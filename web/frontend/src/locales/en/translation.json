@@ -6845,14 +6845,19 @@
         "action": "Send and close"
       },
       "steal": {
-        "title": "Take this ticket over?",
-        "description": "Another operator is handling it — they will lose it from their queue.",
+        "title": "Take over this ticket?",
+        "description": "It is assigned to another operator — it will leave their queue.",
         "action": "Take over"
       },
       "bulkClose": {
         "title": "Close selected tickets?",
         "description": "Every customer will be notified. This cannot be undone.",
         "action": "Close all"
+      },
+      "release": {
+        "title": "Release assignment?",
+        "description": "The ticket returns to the shared queue and leaves the operator list.",
+        "action": "Release"
       }
     },
     "channel": {
@@ -6896,6 +6901,10 @@
       "title": "New ticket",
       "body": "Waiting for a reply: {{count}}",
       "enable": "Enable notifications"
-    }
+    },
+    "assignedToMe": "Mine",
+    "assignedToName": "{{name}}",
+    "takeOver": "Take over",
+    "releaseOther": "Release {{name}}"
   }
 }

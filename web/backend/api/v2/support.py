@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from pydantic import BaseModel, Field
 
 from shared.bedolaga_client import bedolaga_client
+from shared.db_schema import ADMIN_TABLE
 from shared.database import db_service
 from web.backend.api.deps import AdminUser, get_client_ip, require_permission
 from web.backend.api.v2.bedolaga import proxy_request
@@ -206,7 +207,9 @@ async def list_tickets(
     reader_param = len(params)
     params.extend([limit, offset])
     sql = f"""
-        SELECT t.*, a.admin_id AS assignee_id, s.snooze_to,
+        SELECT t.*, a.admin_id AS assignee_id, aa.username AS assignee_name,
+               COALESCE(a.admin_id IS NOT NULL AND a.admin_id = ${reader_param}, FALSE) AS assignee_is_me,
+               s.snooze_to,
                COALESCE(r.last_read_message_id, 0) AS last_read_message_id,
                (SELECT COUNT(*) FROM support_ticket_messages m
                  WHERE m.ticket_id = t.id AND m.id > COALESCE(r.last_read_message_id, 0)
@@ -216,6 +219,7 @@ async def list_tickets(
                  WHERE m2.ticket_id = t.id AND m2.has_media) AS attachments_count
         FROM support_tickets t
         LEFT JOIN support_assignments a ON a.ticket_id = t.id
+        LEFT JOIN {ADMIN_TABLE} aa ON aa.id = a.admin_id
         LEFT JOIN support_snoozes s ON s.ticket_id = t.id
         LEFT JOIN support_reads r ON r.ticket_id = t.id AND r.admin_id = ${reader_param}
         WHERE {' AND '.join(where)}
@@ -246,17 +250,20 @@ async def get_ticket(
 ):
     """Карточка тикета с перепиской из проекции."""
     _require_db()
-    card_sql = """
-        SELECT t.*, a.admin_id AS assignee_id, s.snooze_to, n.note AS customer_note
+    card_sql = f"""
+        SELECT t.*, a.admin_id AS assignee_id, aa.username AS assignee_name,
+               COALESCE(a.admin_id IS NOT NULL AND a.admin_id = $2, FALSE) AS assignee_is_me,
+               s.snooze_to, n.note AS customer_note
         FROM support_tickets t
         LEFT JOIN support_assignments a ON a.ticket_id = t.id
+        LEFT JOIN {ADMIN_TABLE} aa ON aa.id = a.admin_id
         LEFT JOIN support_snoozes s ON s.ticket_id = t.id
         LEFT JOIN support_customer_notes n ON n.bot_user_id = t.bot_user_id
         WHERE t.id = $1
     """
 
     async with db_service.acquire() as conn:
-        ticket = await conn.fetchrow(card_sql, ticket_id)
+        ticket = await conn.fetchrow(card_sql, ticket_id, admin.account_id)
 
     if not ticket:
         # Тикета может не быть просто потому, что синк до него не дошёл. Ходим
@@ -264,7 +271,7 @@ async def get_ticket(
         if not await sync_ticket(ticket_id):
             raise api_error(404, E.NOT_FOUND, "Ticket not found")
         async with db_service.acquire() as conn:
-            ticket = await conn.fetchrow(card_sql, ticket_id)
+            ticket = await conn.fetchrow(card_sql, ticket_id, admin.account_id)
         if not ticket:
             raise api_error(404, E.NOT_FOUND, "Ticket not found")
 

@@ -29,6 +29,8 @@ export interface SupportTicket {
   updated_at: string
   closed_at: string | null
   assignee_id: number | null
+  assignee_name?: string | null
+  assignee_is_me?: boolean
   snooze_to: string | null
   unread_count?: number
   attachments_count?: number

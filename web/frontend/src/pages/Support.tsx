@@ -824,7 +824,7 @@ export default function Support() {
             </div>
           )}
 
-          <div ref={listRef} className="flex-1 overflow-y-auto">
+          <div ref={listRef} className="flex-1 overflow-y-auto" aria-busy={listLoading}>
             {listLoading ? (
               <div className="p-3 space-y-2">
                 <Skeleton className="h-16 w-full" />
@@ -890,14 +890,18 @@ export default function Support() {
                               toggleSelected(item.id)
                             }
                           }}
-                          className={cn(
-                            'mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
-                            selected.has(item.id)
-                              ? 'border-cyan-400 bg-cyan-400/20 text-cyan-300'
-                              : 'border-[var(--glass-border)] text-transparent',
-                          )}
+                          className="-m-2 flex h-8 w-8 flex-shrink-0 items-center justify-center"
                         >
-                          <Check className="h-3 w-3" />
+                          <span
+                            className={cn(
+                              'flex h-4 w-4 items-center justify-center rounded border',
+                              selected.has(item.id)
+                                ? 'border-cyan-400 bg-cyan-400/20 text-cyan-300'
+                                : 'border-[var(--glass-border)] text-transparent',
+                            )}
+                          >
+                            <Check className="h-3 w-3" />
+                          </span>
                         </span>
                       )}
                       <span className="min-w-0 flex-1">
@@ -963,9 +967,20 @@ export default function Support() {
                             </span>
                           )}
                           {item.assignee_id != null && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
-                              <Users className="h-2.5 w-2.5" />
-                              {t('support.assignedTo', { id: item.assignee_id })}
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]',
+                                item.assignee_is_me
+                                  ? 'bg-cyan-400/12 text-cyan-300'
+                                  : 'bg-[var(--glass-bg)] text-dark-300',
+                              )}
+                            >
+                              <Users className="h-2.5 w-2.5" aria-hidden="true" />
+                              {item.assignee_is_me
+                                ? t('support.assignedToMe')
+                                : t('support.assignedToName', {
+                                    name: item.assignee_name || `#${item.assignee_id}`,
+                                  })}
                             </span>
                           )}
                         </span>
@@ -1029,20 +1044,27 @@ export default function Support() {
                     {t('support.alsoViewing', { names: watchers.map((w) => w.username).join(', ') })}
                   </span>
                 )}
+                {/* Чужое обращение перехватывают, своё — отпускают: раньше кнопка
+                    «снять» стояла на обоих и уводила тикет у коллеги молча. */}
                 {canEdit && (
-                  ticket?.assignee_id != null ? (
+                  ticket?.assignee_is_me ? (
                     <Button variant="ghost" size="sm" className="h-9 gap-1.5" onClick={() => unassignMutation.mutate()}>
-                      <Users className="w-3.5 h-3.5" />
+                      <Users className="w-3.5 h-3.5" aria-hidden="true" />
                       {t('support.unassign')}
                     </Button>
-                  ) : (
+                  ) : ticket?.assignee_id != null ? (
                     <Button
                       variant="outline"
                       size="sm"
                       className="h-9 gap-1.5"
-                      onClick={() => (ticket?.assignee_id != null ? setConfirming('steal') : assignMutation.mutate())}
+                      onClick={() => setConfirming('steal')}
                     >
-                      <Check className="w-3.5 h-3.5" />
+                      <Users className="w-3.5 h-3.5" aria-hidden="true" />
+                      {t('support.takeOver')}
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => assignMutation.mutate()}>
+                      <Check className="w-3.5 h-3.5" aria-hidden="true" />
                       {t('support.takeIt')}
                     </Button>
                   )
@@ -1198,9 +1220,9 @@ export default function Support() {
                         type="button"
                         onClick={() => untagMutation.mutate(tag.id)}
                         aria-label={t('support.tagRemove', { name: tag.name })}
-                        className="text-dark-300 hover:text-red-300"
+                        className="-my-1 flex h-6 w-6 items-center justify-center text-dark-300 hover:text-red-300"
                       >
-                        <X className="h-2.5 w-2.5" />
+                        <X className="h-3 w-3" />
                       </button>
                     </span>
                   ))}
@@ -1287,7 +1309,7 @@ export default function Support() {
                 )}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3" aria-busy={detailLoading}>
                 {detailLoading && messages.length === 0 ? (
                   <Skeleton className="h-24 w-2/3" />
                 ) : (
