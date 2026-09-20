@@ -234,6 +234,9 @@ export default function Support() {
     queryKey: ['support-queues'],
     queryFn: supportApi.getQueues,
     refetchInterval: 30_000,
+    // Уведомление всплывает только при скрытой вкладке, а в фоне запросы по
+    // умолчанию стоят — счётчик не менялся и уведомлять было не о чем.
+    refetchIntervalInBackground: true,
   })
   const slaMinutes = queues?.sla_minutes ?? 30
 
@@ -417,7 +420,10 @@ export default function Support() {
       return
     }
     let alive = true
+    // Пингуем только пока вкладка открыта: иначе ушедший на обед оператор
+    // продолжал «смотреть» тикет, и коллега его не брал.
     const ping = () => {
+      if (document.hidden) return
       supportApi
         .presence(activeId)
         .then((r) => alive && setWatchers(r.watchers))
@@ -425,9 +431,11 @@ export default function Support() {
     }
     ping()
     const timer = setInterval(ping, 20_000)
+    document.addEventListener('visibilitychange', ping)
     return () => {
       alive = false
       clearInterval(timer)
+      document.removeEventListener('visibilitychange', ping)
     }
   }, [activeId])
 
