@@ -6817,6 +6817,27 @@
     "prevMedia": "Previous",
     "nextMedia": "Next",
     "emptySearch": "Nothing found",
-    "resetSearch": "Clear search"
+    "resetSearch": "Clear search",
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High"
+    },
+    "confirm": {
+      "close": {
+        "title": "Close this ticket?",
+        "description": "The customer will be notified. This cannot be undone.",
+        "action": "Close"
+      },
+      "replyClose": {
+        "title": "Reply and close?",
+        "description": "The reply goes to the customer and the ticket closes. Closing cannot be undone.",
+        "action": "Send and close"
+      },
+      "steal": {
+        "title": "Take this ticket over?",
+        "description": "Another operator is handling it — they will lose it from their queue.",
+        "action": "Take over"
+      }
+    }
   }
 }

@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
+  AlertTriangle,
   Archive,
   Check,
   ChevronLeft,
@@ -31,6 +32,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/EmptyState'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
 import client from '@/api/client'
@@ -65,6 +67,12 @@ function waitTone(iso: string | null, slaMinutes: number, slaOn = true, now = Da
   return 'text-dark-300'
 }
 
+/** Просрочен ли ответ — отдельно от цвета: значок и подпись говорят то же самое. */
+function isBreached(iso: string | null, slaMinutes: number, slaOn: boolean, now: number): boolean {
+  if (!iso || !slaOn) return false
+  return (now - new Date(iso).getTime()) / 60000 >= slaMinutes
+}
+
 function timeOfDay(iso: string | null): string {
   if (!iso) return ''
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -95,6 +103,9 @@ export default function Support() {
   const [viewer, setViewer] = useState<{ key: string; list: string[]; at: number } | null>(null)
   // Время ожидания должно идти само, а не замирать до следующей загрузки списка.
   const [now, setNow] = useState(() => Date.now())
+  // Закрытие уходит клиенту уведомлением и не отменяется, перехват тикета
+  // забирает работу у коллеги — оба действия спрашивают подтверждение.
+  const [confirming, setConfirming] = useState<null | 'close' | 'replyClose' | 'steal'>(null)
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(timer)
@@ -580,23 +591,47 @@ export default function Support() {
                           'w-[3px] flex-shrink-0 rounded-r',
                           PRIORITY_BAR[item.priority] || PRIORITY_BAR.normal,
                         )}
+                        aria-hidden="true"
                       />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
-                          {(item.unread_count ?? 0) > 0 && (
-                            <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-cyan-400" />
-                          )}
+                          <span className="flex h-1.5 w-1.5 flex-shrink-0 items-center justify-center">
+                            {(item.unread_count ?? 0) > 0 && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                            )}
+                          </span>
                           <span className="truncate text-xs font-semibold text-white">
                             {item.customer_name || `#${item.bot_user_id}`}
                           </span>
                           <span className="text-[11px] text-dark-300">#{item.id}</span>
+                          {(item.priority === 'urgent' || item.priority === 'high') && (
+                            <span
+                              className={cn(
+                                'flex-shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold',
+                                item.priority === 'urgent'
+                                  ? 'bg-red-400/15 text-red-300'
+                                  : 'bg-orange-400/15 text-orange-300',
+                              )}
+                            >
+                              {t(`support.priority.${item.priority}`)}
+                            </span>
+                          )}
                           <span
                             className={cn(
                               'ml-auto flex-shrink-0 text-[11px] tabular-nums',
                               waitTone(item.waiting_since, slaMinutes, slaOn, now),
                             )}
                           >
-                            {item.waiting_since ? waitedFor(item.waiting_since, now) : t('support.answeredShort')}
+                            {item.waiting_since ? (
+                              <>
+                                {isBreached(item.waiting_since, slaMinutes, slaOn, now) && (
+                                  <AlertTriangle className="mr-1 inline h-3 w-3" aria-hidden="true" />
+                                )}
+                                {waitedFor(item.waiting_since, now)}
+                              </>
+                            ) : (
+                              t('support.answeredShort')
+                            )}
                           </span>
                         </span>
                         <span className="mt-1 block truncate text-xs text-dark-100">{item.title}</span>
@@ -663,7 +698,12 @@ export default function Support() {
                       {t('support.unassign')}
                     </Button>
                   ) : (
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => assignMutation.mutate()}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5"
+                      onClick={() => (ticket?.assignee_id != null ? setConfirming('steal') : assignMutation.mutate())}
+                    >
                       <Check className="w-3.5 h-3.5" />
                       {t('support.takeIt')}
                     </Button>
@@ -676,14 +716,19 @@ export default function Support() {
                   </Button>
                 )}
                 {canEdit && ticket?.status !== 'closed' && (
-                  <Button variant="ghost" size="sm" className="h-9" onClick={() => statusMutation.mutate('closed')}>
+                  <Button variant="ghost" size="sm" className="h-9" onClick={() => setConfirming('close')}>
                     {t('support.close')}
                   </Button>
                 )}
               </header>
 
+              {!customer && detailUserId != null && (
+                <div className="flex h-9 items-center border-b border-[var(--glass-border)] px-3 md:px-4">
+                  <Skeleton className="h-3 w-56" />
+                </div>
+              )}
               {customer && (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:px-4">
+                <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:px-4">
                   <span className="font-semibold text-dark-100">
                     {customer.full_name || customer.username || `#${customer.id}`}
                   </span>
@@ -801,7 +846,7 @@ export default function Support() {
                                       <img
                                         src={url}
                                         alt={t('support.hasMedia', { type: 'photo' })}
-                                        className={cn('w-full object-cover', ready.length > 1 ? 'h-28' : 'max-h-60')}
+                                        className={cn('w-full bg-white/5 object-cover', ready.length > 1 ? 'h-28' : 'h-60')}
                                       />
                                     </button>
                                   )
@@ -908,7 +953,7 @@ export default function Support() {
                     <Button
                       size="sm"
                       className="h-11 flex-1 md:h-9 md:flex-none"
-                      onClick={() => send(true)}
+                      onClick={() => setConfirming('replyClose')}
                       disabled={!draft.trim() || replyMutation.isPending}
                     >
                       {t('support.sendAndClose')}
@@ -920,6 +965,21 @@ export default function Support() {
           )}
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={confirming ? t(`support.confirm.${confirming}.title`) : ''}
+        description={confirming ? t(`support.confirm.${confirming}.description`) : undefined}
+        confirmLabel={confirming ? t(`support.confirm.${confirming}.action`) : undefined}
+        variant={confirming === 'steal' ? 'default' : 'destructive'}
+        onConfirm={() => {
+          if (confirming === 'close') statusMutation.mutate('closed')
+          if (confirming === 'replyClose') send(true)
+          if (confirming === 'steal') assignMutation.mutate()
+          setConfirming(null)
+        }}
+      />
 
       {viewer && mediaUrls[viewer.list[viewer.at]] && (
         <div
