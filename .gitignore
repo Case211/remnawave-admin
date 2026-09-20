@@ -50,3 +50,6 @@ web/frontend/.gitignore
 # VitePress
 docs/.vitepress/cache/
 docs/.vitepress/.temp/
+
+# Локальные переопределения стенда: у каждого свои, в репозиторий не нужны
+docker-compose.override.yml

@@ -4428,6 +4428,10 @@
       "notifications_support_enabled": {
         "label": "Notifications: Support",
         "description": "Send ticket messages to Telegram"
+      },
+      "violations_warn_on_action": {
+        "label": "Violations: warn the customer on action",
+        "description": "When an operator blocks or throttles, send the customer an explanation — otherwise they come to support with \"nothing works\""
       }
     },
     "inDb": "In DB",

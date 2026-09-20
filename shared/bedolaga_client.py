@@ -115,6 +115,30 @@ class BedolagaClient:
     async def get_user_by_telegram(self, telegram_id: int) -> dict:
         return await self._get(f"/users/by-telegram-id/{telegram_id}")
 
+    async def notify_user(
+        self,
+        user_id: int,
+        text: str,
+        channels: list[str] | None = None,
+        email_subject: str | None = None,
+        email_html: str | None = None,
+    ) -> dict:
+        """Сервисное сообщение клиенту через бота — в Telegram и на почту.
+
+        Бот уже разговаривает с клиентом везде, и письма уходят с привычного
+        ему адреса; свой токен и SMTP панели для этого держать незачем.
+        Ручка появилась в боте отдельно (её нет в старых версиях) — вызывающий
+        обязан быть готов к 404.
+        """
+        payload: dict = {"text": text}
+        if channels:
+            payload["channels"] = channels
+        if email_subject:
+            payload["email_subject"] = email_subject
+        if email_html:
+            payload["email_html"] = email_html
+        return await self._post(f"/users/{user_id}/notify", json=payload)
+
     async def update_user(self, user_id: int, data: dict) -> dict:
         return await self._patch(f"/users/{user_id}", json=data)
 

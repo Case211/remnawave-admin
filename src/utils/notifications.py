@@ -1266,6 +1266,10 @@ async def send_violation_notification(
                 InlineKeyboardButton(text=tr("notify.violation.btn.reset"), callback_data=f"vact:reset:{user_uuid}"),
             ],
             [
+                # Предупредить раньше, чем отключать: человек часто не знает,
+                # что нарушает, а доступ, пропавший без объяснений, приходит
+                # к нам же обращением в поддержку.
+                InlineKeyboardButton(text=tr("notify.violation.btn.warn"), callback_data=f"vact:warn:{user_uuid}"),
                 InlineKeyboardButton(text=tr("notify.violation.btn.annul"), callback_data=f"vact:dismiss:{user_uuid}"),
             ],
         ]

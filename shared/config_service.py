@@ -804,6 +804,17 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 62,
     },
     {
+        "key": "violations_warn_on_action",
+        "value_type": "bool",
+        "category": "violations",
+        "subcategory": "general",
+        "display_name": "Нарушения: предупреждать клиента при мере",
+        "description": "Когда оператор блокирует или режет скорость, отправлять клиенту "
+                       "объяснение — иначе он приходит в поддержку с «у меня не работает»",
+        "default_value": "true",
+        "sort_order": 12,
+    },
+    {
         "key": "support_alert_new_message",
         "value_type": "bool",
         "category": "general",

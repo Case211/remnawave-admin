@@ -30,7 +30,7 @@ router = Router()
 
 # Действия, меняющие состояние. Белый список сюда же: он отключает защиту,
 # то есть последствия у него не меньше, чем у блокировки.
-_MUTATING_ACTIONS = frozenset({"block", "kill", "dismiss", "reset", "wl", "thr", "unthr"})
+_MUTATING_ACTIONS = frozenset({"block", "kill", "dismiss", "reset", "wl", "thr", "unthr", "warn"})
 
 
 def needs_resolve_permission(action: str) -> bool:
@@ -80,9 +80,11 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
         if action == "info":
             await _show_user_info(callback, user_uuid, panel_user_id)
         elif action == "block":
-            await _block_user(callback, user_uuid, panel_user_id)
+            await _block_user(callback, user_uuid, panel_user_id, admin)
         elif action == "kill":
             await _kill_user(callback, user_uuid, panel_user_id)
+        elif action == "warn":
+            await _warn_user(callback, user_uuid, admin)
         elif action == "dismiss":
             await _annul(callback, user_uuid)
         elif action == "reset":
@@ -100,6 +102,78 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
     except Exception as e:
         logger.error("Violation action error (%s/%s): %s", action, user_uuid, e)
         await callback.answer(_("vact.error").format(e=e), show_alert=True)
+
+
+async def _warn_after_action(user_uuid: str, admin: BotAdmin) -> None:
+    """Объяснить клиенту меру, если оператор не отключил это в настройках.
+
+    Молча отключённый доступ возвращается к нам обращением «у меня не
+    работает», и оператор тратит на него больше, чем на само нарушение.
+    Падение отправки меру не отменяет: доступ уже ограничен.
+    """
+    from shared.config_service import config_service
+
+    if not config_service.get("violations_warn_on_action", True):
+        return
+    try:
+        result = await _send_warning(user_uuid, admin)
+        if not result.get("sent"):
+            logger.info(
+                "Предупреждение к мере по %s не ушло: %s", user_uuid[:8], result.get("reason")
+            )
+    except Exception as exc:  # noqa: BLE001 — уведомление не должно ломать меру
+        logger.warning("Предупреждение к мере по %s упало: %s", user_uuid[:8], exc)
+
+
+async def _latest_violation(user_uuid: str) -> dict | None:
+    """Свежее нарушение человека, по которому ещё имеет смысл писать.
+
+    Аннулированные пропускаем: оператор уже признал их ошибкой детектора.
+    """
+    if not db_service.is_connected:
+        return None
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT * FROM violations
+             WHERE user_uuid = $1::uuid
+               AND (action_taken IS NULL OR action_taken <> 'annulled')
+             ORDER BY detected_at DESC
+             LIMIT 1
+            """,
+            user_uuid,
+        )
+    return dict(row) if row else None
+
+
+async def _send_warning(user_uuid: str, admin: BotAdmin) -> dict:
+    """Предупредить клиента по свежему нарушению. Общая часть кнопки и мер."""
+    from web.backend.core.violation_notices import send_notice
+
+    violation = await _latest_violation(user_uuid)
+    if not violation:
+        return {"sent": False, "reason": "no_violation"}
+    return await send_notice(violation, sent_by=admin.username or str(admin.telegram_id))
+
+
+async def _warn_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmin) -> None:
+    """Кнопка «Предупредить»: клиент узнаёт о проблеме до того, как её решат за него."""
+    result = await _send_warning(user_uuid, admin)
+
+    if result.get("reason") == "no_violation":
+        await callback.answer(_("vact.warn_no_violation"), show_alert=True)
+        return
+    if not result.get("sent"):
+        await callback.answer(
+            _("vact.warn_not_sent").format(reason=result.get("reason") or "—"), show_alert=True
+        )
+        return
+
+    channels = [
+        name for name, key in (("Telegram", "telegram"), ("email", "email"))
+        if (result.get(key) or {}).get("sent")
+    ]
+    await callback.answer(_("vact.warn_sent").format(channels=", ".join(channels) or "—"))
 
 
 async def _show_user_info(callback: CallbackQuery, user_uuid: str, panel_user_id: str | int) -> None:
@@ -135,7 +209,9 @@ async def _show_user_info(callback: CallbackQuery, user_uuid: str, panel_user_id
         await callback.answer(_("vact.info_failed").format(e=e), show_alert=True)
 
 
-async def _block_user(callback: CallbackQuery, user_uuid: str, panel_user_id: str | int) -> None:
+async def _block_user(
+    callback: CallbackQuery, user_uuid: str, panel_user_id: str | int, admin: BotAdmin
+) -> None:
     """Disable (block) user via Panel API."""
     try:
         await internal_api_client.disable_user(panel_user_id)
@@ -154,6 +230,7 @@ async def _block_user(callback: CallbackQuery, user_uuid: str, panel_user_id: st
         await append_card_note(
             callback, _("vact.blocked_suffix").format(name=callback.from_user.first_name),
         )
+        await _warn_after_action(user_uuid, admin)
     except Exception as e:
         logger.error("Block user %s failed: %s", user_uuid, e)
         await callback.answer(_("vact.block_error").format(e=e), show_alert=True)
@@ -383,6 +460,7 @@ async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmi
             ),
             keyboard=_unthrottle_keyboard(user_uuid),
         )
+        await _warn_after_action(user_uuid, admin)
     except Exception as e:
         logger.error("Throttle user %s failed: %s", user_uuid, e)
         await callback.answer(_("vact.thr_error").format(e=e), show_alert=True)

@@ -1049,7 +1049,10 @@
     "unthr_suffix": "\n\n↩️ <i>Throttle lifted{restored} ({name})</i>",
     "unthr_restored": " + previous squads restored",
     "unthr_absent": "ℹ️ This user has no active throttle",
-    "unthr_error": "❌ Could not lift the throttle: {e}"
+    "unthr_error": "❌ Could not lift the throttle: {e}",
+    "warn_sent": "Warning sent: {channels}",
+    "warn_not_sent": "Warning was not delivered: {reason}",
+    "warn_no_violation": "No recent violation to warn about"
   },
   "pact": {
     "invalid_format": "Invalid button format",
@@ -1259,7 +1262,8 @@
         "annul": "🚫 Annul",
         "whitelist": "🤍 Whitelist",
         "whitelist_partial": "🤍 Skip: {analyzer}",
-        "throttle": "🐌 Throttle"
+        "throttle": "🐌 Throttle",
+        "warn": "⚠️ Warn"
       },
       "platform": {
         "android": "Android",

@@ -1071,6 +1071,104 @@ async def remove_throttle(
     return {"success": True, "squads_restored": restored}
 
 
+# ── Предупреждения клиенту ───────────────────────────────────────
+
+
+class NoticeTemplateUpdate(BaseModel):
+    """Правка шаблона. Всё необязательно: меняют обычно одно поле."""
+
+    enabled: Optional[bool] = None
+    min_score: Optional[float] = Field(None, ge=0, le=100)
+    send_email: Optional[bool] = None
+    subject_ru: Optional[str] = Field(None, max_length=200)
+    body_ru: Optional[str] = Field(None, max_length=4000)
+    subject_en: Optional[str] = Field(None, max_length=200)
+    body_en: Optional[str] = Field(None, max_length=4000)
+
+
+class NoticeSendRequest(BaseModel):
+    """Повторная отправка — отдельным флагом: случайный двойной клик не должен
+    писать клиенту дважды."""
+
+    force: bool = False
+
+
+@router.get("/notice-templates")
+async def list_notice_templates(
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+):
+    """Шаблоны предупреждений — по одному на вид нарушения."""
+    from web.backend.core.violation_notices import NOTICE_KINDS, list_templates
+
+    return {"items": await list_templates(), "kinds": list(NOTICE_KINDS)}
+
+
+@router.patch("/notice-templates/{kind}")
+async def patch_notice_template(
+    kind: str,
+    data: NoticeTemplateUpdate,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+):
+    """Изменить шаблон. Правку текста, который уходит клиентам, пишем в аудит."""
+    from web.backend.core.violation_notices import update_template
+
+    updated = await update_template(
+        kind,
+        data.model_dump(exclude_none=True),
+        updated_by=admin.username,
+    )
+    if not updated:
+        raise api_error(404, E.NOT_FOUND, "Notice template not found")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violations.notice_template_updated",
+        resource="violations",
+        resource_id=kind,
+        ip_address=get_client_ip(request),
+    )
+    return updated
+
+
+@router.post("/{violation_id}/notify")
+async def notify_violation_user(
+    violation_id: int,
+    data: NoticeSendRequest,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+):
+    """Предупредить клиента об этом нарушении.
+
+    Право то же, что у блокировки: сообщение уходит человеку от имени сервиса,
+    и отозвать его нельзя.
+    """
+    from web.backend.core.violation_notices import send_notice
+
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE, "Database is not available")
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM violations WHERE id = $1", violation_id)
+    if not row:
+        raise api_error(404, E.NOT_FOUND, "Violation not found")
+
+    result = await send_notice(dict(row), sent_by=admin.username, force=data.force)
+
+    if result.get("sent"):
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="violations.client_notified",
+            resource="violations",
+            resource_id=str(violation_id),
+            ip_address=get_client_ip(request),
+        )
+    return result
+
+
 @router.get("/{violation_id}", response_model=ViolationDetail)
 async def get_violation(
     violation_id: int,
