@@ -222,12 +222,16 @@ async def send_notice(
 
     if delivered and db_service.is_connected:
         async with db_service.acquire() as conn:
+            # Текст храним снимком: шаблон потом правят, а клиенту показывать
+            # надо ровно то, что он получил.
             await conn.execute(
                 """
-                INSERT INTO violation_notices (violation_id, user_uuid, telegram_id, kind, channels, sent_by)
-                VALUES ($1, $2::uuid, $3, $4, $5, $6)
+                INSERT INTO violation_notices
+                    (violation_id, user_uuid, telegram_id, kind, channels, sent_by, subject, body)
+                VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT (violation_id) DO UPDATE
-                   SET channels = EXCLUDED.channels, sent_at = NOW(), sent_by = EXCLUDED.sent_by
+                   SET channels = EXCLUDED.channels, sent_at = NOW(), sent_by = EXCLUDED.sent_by,
+                       subject = EXCLUDED.subject, body = EXCLUDED.body
                 """,
                 violation_id,
                 str(violation.get("user_uuid")),
@@ -235,6 +239,8 @@ async def send_notice(
                 kind,
                 delivered,
                 sent_by,
+                subject,
+                body,
             )
 
     logger.info(
@@ -258,7 +264,65 @@ async def notice_for(violation_id: int) -> Optional[dict]:
         return None
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT violation_id, kind, channels, sent_by, sent_at FROM violation_notices WHERE violation_id = $1",
+            "SELECT violation_id, kind, channels, sent_by, sent_at, subject, body "
+            "FROM violation_notices WHERE violation_id = $1",
             violation_id,
         )
     return dict(row) if row else None
+
+
+async def last_notice_for_user(telegram_id: int, *, days: int = 14) -> Optional[dict]:
+    """Последнее предупреждение клиента — то, что показывает ему кабинет.
+
+    Ограничение по сроку важнее, чем кажется: плашка «вы нарушили» не должна
+    висеть у человека вечно. Аннулированные нарушения не в счёт — оператор
+    признал их ошибкой детектора, и напоминать о них незачем.
+    """
+    from shared.database import db_service
+
+    if not telegram_id or not db_service.is_connected:
+        return None
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT n.violation_id, n.kind, n.subject, n.body, n.sent_at
+              FROM violation_notices n
+              JOIN violations v ON v.id = n.violation_id
+             WHERE n.telegram_id = $1
+               AND n.sent_at >= NOW() - ($2 || ' days')::interval
+               AND (v.action_taken IS NULL OR v.action_taken <> 'annulled')
+             ORDER BY n.sent_at DESC
+             LIMIT 1
+            """,
+            telegram_id,
+            str(days),
+        )
+    return dict(row) if row else None
+
+
+async def notices_for_user(telegram_id: int, *, limit: int = 20) -> list[dict]:
+    """История предупреждений клиента — то, что он сам может открыть в кабинете.
+
+    Отдаём только дату и текст: вид нарушения, скоринг и признаки детекта сюда
+    не попадают намеренно. Клиент и так получил эти сообщения, а подробности
+    детекта на руках у нарушителя превращаются в инструкцию по обходу.
+    """
+    from shared.database import db_service
+
+    if not telegram_id or not db_service.is_connected:
+        return []
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT n.subject, n.body, n.sent_at
+              FROM violation_notices n
+              JOIN violations v ON v.id = n.violation_id
+             WHERE n.telegram_id = $1
+               AND (v.action_taken IS NULL OR v.action_taken <> 'annulled')
+             ORDER BY n.sent_at DESC
+             LIMIT $2
+            """,
+            telegram_id,
+            limit,
+        )
+    return [dict(row) for row in rows]

@@ -137,6 +137,9 @@ class ViolationPublic(_PublicBase):
     ip_addresses: Optional[List[str]] = None
     countries: Optional[List[str]] = None
     detected_at: Optional[str] = None
+    notified_at: Optional[str] = Field(
+        default=None, description="When the customer was warned about this violation"
+    )
 
 
 class AbuseSummaryPublic(_PublicBase):
@@ -156,6 +159,32 @@ class AbuseSummaryPublic(_PublicBase):
     last_detected_at: Optional[str] = None
     last_action: Optional[str] = None
     whitelisted: bool = False
+    notice: Optional["AbuseNoticePublic"] = Field(
+        default=None,
+        description="Last warning the customer actually received, if any",
+    )
+
+
+class AbuseNoticePublic(_PublicBase):
+    """Предупреждение, которое клиент получил.
+
+    Текст — снимок на момент отправки: шаблон потом правят, а показывать
+    человеку надо ровно то, что ему присылали.
+    """
+
+    violation_id: int
+    kind: str
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    sent_at: Optional[str] = None
+
+
+class CustomerNoticePublic(_PublicBase):
+    """Предупреждение в том виде, в каком его показывают самому клиенту."""
+
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    sent_at: Optional[str] = None
 
 
 class ViolationDetailPublic(ViolationPublic):
@@ -721,7 +750,7 @@ _VIOLATION_LIST_COLUMNS = (
 
 def _violation_row_to_dict(row) -> dict:
     d = dict(row)
-    for ts_field in ("detected_at", "action_taken_at"):
+    for ts_field in ("detected_at", "action_taken_at", "notified_at"):
         if d.get(ts_field):
             d[ts_field] = d[ts_field].isoformat()
     for arr_field in ("reasons", "ip_addresses", "countries", "cities",
@@ -790,7 +819,9 @@ async def list_violations(
 
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT {_VIOLATION_LIST_COLUMNS} FROM violations WHERE {where} "
+            f"SELECT {_VIOLATION_LIST_COLUMNS}, "
+            "(SELECT n.sent_at FROM violation_notices n WHERE n.violation_id = violations.id) AS notified_at "
+            f"FROM violations WHERE {where} "
             f"ORDER BY detected_at DESC LIMIT ${idx - 1} OFFSET ${idx}",
             *args,
         )
@@ -867,6 +898,21 @@ async def violations_summary(
     else:
         level = "warned"
 
+    notice = None
+    if not whitelisted and (data.get("telegram_id") or telegram_id):
+        from web.backend.core.violation_notices import last_notice_for_user
+
+        raw_notice = await last_notice_for_user(int(data.get("telegram_id") or telegram_id or 0))
+        if raw_notice:
+            sent_at = raw_notice.get("sent_at")
+            notice = AbuseNoticePublic(
+                violation_id=int(raw_notice["violation_id"]),
+                kind=str(raw_notice.get("kind") or "default"),
+                subject=raw_notice.get("subject"),
+                body=raw_notice.get("body"),
+                sent_at=sent_at.isoformat() if sent_at else None,
+            )
+
     detected = data.get("last_detected_at")
     return AbuseSummaryPublic(
         user_uuid=resolved_uuid,
@@ -878,7 +924,33 @@ async def violations_summary(
         last_detected_at=detected.isoformat() if detected else None,
         last_action=data.get("last_action"),
         whitelisted=whitelisted,
+        notice=notice,
     )
+
+
+@router.get("/violations/notices", response_model=List[CustomerNoticePublic])
+async def customer_notices(
+    telegram_id: int = Query(..., description="Telegram id клиента"),
+    limit: int = Query(20, ge=1, le=100),
+    api_key: ApiKeyUser = Depends(require_scope("violations:read")),
+):
+    """История предупреждений клиента — для показа ему самому.
+
+    Здесь нет ни вида нарушения, ни скоринга, ни признаков: это те же тексты,
+    которые человек уже получил, и ничего сверх них. Подробности детекта на
+    руках у нарушителя становятся инструкцией по обходу.
+    """
+    from web.backend.core.violation_notices import notices_for_user
+
+    rows = await notices_for_user(telegram_id, limit=limit)
+    return [
+        CustomerNoticePublic(
+            subject=row.get("subject"),
+            body=row.get("body"),
+            sent_at=row["sent_at"].isoformat() if row.get("sent_at") else None,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/violations/{violation_id}", response_model=ViolationDetailPublic)
