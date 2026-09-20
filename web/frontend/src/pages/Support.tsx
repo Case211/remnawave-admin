@@ -785,6 +785,16 @@ export default function Support() {
                 className="h-6 border-0 bg-transparent p-0 text-xs focus-visible:ring-0"
               />
             </div>
+            {/* Список берёт первую сотню: без этой строки очередь из трёхсот
+                обращений выглядит как очередь из ста. */}
+            {!listLoading && !listFailed && tickets.length > 0 && (
+              <p className="mt-1.5 px-0.5 text-[11px] text-dark-300">
+                {t('support.shownOf', { shown: tickets.length, total: list?.total ?? tickets.length })}
+                {(list?.total ?? 0) > tickets.length && (
+                  <span className="text-amber-300"> · {t('support.truncated')}</span>
+                )}
+              </p>
+            )}
           </div>
 
           {selected.size > 0 && (
@@ -865,6 +875,7 @@ export default function Support() {
                 <EmptyState
                   icon={Search}
                   title={t('support.emptySearch')}
+                  description={t('support.emptySearchHint')}
                   action={
                     <Button variant="outline" size="sm" onClick={() => setSearchInput('')}>
                       {t('support.resetSearch')}

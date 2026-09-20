@@ -6914,6 +6914,9 @@
     "loadFailed": "Queue failed to load",
     "loadFailedHint": "Tickets may still be there — this is a connection failure, not an empty queue.",
     "ticketLoadFailed": "Conversation failed to load",
-    "waitingCount": "{{count}} tickets waiting for a reply"
+    "waitingCount": "{{count}} tickets waiting for a reply",
+    "shownOf": "Showing {{shown}} of {{total}}",
+    "truncated": "list is capped — narrow it with a filter or search",
+    "emptySearchHint": "Search covers the conversation text, subject, customer name and ticket number."
   }
 }
