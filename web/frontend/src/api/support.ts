@@ -208,6 +208,11 @@ export const supportExtraApi = {
     return data
   },
 
+  createTag: async (name: string) => {
+    const { data } = await client.post('/support/tags', { name })
+    return data as SupportTag
+  },
+
   attachTag: async (ticketId: number, tagId: number) => {
     await client.post(`/support/tickets/${ticketId}/tags/${tagId}`)
   },

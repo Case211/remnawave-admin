@@ -405,6 +405,27 @@ export default function Support() {
     onError: () => toast.error(t('common.error')),
   })
 
+  const untagMutation = useMutation({
+    mutationFn: (tagId: number) => supportExtraApi.detachTag(activeId as number, tagId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['support-ticket', activeId] }),
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const [newTag, setNewTag] = useState('')
+  const createTagMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const tag = await supportExtraApi.createTag(name)
+      if (activeId != null) await supportExtraApi.attachTag(activeId, tag.id)
+      return tag
+    },
+    onSuccess: () => {
+      setNewTag('')
+      queryClient.invalidateQueries({ queryKey: ['support-tags'] })
+      queryClient.invalidateQueries({ queryKey: ['support-ticket', activeId] })
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
   const tagMutation = useMutation({
     mutationFn: (tagId: number) => supportExtraApi.attachTag(activeId as number, tagId),
     onSuccess: () => {
@@ -1086,8 +1107,19 @@ export default function Support() {
               {(ticketTags?.length || allTags.length > 0) && canEdit && (
                 <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--glass-border)] px-4 py-2">
                   {ticketTags?.map((tag) => (
-                    <span key={tag.id} className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-200">
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 rounded-md bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-200"
+                    >
                       {tag.name}
+                      <button
+                        type="button"
+                        onClick={() => untagMutation.mutate(tag.id)}
+                        aria-label={t('support.tagRemove', { name: tag.name })}
+                        className="text-dark-300 hover:text-red-300"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
                     </span>
                   ))}
                   {allTags
@@ -1103,6 +1135,19 @@ export default function Support() {
                         + {tag.name}
                       </button>
                     ))}
+                  <input
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newTag.trim()) {
+                        e.preventDefault()
+                        createTagMutation.mutate(newTag.trim())
+                      }
+                    }}
+                    placeholder={t('support.tagNew')}
+                    aria-label={t('support.tagNew')}
+                    className="h-6 w-28 rounded-md border border-dashed border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-dark-200 outline-none focus:border-cyan-400/40"
+                  />
                 </div>
               )}
 

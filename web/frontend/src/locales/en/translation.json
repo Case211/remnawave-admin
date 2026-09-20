@@ -6754,17 +6754,17 @@
   },
   "support": {
     "queues": {
-      "wait_us": "Waiting on us",
-      "mine": "Mine",
+      "wait_us": "To do",
+      "mine": "In progress",
       "late": "Overdue",
-      "wait_client": "Waiting on client",
-      "snoozed": "Snoozed",
+      "wait_client": "Waiting for customer",
+      "snoozed": "On hold",
       "all": "All"
     },
     "status": {
-      "open": "Waiting on us",
-      "answered": "Waiting on client",
-      "pending": "Pending",
+      "open": "Open",
+      "answered": "Waiting for customer",
+      "pending": "On hold",
       "closed": "Closed"
     },
     "searchPlaceholder": "Search messages, subject, customer",
@@ -6887,6 +6887,8 @@
       "week": "week"
     },
     "siblings_one": "{{count}} more ticket from this customer:",
-    "siblings_other": "{{count}} more tickets from this customer:"
+    "siblings_other": "{{count}} more tickets from this customer:",
+    "tagRemove": "Remove tag {{name}}",
+    "tagNew": "+ new tag"
   }
 }

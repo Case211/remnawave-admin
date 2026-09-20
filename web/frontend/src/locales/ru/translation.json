@@ -6750,18 +6750,18 @@
   },
   "support": {
     "queues": {
-      "wait_us": "Ждут нас",
-      "mine": "Мои",
-      "late": "Просрочены",
-      "wait_client": "Ждут клиента",
-      "snoozed": "Отложенные",
+      "wait_us": "К обработке",
+      "mine": "В работе",
+      "late": "Просрочено",
+      "wait_client": "Ждёт клиента",
+      "snoozed": "Отложено",
       "all": "Все"
     },
     "status": {
-      "open": "Ждёт нас",
+      "open": "Открыто",
       "answered": "Ждёт клиента",
-      "pending": "В ожидании",
-      "closed": "Закрыт"
+      "pending": "На удержании",
+      "closed": "Закрыто"
     },
     "searchPlaceholder": "Поиск по переписке, теме, клиенту",
     "emptyQueue": "В этой очереди пусто",
@@ -6884,6 +6884,8 @@
     },
     "siblings_one": "Ещё {{count}} обращение клиента:",
     "siblings_few": "Ещё {{count}} обращения клиента:",
-    "siblings_many": "Ещё {{count}} обращений клиента:"
+    "siblings_many": "Ещё {{count}} обращений клиента:",
+    "tagRemove": "Снять тег {{name}}",
+    "tagNew": "+ новый тег"
   }
 }
