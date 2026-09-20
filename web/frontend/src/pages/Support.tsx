@@ -104,6 +104,7 @@ export default function Support() {
   }
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [tagFilter, setTagFilter] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   // На узком экране колонки не помещаются рядом: показываем либо очередь,
   // либо переписку. Флаг переключает панели, на десктопе он ни на что не влияет.
@@ -174,8 +175,14 @@ export default function Support() {
   })
 
   const { data: list, isLoading: listLoading } = useQuery({
-    queryKey: ['support-tickets', queue, search],
-    queryFn: () => supportApi.listTickets({ queue, search: search || undefined, limit: 100 }),
+    queryKey: ['support-tickets', queue, search, tagFilter],
+    queryFn: () =>
+      supportApi.listTickets({
+        queue,
+        search: search || undefined,
+        tag_id: tagFilter ?? undefined,
+        limit: 100,
+      }),
     refetchInterval: 30_000,
   })
 
@@ -620,6 +627,26 @@ export default function Support() {
               />
             </div>
           </div>
+
+          {allTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 border-b border-[var(--glass-border)] px-3 py-2">
+              {allTags.slice(0, 8).map((tag) => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => setTagFilter(tagFilter === tag.id ? null : tag.id)}
+                  className={cn(
+                    'rounded-md px-2 py-0.5 text-[11px] font-medium border',
+                    tagFilter === tag.id
+                      ? 'border-cyan-400/30 bg-cyan-400/14 text-cyan-300'
+                      : 'border-[var(--glass-border)] text-dark-300 hover:text-dark-100',
+                  )}
+                >
+                  {tag.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div ref={listRef} className="flex-1 overflow-y-auto">
             {listLoading ? (

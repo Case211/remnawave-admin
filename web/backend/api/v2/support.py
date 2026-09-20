@@ -172,6 +172,8 @@ async def list_tickets(
     queue: str = Query(QUEUE_WAIT_US),
     search: Optional[str] = Query(None, max_length=200),
     priority: Optional[str] = Query(None, pattern=r"^(low|normal|high|urgent)$"),
+    tag_id: Optional[int] = Query(None, ge=1),
+    assignee_id: Optional[int] = Query(None, ge=1),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     admin: AdminUser = Depends(require_permission("bedolaga_support", "view")),
@@ -184,6 +186,14 @@ async def list_tickets(
     if priority:
         params.append(priority)
         where.append(f"t.priority = ${len(params)}")
+    if tag_id:
+        params.append(tag_id)
+        where.append(
+            f"EXISTS (SELECT 1 FROM support_ticket_tags tt WHERE tt.ticket_id = t.id AND tt.tag_id = ${len(params)})"
+        )
+    if assignee_id:
+        params.append(assignee_id)
+        where.append(f"a.admin_id = ${len(params)}")
     if search:
         # % и _ в запросе оператора — это символы, а не подстановочные знаки.
         escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

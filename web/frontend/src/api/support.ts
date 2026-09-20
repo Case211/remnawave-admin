@@ -70,6 +70,7 @@ export const supportApi = {
     queue: string
     search?: string
     priority?: string
+    tag_id?: number
     limit?: number
     offset?: number
   }): Promise<SupportTicketList> => {
