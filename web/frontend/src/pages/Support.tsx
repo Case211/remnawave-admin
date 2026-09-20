@@ -98,9 +98,15 @@ export default function Support() {
   // На узком экране колонки не помещаются рядом: показываем либо очередь,
   // либо переписку. Флаг переключает панели, на десктопе он ни на что не влияет.
   const [mobileChatOpen, setMobileChatOpen] = useState(false)
-  const [draft, setDraft] = useState('')
   // Шаблон, вставленный в черновик: его побочные действия уйдут вместе с ответом.
   const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
+  const clearDraft = () =>
+    setDrafts((prev) => {
+      if (activeId == null) return prev
+      const next = { ...prev }
+      delete next[activeId]
+      return next
+    })
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const feedEndRef = useRef<HTMLDivElement>(null)
@@ -108,6 +114,9 @@ export default function Support() {
   // файл заново при каждом ререндере.
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
   const [viewer, setViewer] = useState<{ key: string; list: string[]; at: number } | null>(null)
+  // Пока ответ идёт к боту, он уже виден в ленте — иначе секунду кажется, что
+  // нажатие не сработало.
+  const [sending, setSending] = useState<{ ticketId: number; text: string } | null>(null)
   // Время ожидания должно идти само, а не замирать до следующей загрузки списка.
   const [now, setNow] = useState(() => Date.now())
   // Закрытие уходит клиенту уведомлением и не отменяется, перехват тикета
@@ -172,6 +181,13 @@ export default function Support() {
   })
   const activeId = selectedId ?? tickets[0]?.id ?? null
 
+  // Черновик живёт на каждый тикет: переключился на срочное и вернулся —
+  // набранный текст на месте.
+  const [drafts, setDrafts] = useState<Record<number, string>>({})
+  const draft = activeId != null ? drafts[activeId] ?? '' : ''
+  const setDraft = (value: string) =>
+    setDrafts((prev) => (activeId == null ? prev : { ...prev, [activeId]: value }))
+
   const { data: detail, isFetching: detailLoading } = useQuery({
     queryKey: ['support-ticket', activeId],
     queryFn: () => supportApi.getTicket(activeId as number),
@@ -230,13 +246,17 @@ export default function Support() {
   }
 
   const replyMutation = useMutation({
+    onMutate: ({ text }: { text: string; close: boolean }) => {
+      if (activeId != null) setSending({ ticketId: activeId, text })
+    },
+    onSettled: () => setSending(null),
     mutationFn: ({ text, close }: { text: string; close: boolean }) =>
       supportApi.reply(activeId as number, text, close, {
         set_status: pendingMacro?.set_status ?? null,
         add_tag_id: pendingMacro?.add_tag_id ?? null,
       }),
     onSuccess: (_, variables) => {
-      setDraft('')
+      clearDraft()
       setPendingMacro(null)
       invalidateAll()
       toast.success(variables.close ? t('support.repliedAndClosed') : t('support.replied'))
@@ -274,7 +294,7 @@ export default function Support() {
   const attachMutation = useMutation({
     mutationFn: (file: File) => supportApi.attach(activeId as number, file, draft.trim()),
     onSuccess: () => {
-      setDraft('')
+      clearDraft()
       invalidateAll()
       toast.success(t('support.attached'))
     },
@@ -927,6 +947,20 @@ export default function Support() {
                     </div>
                   ))
                 )}
+                {sending && sending.ticketId === activeId && (
+                  <div className="flex justify-end">
+                    <div className="max-w-[88%] rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 opacity-60 md:max-w-[70%]">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-emerald-300">{t('support.operator')}</span>
+                        <span className="flex items-center gap-1 text-[11px] text-dark-300">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {t('support.sending')}
+                        </span>
+                      </div>
+                      <div className="whitespace-pre-line text-xs leading-relaxed text-dark-100">{sending.text}</div>
+                    </div>
+                  </div>
+                )}
                 <div ref={feedEndRef} />
               </div>
 
@@ -953,8 +987,23 @@ export default function Support() {
                     </div>
                   )}
                   {pendingMacro && (
-                    <div className="mb-2 text-[11px] text-cyan-300">
-                      {t('support.macroApplied', { title: pendingMacro.title })}
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-cyan-300">
+                      <span>{t('support.macroApplied', { title: pendingMacro.title })}</span>
+                      {pendingMacro.set_status && (
+                        <span className="rounded bg-emerald-400/12 px-1.5 py-0.5 text-emerald-300">
+                          {t('support.macroSetsStatus', {
+                            status: t(`support.status.${pendingMacro.set_status}`),
+                          })}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPendingMacro(null)}
+                        className="inline-flex items-center gap-1 text-dark-300 hover:text-dark-100"
+                      >
+                        <X className="h-3 w-3" />
+                        {t('support.macroDrop')}
+                      </button>
                     </div>
                   )}
                   <textarea

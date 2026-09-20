@@ -6846,6 +6846,8 @@
     "channel": {
       "telegram": "Telegram",
       "cabinet": "Cabinet"
-    }
+    },
+    "sending": "sending…",
+    "macroDrop": "drop template"
   }
 }
