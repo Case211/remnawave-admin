@@ -278,7 +278,9 @@ export default function Support() {
   const rowVirtualizer = useVirtualizer({
     count: tickets.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => 118,
+    // На телефоне строка выше: там кегль крупнее, чем в плотном десктопном списке.
+    estimateSize: () =>
+      typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches ? 118 : 132,
     overscan: 8,
   })
   const activeId = selectedId ?? tickets[0]?.id ?? null
@@ -953,7 +955,7 @@ export default function Support() {
                               <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
                             )}
                           </span>
-                          <span className="truncate text-xs font-semibold text-white">
+                          <span className="truncate text-sm font-semibold text-white lg:text-xs">
                             {item.customer_name || `#${item.bot_user_id}`}
                           </span>
                           <span className="text-[11px] text-dark-300">#{item.id}</span>
@@ -987,9 +989,9 @@ export default function Support() {
                             )}
                           </span>
                         </span>
-                        <span className="mt-1 block truncate text-xs text-dark-100">{item.title}</span>
+                        <span className="mt-1 block truncate text-sm text-dark-100 lg:text-xs">{item.title}</span>
                         {item.last_message_text && (
-                          <span className="mt-0.5 block truncate text-[11px] text-dark-300">
+                          <span className="mt-0.5 block truncate text-xs text-dark-300 lg:text-[11px]">
                             {item.last_message_text}
                           </span>
                         )}
@@ -1381,7 +1383,7 @@ export default function Support() {
                           </span>
                           <span className="text-[11px] text-dark-300">{timeOfDay(m.created_at)}</span>
                         </div>
-                        <div className="whitespace-pre-line text-xs leading-relaxed text-dark-100">{m.text}</div>
+                        <div className="whitespace-pre-line text-sm leading-relaxed text-dark-100 lg:text-xs">{m.text}</div>
                         {m.has_media && (() => {
                           const keys = m.media_items?.length
                             ? m.media_items.map((item) => `${m.id}:${item.index}`)
@@ -1461,7 +1463,7 @@ export default function Support() {
                           {t('support.sending')}
                         </span>
                       </div>
-                      <div className="whitespace-pre-line text-xs leading-relaxed text-dark-100">{sending.text}</div>
+                      <div className="whitespace-pre-line text-sm leading-relaxed text-dark-100 lg:text-xs">{sending.text}</div>
                     </div>
                   </div>
                 )}
@@ -1519,7 +1521,7 @@ export default function Support() {
                     style={{ maxHeight: '40vh' }}
                     aria-label={t('support.replyPlaceholder')}
                     placeholder={t('support.replyPlaceholder')}
-                    className="w-full resize-none rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-xs text-dark-100 outline-none focus:border-cyan-400/40 focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+                    className="w-full resize-none rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-sm text-dark-100 outline-none focus:border-cyan-400/40 lg:text-xs focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <input
