@@ -124,6 +124,19 @@ const ACTION_CLASS =
   'transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-white ' +
   'active:bg-cyan-400/15 disabled:opacity-50'
 
+/** Действия над подпиской клиента красим по смыслу: продление даёт человеку
+ *  дни, сброс отвязывает все его устройства. В сером ряду они выглядели
+ *  одинаково безобидно, а нажимаются с телефона одним пальцем. */
+const GRANT_CLASS =
+  'rounded-lg border border-emerald-400/30 bg-emerald-400/10 text-emerald-200 ' +
+  'transition-colors hover:border-emerald-400/50 hover:bg-emerald-400/20 hover:text-emerald-100 ' +
+  'active:bg-emerald-400/25 disabled:opacity-50'
+
+const RESET_CLASS =
+  'rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-200 ' +
+  'transition-colors hover:border-amber-400/50 hover:bg-amber-400/20 hover:text-amber-100 ' +
+  'active:bg-amber-400/25 disabled:opacity-50'
+
 /** Трафик по-человечески.
  *
  * Поле называется `*_gb`, но бот отдаёт в нём сырые байты — на экране это
@@ -749,6 +762,18 @@ export default function Support() {
   }, [tickets, activeId, canEdit, assignMutation])
 
   const ticket = detail?.ticket
+  const cardState = ticket
+    ? stateOf(
+        {
+          status: ticket.status,
+          waiting_since: ticket.waiting_since,
+          snooze_to: (ticket as any).snooze_to ?? null,
+        },
+        slaMinutes,
+        slaOn,
+        now,
+      )
+    : 'answered' 
   const messages = detail?.messages ?? []
   const ticketTags = (detail as any)?.tags as SupportTag[] | undefined
   const siblings = ((detail as any)?.sibling_tickets ?? []) as Array<{
@@ -1152,9 +1177,32 @@ export default function Support() {
                 </button>
                 <div className="min-w-0 flex-1 basis-full lg:basis-auto">
                   <div className="text-sm font-semibold text-white truncate">{ticket?.title}</div>
-                  <div className="text-[11px] text-dark-300">
-                    #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} ·{' '}
-                    {t(`support.channel.${channelOf(ticket?.telegram_id ?? null)}`)} · {t(`support.status.${ticket?.status}`)}
+                  {/* Раньше номер, имя, канал и состояние шли одной серой строкой
+                      через точки — глаз не отделял «кто написал» от «что делать».
+                      Состояние названо действием оператора, а не именем очереди. */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-dark-300">
+                    <span className="font-semibold text-dark-100">#{ticket?.id}</span>
+                    <span className="truncate text-dark-100">
+                      {ticket?.customer_name || `#${ticket?.bot_user_id}`}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5">
+                      {channelOf(ticket?.telegram_id ?? null) === 'telegram' ? (
+                        <Send className="h-2.5 w-2.5" aria-hidden="true" />
+                      ) : (
+                        <Mail className="h-2.5 w-2.5" aria-hidden="true" />
+                      )}
+                      {t(`support.channel.${channelOf(ticket?.telegram_id ?? null)}`)}
+                    </span>
+                    {ticket && (
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full px-2 py-0.5 font-semibold',
+                          STATE_BADGE[cardState],
+                        )}
+                      >
+                        {t(`support.cardState.${cardState}`)}
+                      </span>
+                    )}
                     {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since, now)}` : ''}
                     {ticket?.first_response_at && ticket?.created_at && (
                       <span className="hidden whitespace-nowrap rounded bg-[var(--glass-bg)] px-1.5 xl:inline">
@@ -1294,7 +1342,7 @@ export default function Support() {
                         type="button"
                         onClick={() => setConfirming('extend')}
                         disabled={quickActionMutation.isPending}
-                        className={cn('h-8 px-2.5 text-[11px] font-medium', ACTION_CLASS)}
+                        className={cn('h-8 px-2.5 text-[11px] font-medium', GRANT_CLASS)}
                       >
                         {t('support.customer.extend3d')}
                       </button>
@@ -1302,7 +1350,7 @@ export default function Support() {
                         type="button"
                         onClick={() => setConfirming('resetDevices')}
                         disabled={quickActionMutation.isPending}
-                        className={cn('h-8 px-2.5 text-[11px] font-medium', ACTION_CLASS)}
+                        className={cn('h-8 px-2.5 text-[11px] font-medium', RESET_CLASS)}
                       >
                         {t('support.customer.resetDevices')}
                       </button>

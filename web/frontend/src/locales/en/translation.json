@@ -7034,6 +7034,13 @@
     "fromUs": "You:",
     "fromClient": "Client:",
     "autoReply": "Auto-reply",
-    "autoReplyBadge": "bot"
+    "autoReplyBadge": "bot",
+    "cardState": {
+      "waiting": "Needs a reply",
+      "late": "Overdue — needs a reply",
+      "answered": "Answered, waiting for the client",
+      "snoozed": "Snoozed",
+      "closed": "Closed"
+    }
   }
 }

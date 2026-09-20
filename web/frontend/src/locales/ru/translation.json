@@ -7031,6 +7031,13 @@
     "fromUs": "Вы:",
     "fromClient": "Клиент:",
     "autoReply": "Автоответ",
-    "autoReplyBadge": "робот"
+    "autoReplyBadge": "робот",
+    "cardState": {
+      "waiting": "Нужен ответ",
+      "late": "Просрочено — нужен ответ",
+      "answered": "Ответ дан, ждём клиента",
+      "snoozed": "Отложено",
+      "closed": "Закрыто"
+    }
   }
 }
