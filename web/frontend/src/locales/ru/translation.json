@@ -6788,7 +6788,6 @@
     "unassign": "Снять с себя",
     "unassigned": "Обращение снято",
     "alsoViewing": "Сейчас смотрит: {{names}}",
-    "snooze3h": "Отложить 3 ч",
     "snoozed": "Обращение отложено",
     "macroSetsStatus": "Статус → {{status}}",
     "macroApplied": "Шаблон: {{title}}",
@@ -6876,6 +6875,15 @@
       "close": "Закрыть",
       "done": "Готово",
       "select": "Выбрать обращение"
-    }
+    },
+    "snooze": {
+      "h1": "1 ч",
+      "h3": "3 ч",
+      "tomorrow": "завтра",
+      "week": "неделя"
+    },
+    "siblings_one": "Ещё {{count}} обращение клиента:",
+    "siblings_few": "Ещё {{count}} обращения клиента:",
+    "siblings_many": "Ещё {{count}} обращений клиента:"
   }
 }

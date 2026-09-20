@@ -274,6 +274,18 @@ async def get_ticket(
             "SELECT * FROM support_ticket_messages WHERE ticket_id = $1 ORDER BY created_at ASC",
             ticket_id,
         )
+        # Другие обращения того же человека: половина ответов начинается со
+        # слов «вы уже писали об этом на прошлой неделе».
+        siblings = await conn.fetch(
+            """
+            SELECT id, title, status, created_at
+            FROM support_tickets
+            WHERE bot_user_id = $1 AND id <> $2
+            ORDER BY created_at DESC
+            LIMIT 5
+            """,
+            ticket["bot_user_id"], ticket_id,
+        )
         tags = await conn.fetch(
             """
             SELECT g.id, g.name, g.color
@@ -308,6 +320,7 @@ async def get_ticket(
         "messages": [_message_payload(m) for m in messages],
         "watchers": _watchers(ticket_id, exclude_admin_id=admin.account_id),
         "tags": [dict(tag) for tag in tags],
+        "sibling_tickets": [dict(s) for s in siblings],
     }
 
 

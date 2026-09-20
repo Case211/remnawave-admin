@@ -6792,7 +6792,6 @@
     "unassign": "Release",
     "unassigned": "Ticket released",
     "alsoViewing": "Also viewing: {{names}}",
-    "snooze3h": "Snooze 3h",
     "snoozed": "Ticket snoozed",
     "macroSetsStatus": "Status → {{status}}",
     "macroApplied": "Template: {{title}}",
@@ -6880,6 +6879,14 @@
       "close": "Close",
       "done": "Done",
       "select": "Select ticket"
-    }
+    },
+    "snooze": {
+      "h1": "1h",
+      "h3": "3h",
+      "tomorrow": "tomorrow",
+      "week": "week"
+    },
+    "siblings_one": "{{count}} more ticket from this customer:",
+    "siblings_other": "{{count}} more tickets from this customer:"
   }
 }

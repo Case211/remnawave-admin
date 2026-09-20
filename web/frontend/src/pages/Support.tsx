@@ -40,6 +40,14 @@ import client from '@/api/client'
 
 const QUEUES = ['wait_us', 'mine', 'late', 'wait_client', 'snoozed', 'all'] as const
 
+/** Отложить можно на срок, а не только «на три часа». */
+const SNOOZE_OPTIONS = [
+  { id: 'h1', minutes: 60 },
+  { id: 'h3', minutes: 180 },
+  { id: 'tomorrow', minutes: 60 * 18 },
+  { id: 'week', minutes: 60 * 24 * 7 },
+] as const
+
 /** Приоритет виден полоской: срочное должно выделяться до чтения текста. */
 const PRIORITY_BAR: Record<string, string> = {
   urgent: 'bg-red-400',
@@ -95,6 +103,7 @@ export default function Support() {
   // уведомления об SLA.
   const [searchParams, setSearchParams] = useSearchParams()
   const queueFromUrl = searchParams.get('queue') as QueueId | null
+  const ticketFromUrl = Number(searchParams.get('ticket')) || null
   const [queue, setQueueState] = useState<QueueId>(
     queueFromUrl && QUEUES.includes(queueFromUrl) ? queueFromUrl : 'wait_us',
   )
@@ -116,10 +125,19 @@ export default function Support() {
       else next.add(id)
       return next
     })
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(ticketFromUrl)
   // На узком экране колонки не помещаются рядом: показываем либо очередь,
   // либо переписку. Флаг переключает панели, на десктопе он ни на что не влияет.
-  const [mobileChatOpen, setMobileChatOpen] = useState(false)
+  const [mobileChatOpen, setMobileChatOpen] = useState(Boolean(ticketFromUrl))
+
+  // Алерт о просрочке ведёт на /support?ticket=123 — открываем именно его,
+  // даже если тикета нет в текущей очереди.
+  useEffect(() => {
+    if (ticketFromUrl) {
+      setSelectedId(ticketFromUrl)
+      setMobileChatOpen(true)
+    }
+  }, [ticketFromUrl])
   // Шаблон, вставленный в черновик: его побочные действия уйдут вместе с ответом.
   const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
   const clearDraft = () =>
@@ -556,6 +574,12 @@ export default function Support() {
   const ticket = detail?.ticket
   const messages = detail?.messages ?? []
   const ticketTags = (detail as any)?.tags as SupportTag[] | undefined
+  const siblings = ((detail as any)?.sibling_tickets ?? []) as Array<{
+    id: number
+    title: string
+    status: string
+    created_at: string
+  }>
 
   return (
     <PermissionGate resource="bedolaga_support" action="view">
@@ -925,10 +949,20 @@ export default function Support() {
                   )
                 )}
                 {canEdit && (
-                  <Button variant="ghost" size="sm" className="h-9" onClick={() => snoozeMutation.mutate(180)}>
-                    <Clock className="w-3.5 h-3.5 mr-1.5" />
-                    {t('support.snooze3h')}
-                  </Button>
+                  <span className="flex items-center gap-1 rounded-lg border border-[var(--glass-border)] px-1">
+                    <Clock className="h-3.5 w-3.5 text-dark-300" aria-hidden="true" />
+                    {SNOOZE_OPTIONS.map((option) => (
+                      <button
+                        key={option.minutes}
+                        type="button"
+                        onClick={() => snoozeMutation.mutate(option.minutes)}
+                        disabled={snoozeMutation.isPending}
+                        className="h-8 rounded px-1.5 text-[11px] text-dark-300 hover:text-white"
+                      >
+                        {t(`support.snooze.${option.id}`)}
+                      </button>
+                    ))}
+                  </span>
                 )}
                 {canEdit && ticket?.status !== 'closed' && (
                   <Button variant="ghost" size="sm" className="h-9" onClick={() => setConfirming('close')}>
@@ -1069,6 +1103,23 @@ export default function Support() {
                         + {tag.name}
                       </button>
                     ))}
+                </div>
+              )}
+
+              {siblings.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] md:px-4">
+                  <span className="text-dark-300">{t('support.siblings', { count: siblings.length })}</span>
+                  {siblings.map((sibling) => (
+                    <button
+                      key={sibling.id}
+                      type="button"
+                      onClick={() => setSelectedId(sibling.id)}
+                      className="max-w-[220px] truncate rounded-md border border-[var(--glass-border)] px-2 py-0.5 text-dark-200 hover:text-white"
+                      title={sibling.title}
+                    >
+                      #{sibling.id} · {sibling.title}
+                    </button>
+                  ))}
                 </div>
               )}
 
