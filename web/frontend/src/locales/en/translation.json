@@ -6849,6 +6849,11 @@
         "title": "Take this ticket over?",
         "description": "Another operator is handling it — they will lose it from their queue.",
         "action": "Take over"
+      },
+      "bulkClose": {
+        "title": "Close selected tickets?",
+        "description": "Every customer will be notified. This cannot be undone.",
+        "action": "Close all"
       }
     },
     "channel": {
@@ -6868,6 +6873,13 @@
         "s3_upload": "upload",
         "assign": "assigned"
       }
+    },
+    "bulk": {
+      "selected": "Selected: {{count}}",
+      "assign": "Take",
+      "close": "Close",
+      "done": "Done",
+      "select": "Select ticket"
     }
   }
 }

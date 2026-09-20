@@ -106,6 +106,16 @@ export default function Support() {
   const [searchInput, setSearchInput] = useState('')
   const [tagFilter, setTagFilter] = useState<number | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  // Массовые действия: разбор завала начинается с того, что половину очереди
+  // нужно закрыть или забрать себе одним движением.
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const toggleSelected = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   // На узком экране колонки не помещаются рядом: показываем либо очередь,
   // либо переписку. Флаг переключает панели, на десктопе он ни на что не влияет.
@@ -133,7 +143,7 @@ export default function Support() {
   const [now, setNow] = useState(() => Date.now())
   // Закрытие уходит клиенту уведомлением и не отменяется, перехват тикета
   // забирает работу у коллеги — оба действия спрашивают подтверждение.
-  const [confirming, setConfirming] = useState<null | 'close' | 'replyClose' | 'steal'>(null)
+  const [confirming, setConfirming] = useState<null | 'close' | 'replyClose' | 'steal' | 'bulkClose'>(null)
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(timer)
@@ -381,6 +391,23 @@ export default function Support() {
     mutationFn: (tagId: number) => supportExtraApi.attachTag(activeId as number, tagId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['support-ticket', activeId] })
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const bulkMutation = useMutation({
+    mutationFn: async (action: 'close' | 'assign') => {
+      const ids = Array.from(selected)
+      // Последовательно: бот на пачку параллельных запросов отвечает 429.
+      for (const id of ids) {
+        if (action === 'close') await supportApi.setStatus(id, 'closed')
+        else await supportApi.assign(id)
+      }
+    },
+    onSuccess: () => {
+      setSelected(new Set())
+      invalidateAll()
+      toast.success(t('support.bulk.done'))
     },
     onError: () => toast.error(t('common.error')),
   })
@@ -638,6 +665,36 @@ export default function Support() {
             </div>
           </div>
 
+          {selected.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-[var(--glass-border)] bg-cyan-400/8 px-3 py-2">
+              <span className="text-[11px] font-semibold text-cyan-300">
+                {t('support.bulk.selected', { count: selected.size })}
+              </span>
+              <span className="flex-1" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => bulkMutation.mutate('assign')}
+                disabled={bulkMutation.isPending}
+              >
+                {t('support.bulk.assign')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => setConfirming('bulkClose')}
+                disabled={bulkMutation.isPending}
+              >
+                {t('support.bulk.close')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => setSelected(new Set())}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          )}
+
           {allTags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 border-b border-[var(--glass-border)] px-3 py-2">
               {allTags.slice(0, 8).map((tag) => (
@@ -707,6 +764,33 @@ export default function Support() {
                         )}
                         aria-hidden="true"
                       />
+                      {canEdit && (
+                        <span
+                          role="checkbox"
+                          aria-checked={selected.has(item.id)}
+                          aria-label={t('support.bulk.select')}
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleSelected(item.id)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ' || e.key === 'Enter') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              toggleSelected(item.id)
+                            }
+                          }}
+                          className={cn(
+                            'mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
+                            selected.has(item.id)
+                              ? 'border-cyan-400 bg-cyan-400/20 text-cyan-300'
+                              : 'border-[var(--glass-border)] text-transparent',
+                          )}
+                        >
+                          <Check className="h-3 w-3" />
+                        </span>
+                      )}
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
                           <span className="flex h-1.5 w-1.5 flex-shrink-0 items-center justify-center">
@@ -1248,6 +1332,7 @@ export default function Support() {
           if (confirming === 'close') statusMutation.mutate('closed')
           if (confirming === 'replyClose') send(true)
           if (confirming === 'steal') assignMutation.mutate()
+          if (confirming === 'bulkClose') bulkMutation.mutate('close')
           setConfirming(null)
         }}
       />
