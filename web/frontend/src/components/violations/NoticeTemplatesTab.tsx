@@ -35,6 +35,7 @@ interface NoticeTemplate {
 /** Цвет вида нарушения закреплён за именем: раздел должен узнаваться с ходу. */
 const KIND_TONE: Record<string, string> = {
   default: 'border-cyan-400/25 bg-cyan-400/12 text-cyan-200',
+  traffic_rate: 'border-amber-400/25 bg-amber-400/12 text-amber-200',
   temporal: 'border-violet-400/25 bg-violet-400/12 text-violet-200',
   geo: 'border-sky-400/25 bg-sky-400/12 text-sky-200',
   asn: 'border-emerald-400/25 bg-emerald-400/12 text-emerald-200',
@@ -152,7 +153,10 @@ export function NoticeTemplatesTab() {
                   {t('violations.notices.alsoEmail')}
                 </label>
 
-                <label className="flex items-center gap-2 text-sm text-dark-200">
+                <label
+                  className="flex items-center gap-2 text-sm text-dark-200"
+                  title={t('violations.notices.minScoreHint')}
+                >
                   {t('violations.notices.minScore')}
                   <Input
                     type="number"

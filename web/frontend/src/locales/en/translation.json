@@ -2065,22 +2065,24 @@
       "saved": "Template saved",
       "enabled": "Warn",
       "alsoEmail": "and by email",
-      "minScore": "Score threshold",
+      "minScore": "Auto-send threshold",
       "off": "off",
       "updatedBy": "edited by {{name}}",
       "subjectPlaceholder": "Email subject",
       "bodyPlaceholder": "Warning text",
       "kinds": {
-        "default": "General",
-        "temporal": "Connection timing",
-        "geo": "Geography",
-        "asn": "Networks and providers",
-        "profile": "Behaviour profile",
-        "device": "Devices",
-        "hwid": "Device fingerprints",
-        "user_agent": "Clients and versions",
-        "torrent": "Torrents"
-      }
+        "default": "General (subscription sharing)",
+        "temporal": "Temporal (simultaneous connections)",
+        "geo": "Geographic (impossible travel)",
+        "asn": "ASN (provider type)",
+        "profile": "Profile (behavior deviation)",
+        "device": "Device (fingerprint)",
+        "hwid": "HWID (cross-account)",
+        "user_agent": "User-Agent (client and version)",
+        "torrent": "Torrent (P2P traffic)",
+        "traffic_rate": "Traffic usage (excessive consumption)"
+      },
+      "minScoreHint": "Applies to auto-sending only: the «Warn» button sends regardless of the score"
     }
   },
   "admins": {

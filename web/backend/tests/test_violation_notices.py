@@ -88,11 +88,21 @@ def _template(**extra) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_weak_violation_does_not_warn(monkeypatch):
-    """Порог проверяется на отправке, а не только при показе кнопки."""
+async def test_threshold_holds_back_auto_send(monkeypatch):
+    """Порог сдерживает автоматику: слабое срабатывание клиента не тревожит."""
     monkeypatch.setattr("shared.database.db_service", _db(_Conn({"device": _template()})))
 
-    assert await notices.pick_template("device", score=20.0) is None
+    assert await notices.pick_template("device", score=20.0, respect_threshold=True) is None
+
+
+@pytest.mark.asyncio
+async def test_button_ignores_threshold(monkeypatch):
+    """Нажатие «Предупредить» — уже решение человека, спорить с ним не надо."""
+    monkeypatch.setattr("shared.database.db_service", _db(_Conn({"device": _template()})))
+
+    template = await notices.pick_template("device", score=20.0)
+
+    assert template is not None, "ручная отправка порогом не ограничивается"
 
 
 @pytest.mark.asyncio
@@ -103,7 +113,7 @@ async def test_disabled_kind_falls_back_to_default(monkeypatch):
     })
     monkeypatch.setattr("shared.database.db_service", _db(conn))
 
-    template = await notices.pick_template("device", score=90.0)
+    template = await notices.pick_template("device", score=90.0, respect_threshold=True)
 
     assert template is not None
     assert template["kind"] == "default"

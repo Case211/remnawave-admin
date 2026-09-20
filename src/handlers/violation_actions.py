@@ -116,7 +116,7 @@ async def _warn_after_action(user_uuid: str, admin: BotAdmin) -> None:
     if not config_service.get("violations_warn_on_action", True):
         return
     try:
-        result = await _send_warning(user_uuid, admin)
+        result = await _send_warning(user_uuid, admin, auto=True)
         if not result.get("sent"):
             logger.info(
                 "Предупреждение к мере по %s не ушло: %s", user_uuid[:8], result.get("reason")
@@ -146,14 +146,20 @@ async def _latest_violation(user_uuid: str) -> dict | None:
     return dict(row) if row else None
 
 
-async def _send_warning(user_uuid: str, admin: BotAdmin) -> dict:
-    """Предупредить клиента по свежему нарушению. Общая часть кнопки и мер."""
+async def _send_warning(user_uuid: str, admin: BotAdmin, *, auto: bool = False) -> dict:
+    """Предупредить клиента по свежему нарушению. Общая часть кнопки и мер.
+
+    ``auto`` включает порог скора из шаблона: автоматическую отправку он
+    сдерживает, а нажатие кнопки — нет, там уже решил человек.
+    """
     from web.backend.core.violation_notices import send_notice
 
     violation = await _latest_violation(user_uuid)
     if not violation:
         return {"sent": False, "reason": "no_violation"}
-    return await send_notice(violation, sent_by=admin.username or str(admin.telegram_id))
+    return await send_notice(
+        violation, sent_by=admin.username or str(admin.telegram_id), auto=auto
+    )
 
 
 async def _warn_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmin) -> None:

@@ -24,7 +24,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Порядок важен: сюда же смотрит интерфейс шаблонов.
-NOTICE_KINDS = ("default", "temporal", "geo", "asn", "profile", "device", "hwid", "user_agent", "torrent")
+NOTICE_KINDS = (
+    "default", "temporal", "geo", "asn", "profile",
+    "device", "hwid", "user_agent", "torrent", "traffic_rate",
+)
 
 _TEMPLATE_FIELDS = (
     "kind", "enabled", "min_score", "send_email",
@@ -101,8 +104,15 @@ def violation_kind(violation: dict) -> str:
     return "default"
 
 
-async def pick_template(kind: str, score: float | None) -> Optional[dict]:
-    """Шаблон под вид нарушения с учётом порога; None — предупреждать не надо."""
+async def pick_template(
+    kind: str, score: float | None, *, respect_threshold: bool = False
+) -> Optional[dict]:
+    """Шаблон под вид нарушения; None — предупреждать не надо.
+
+    Порог скора смотрим только при автоотправке. Нажатие «Предупредить» — уже
+    решение человека, и отказывать ему из-за слабого скора значит спорить с
+    оператором, который видит нарушение целиком.
+    """
     from shared.database import db_service
 
     if not db_service.is_connected:
@@ -120,7 +130,7 @@ async def pick_template(kind: str, score: float | None) -> Optional[dict]:
         return None
 
     template = dict(row)
-    if score is not None and float(score) < float(template["min_score"] or 0):
+    if respect_threshold and score is not None and float(score) < float(template["min_score"] or 0):
         return None
     if not (template.get("body_ru") or "").strip():
         return None
@@ -143,12 +153,16 @@ async def send_notice(
     *,
     sent_by: str | None = None,
     force: bool = False,
+    auto: bool = False,
 ) -> dict:
     """Отправить клиенту предупреждение по конкретному нарушению.
 
     Возвращает результат доставки по каналам: ``{"sent": bool, "telegram": …,
     "email": …, "reason": …}``. Ошибка доставки не откатывает ничего — писать
     повторно решает оператор.
+
+    ``auto`` — отправка без отдельного решения человека: тогда действует порог
+    скора из шаблона, иначе он не применяется.
     """
     from shared.bedolaga_client import bedolaga_client
     from shared.database import db_service
@@ -164,7 +178,7 @@ async def send_notice(
         return {"sent": False, "reason": "already_notified"}
 
     kind = violation_kind(violation)
-    template = await pick_template(kind, violation.get("score"))
+    template = await pick_template(kind, violation.get("score"), respect_threshold=auto)
     if not template:
         return {"sent": False, "reason": "no_template", "kind": kind}
 
