@@ -800,7 +800,6 @@ async def message_media(
     токен. Поэтому админка не отдаёт эту ссылку в браузер, а скачивает файл
     сама и стримит клиенту — наружу не утекает ни адрес бота, ни ключ.
     """
-    import httpx
     from fastapi.responses import Response
 
     # Файл из пачки качаем по его file_id: ручка медиа тикета знает только
@@ -836,39 +835,29 @@ async def message_media(
         )
 
     info = await proxy_request(lambda: bedolaga_client.get_ticket_message_media(ticket_id, message_id))
-    media_url = (info or {}).get("media_url")
-    if not media_url:
+    file_id = (info or {}).get("media_file_id")
+    if not file_id:
         raise api_error(404, E.NOT_FOUND, "Media is not available")
 
     media_type = str((info or {}).get("media_type") or "document")
-    cache_key = str((info or {}).get("media_file_id") or f"{ticket_id}:{message_id}")
-    cached = media_cache.read(cache_key)
-    if cached is not None:
-        return Response(
-            content=cached,
-            media_type={"photo": "image/jpeg", "video": "video/mp4"}.get(media_type, "application/octet-stream"),
-            headers={
-                "Cache-Control": "private, max-age=3600",
-                "Content-Disposition": f'inline; filename="ticket-{ticket_id}-{message_id}"',
-            },
-        )
+    cached = media_cache.read(file_id)
+    content = cached
+    if content is None:
+        # Раньше ходили по media_url из ответа бота, но этот адрес он строит
+        # относительно себя (request.url_for) — из нашего контейнера он не
+        # резолвится и запрос падал с «All connection attempts failed».
+        # Тянем файл тем же клиентом, что и остальные вызовы бота: по file_id,
+        # на настроенный BEDOLAGA_API_URL и с токеном.
+        content = await proxy_request(lambda: bedolaga_client.download_media(file_id))
+        media_cache.write(file_id, content)
 
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:
-            response = await http.get(media_url)
-            response.raise_for_status()
-    except httpx.HTTPError as exc:
-        logger.warning("Support: вложение %s/%s не скачалось: %s", ticket_id, message_id, exc)
-        raise api_error(502, E.NOT_FOUND, "Could not fetch media from the bot")
-
-    media_cache.write(cache_key, response.content)
-    content_type = response.headers.get("content-type") or {
+    content_type = {
         "photo": "image/jpeg",
         "video": "video/mp4",
     }.get(media_type, "application/octet-stream")
 
     return Response(
-        content=response.content,
+        content=content,
         media_type=content_type,
         headers={
             # Вложения не меняются: браузер может держать их у себя.
