@@ -890,6 +890,7 @@ export default function Support() {
                       }}
                       className={cn(
                         'absolute left-0 top-0 flex w-full gap-2.5 border-b border-[var(--glass-border)] py-2.5 pr-3 text-left transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cyan-400/60',
                         item.id === activeId ? 'bg-cyan-400/8' : 'hover:bg-[var(--glass-bg)]',
                       )}
                       style={{ transform: `translateY(${row.start}px)` }}
@@ -1222,7 +1223,7 @@ export default function Support() {
                     rows={1}
                     placeholder={t('support.customer.notePlaceholder')}
                     aria-label={t('support.customer.note')}
-                    className="h-8 flex-1 resize-none rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-[11px] text-dark-100 outline-none focus:border-amber-400/40"
+                    className="h-8 flex-1 resize-none rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-[11px] text-dark-100 outline-none focus:border-amber-400/40 focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                   />
                   {noteDraft !== null && noteDraft !== (noteData?.note ?? '') && (
                     <Button
@@ -1280,7 +1281,7 @@ export default function Support() {
                     }}
                     placeholder={t('support.tagNew')}
                     aria-label={t('support.tagNew')}
-                    className="h-6 w-28 rounded-md border border-dashed border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-dark-200 outline-none focus:border-cyan-400/40"
+                    className="h-6 w-28 rounded-md border border-dashed border-[var(--glass-border)] bg-transparent px-2 text-[11px] text-dark-200 outline-none focus:border-cyan-400/40 focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                   />
                 </div>
               )}
@@ -1507,7 +1508,7 @@ export default function Support() {
                     style={{ maxHeight: '40vh' }}
                     aria-label={t('support.replyPlaceholder')}
                     placeholder={t('support.replyPlaceholder')}
-                    className="w-full resize-none rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-xs text-dark-100 outline-none focus:border-cyan-400/40"
+                    className="w-full resize-none rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-xs text-dark-100 outline-none focus:border-cyan-400/40 focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <input

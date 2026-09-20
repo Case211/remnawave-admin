@@ -317,7 +317,10 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                                 />
                                 <span className="sidebar-nav-text">{t(item.name)}</span>
                                 {item.href === '/support' && supportWaiting > 0 && (
-                                  <span className="sidebar-nav-text ml-auto rounded-full bg-cyan-400/15 px-1.5 text-[11px] font-semibold tabular-nums text-cyan-300">
+                                  <span
+                                    className="sidebar-nav-text ml-auto rounded-full bg-cyan-400/15 px-1.5 text-[11px] font-semibold tabular-nums text-cyan-300"
+                                    aria-label={t('support.waitingCount', { count: supportWaiting })}
+                                  >
                                     {supportWaiting}
                                   </span>
                                 )}

@@ -6913,6 +6913,7 @@
     "releaseOther": "Release {{name}}",
     "loadFailed": "Queue failed to load",
     "loadFailedHint": "Tickets may still be there — this is a connection failure, not an empty queue.",
-    "ticketLoadFailed": "Conversation failed to load"
+    "ticketLoadFailed": "Conversation failed to load",
+    "waitingCount": "{{count}} tickets waiting for a reply"
   }
 }
