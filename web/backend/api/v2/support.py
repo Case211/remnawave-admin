@@ -19,7 +19,7 @@ from web.backend.api.deps import AdminUser, get_client_ip, require_permission
 from web.backend.api.v2.bedolaga import proxy_request
 from web.backend.core.audit import write_audit_log
 from web.backend.core.errors import E, api_error
-from web.backend.core.support_alerts import sla_minutes
+from web.backend.core.support_alerts import sla_enabled, sla_minutes
 from web.backend.core.support_sync import sync_ticket, sync_tickets
 
 logger = logging.getLogger(__name__)
@@ -109,6 +109,10 @@ def _queue_condition(queue: str, admin_id: int, params: list) -> str:
         params.append(admin_id)
         return f"t.status <> 'closed' AND a.admin_id = ${len(params)}"
     if queue == QUEUE_LATE:
+        # Контроль срока выключен — очереди «просрочены» не существует, а не
+        # «в ней все подряд».
+        if not sla_enabled():
+            return "FALSE"
         params.append(late_before)
         return f"t.waiting_since IS NOT NULL AND t.waiting_since < ${len(params)}"
     if queue == QUEUE_WAIT_CLIENT:
@@ -148,13 +152,15 @@ async def get_queues(admin: AdminUser = Depends(require_permission("bedolaga_sup
             late_before,
         )
 
+    sla_on = sla_enabled()
     return {
         "wait_us": row["wait_us"],
         "mine": row["mine"],
-        "late": row["late"],
+        "late": row["late"] if sla_on else 0,
         "wait_client": row["wait_client"],
         "snoozed": row["snoozed"],
         "all": row["all"],
+        "sla_enabled": sla_on,
         "sla_minutes": sla_minutes(),
     }
 
@@ -649,15 +655,17 @@ async def metrics(
 
     created = int(row["created"] or 0)
     breached = int(row["breached"] or 0)
+    sla_on = sla_enabled()
     return {
         "days": days,
+        "sla_enabled": sla_on,
         "sla_minutes": threshold_minutes,
         "created": created,
         "answered": int(row["answered"] or 0),
         "still_waiting": int(row["still_waiting"] or 0),
         "closed": int(row["closed"] or 0),
         "avg_first_response_minutes": round(float(row["avg_first_response_minutes"] or 0), 1),
-        "breached": breached,
-        "breached_percent": round(breached * 100 / created, 1) if created else 0.0,
+        "breached": breached if sla_on else None,
+        "breached_percent": (round(breached * 100 / created, 1) if created else 0.0) if sla_on else None,
         "by_admin": [dict(r) for r in by_admin],
     }

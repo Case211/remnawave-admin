@@ -31,6 +31,17 @@ def sla_minutes() -> int:
         return DEFAULT_SLA_MINUTES
 
 
+def sla_enabled() -> bool:
+    """Контроль срока ответа целиком: очередь, подсветка, алерты о просрочке.
+
+    Выключатель отдельный от алертов: кому-то нужны уведомления о новых
+    обращениях, но не нужна гонка за таймером.
+    """
+    from shared.config_service import config_service
+
+    return bool(config_service.get("support_sla_enabled", True))
+
+
 def alerts_enabled() -> bool:
     from shared.config_service import config_service
 
@@ -84,7 +95,7 @@ async def check_sla_breaches() -> int:
     """Найти обращения, где клиент ждёт дольше порога, и предупредить один раз."""
     from shared.database import db_service
 
-    if not alerts_enabled() or not db_service.is_connected:
+    if not sla_enabled() or not alerts_enabled() or not db_service.is_connected:
         return 0
 
     threshold = datetime.now(timezone.utc) - timedelta(minutes=sla_minutes())

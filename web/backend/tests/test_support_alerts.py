@@ -65,6 +65,7 @@ def _row(ticket_id: int, minutes: int) -> dict:
 def _clean_state(monkeypatch):
     support_alerts._sla_alerted.clear()
     monkeypatch.setattr(support_alerts, "alerts_enabled", lambda: True)
+    monkeypatch.setattr(support_alerts, "sla_enabled", lambda: True)
     monkeypatch.setattr(support_alerts, "sla_minutes", lambda: 30)
 
 
@@ -110,6 +111,16 @@ async def test_alert_repeats_after_ticket_was_answered(monkeypatch, sent):
 async def test_alerts_can_be_switched_off(monkeypatch, sent):
     monkeypatch.setattr(support_alerts, "alerts_enabled", lambda: False)
     monkeypatch.setattr("shared.database.db_service", _DB([_row(11, 90)]))
+
+    assert await support_alerts.check_sla_breaches() == 0
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_sla_switch_off_silences_breaches(monkeypatch, sent):
+    """Контроль срока выключен — о просрочке не сообщаем вовсе."""
+    monkeypatch.setattr(support_alerts, "sla_enabled", lambda: False)
+    monkeypatch.setattr("shared.database.db_service", _DB([_row(11, 120)]))
 
     assert await support_alerts.check_sla_breaches() == 0
     assert sent == []

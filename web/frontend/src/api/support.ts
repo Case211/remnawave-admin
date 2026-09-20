@@ -1,6 +1,7 @@
 import client from './client'
 
 export interface SupportQueues {
+  sla_enabled: boolean
   wait_us: number
   mine: number
   late: number
@@ -145,14 +146,15 @@ export interface SupportTag {
 
 export interface SupportMetrics {
   days: number
+  sla_enabled: boolean
   sla_minutes: number
   created: number
   answered: number
   still_waiting: number
   closed: number
   avg_first_response_minutes: number
-  breached: number
-  breached_percent: number
+  breached: number | null
+  breached_percent: number | null
   by_admin: Array<{ admin_id: number; tickets: number }>
 }
 

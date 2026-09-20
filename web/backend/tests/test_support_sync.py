@@ -135,6 +135,16 @@ def test_queue_late_binds_sla_threshold():
     assert params[0] < datetime.now(timezone.utc)
 
 
+def test_queue_late_is_empty_when_sla_is_off(monkeypatch):
+    """Выключенный контроль срока убирает очередь, а не наполняет её всеми."""
+    # роутер импортирует функцию по имени — подменяем её именно там
+    monkeypatch.setattr(support, "sla_enabled", lambda: False)
+    params: list = []
+
+    assert support._queue_condition(support.QUEUE_LATE, admin_id=1, params=params) == "FALSE"
+    assert params == []
+
+
 def test_queue_all_has_no_filter():
     params: list = []
     assert support._queue_condition(support.QUEUE_ALL, admin_id=1, params=params) == "TRUE"

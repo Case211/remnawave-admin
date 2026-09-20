@@ -40,8 +40,9 @@ function waitedFor(iso: string | null): string {
   return `${Math.floor(hours / 24)} дн`
 }
 
-function waitTone(iso: string | null, slaMinutes: number): string {
+function waitTone(iso: string | null, slaMinutes: number, slaOn = true): string {
   if (!iso) return 'text-dark-400'
+  if (!slaOn) return 'text-dark-300'
   const minutes = (Date.now() - new Date(iso).getTime()) / 60000
   if (minutes >= slaMinutes) return 'text-red-400 font-bold'
   if (minutes >= slaMinutes / 2) return 'text-amber-400'
@@ -74,6 +75,10 @@ export default function Support() {
     refetchInterval: 30_000,
   })
   const slaMinutes = queues?.sla_minutes ?? 30
+  // Контроль срока выключен — ни очереди «просрочены», ни цветного таймера:
+  // подсвечивать нечего, а красное время без SLA только пугает.
+  const slaOn = queues?.sla_enabled !== false
+  const visibleQueues = slaOn ? QUEUES : QUEUES.filter((id) => id !== 'late')
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput.trim()), 300)
@@ -296,7 +301,7 @@ export default function Support() {
         {/* Очереди */}
         <aside className="w-52 flex-shrink-0 flex flex-col gap-4">
           <div className="space-y-1">
-            {QUEUES.map((id) => (
+            {visibleQueues.map((id) => (
               <button
                 key={id}
                 type="button"
@@ -332,12 +337,14 @@ export default function Support() {
                 <span>{t('support.metrics.avgFirstResponse')}</span>
                 <span className="tabular-nums text-emerald-400">{metrics.avg_first_response_minutes} {t('support.metrics.min')}</span>
               </div>
-              <div className="flex justify-between">
-                <span>{t('support.metrics.breached')}</span>
-                <span className={cn('tabular-nums', metrics.breached ? 'text-red-400' : 'text-dark-100')}>
-                  {metrics.breached} ({metrics.breached_percent}%)
-                </span>
-              </div>
+              {metrics.sla_enabled && (
+                <div className="flex justify-between">
+                  <span>{t('support.metrics.breached')}</span>
+                  <span className={cn('tabular-nums', metrics.breached ? 'text-red-400' : 'text-dark-100')}>
+                    {metrics.breached} ({metrics.breached_percent}%)
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -393,7 +400,7 @@ export default function Support() {
                       {item.customer_name || `#${item.bot_user_id}`}
                     </span>
                     <span className="text-[10px] text-dark-400">#{item.id}</span>
-                    <span className={cn('ml-auto text-[11px] tabular-nums', waitTone(item.waiting_since, slaMinutes))}>
+                    <span className={cn('ml-auto text-[11px] tabular-nums', waitTone(item.waiting_since, slaMinutes, slaOn))}>
                       {item.waiting_since ? waitedFor(item.waiting_since) : t('support.answeredShort')}
                     </span>
                   </div>

@@ -686,6 +686,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 8,
     },
     {
+        "key": "support_sla_enabled",
+        "value_type": "bool",
+        "category": "general",
+        "subcategory": "support",
+        "display_name": "Поддержка: контроль срока ответа",
+        "description": "Очередь «просрочены», подсветка времени ожидания и алерты о просрочке",
+        "default_value": "true",
+        "sort_order": 59,
+    },
+    {
         "key": "support_sla_minutes",
         "value_type": "int",
         "category": "general",

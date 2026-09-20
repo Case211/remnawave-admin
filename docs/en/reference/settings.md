@@ -318,6 +318,10 @@ Schedule, retention and the dead-man switch that warns when backups have stopped
 | **S3: upload automatically** | `backup_s3_auto_upload` | `false` | Send every scheduled backup to the storage |
 | **S3: files to keep** | `backup_s3_keep_count` | `0` | How many recent files to keep in the bucket after an automatic upload (0 = keep everything) |
 | **S3: access keys** | `backup_s3_creds` | — | Access Key and Secret Key, encrypted; editable only on the Storage tab |
+| **Support: response deadline** | `support_sla_enabled` | `true` | Overdue queue, wait-time highlighting and breach alerts |
+| **Support: first reply target** | `support_sla_minutes` | `30` | Minutes of waiting after which a ticket counts as overdue |
+| **Support: alerts** | `support_alerts_enabled` | `true` | Notify about new tickets and missed first replies |
+| **Support: new ticket alert** | `support_alert_new_ticket` | `true` | Notify as soon as a customer opens a ticket |
 
 
 ## 📊 Reports
