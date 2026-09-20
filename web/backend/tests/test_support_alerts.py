@@ -213,3 +213,36 @@ def test_scrub_hides_token_from_logs():
     scrubbed = support_ws_client._scrub(message)
     assert "super-secret" not in scrubbed
     assert "token=***" in scrubbed
+
+
+# ── Ссылка на обращение в Telegram ──
+
+
+def _panel_url(monkeypatch, value: str):
+    class _Config:
+        def get(self, key, default=None):
+            return value if key == "web_panel_public_url" else default
+
+    monkeypatch.setattr("shared.config_service.config_service", _Config())
+
+
+def test_alert_carries_button_to_the_ticket(monkeypatch):
+    _panel_url(monkeypatch, "https://panel.example.com/")
+
+    markup = support_alerts._ticket_button(42)
+
+    assert markup["inline_keyboard"][0][0]["url"] == "https://panel.example.com/support?ticket=42"
+
+
+def test_no_button_without_public_url(monkeypatch):
+    # Пустая настройка — уведомление уходит просто без кнопки.
+    _panel_url(monkeypatch, "")
+
+    assert support_alerts._ticket_button(42) is None
+
+
+def test_no_button_for_plain_http(monkeypatch):
+    # Telegram отклоняет http-кнопку вместе со всем сообщением — лучше без неё.
+    _panel_url(monkeypatch, "http://panel.example.com")
+
+    assert support_alerts._ticket_button(42) is None

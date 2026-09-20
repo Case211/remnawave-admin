@@ -54,6 +54,27 @@ def new_ticket_alerts_enabled() -> bool:
     return alerts_enabled() and bool(config_service.get("support_alert_new_ticket", True))
 
 
+def _ticket_button(ticket_id: int) -> dict | None:
+    """Кнопка «Открыть обращение» под уведомлением в Telegram.
+
+    Внутрипанельный путь в чате бесполезен — нужен абсолютный адрес, а его
+    знает только настройка «Публичный URL панели». Telegram принимает в кнопке
+    исключительно https и отклоняет всё сообщение целиком, если адрес не
+    подошёл, поэтому на пустой или http-настройке кнопки просто нет: лучше
+    уведомление без ссылки, чем молчание.
+    """
+    from shared.config_service import config_service
+
+    base = str(config_service.get("web_panel_public_url", "") or "").strip().rstrip("/")
+    if not base.startswith("https://"):
+        return None
+    return {
+        "inline_keyboard": [
+            [{"text": "🔎 Открыть обращение", "url": f"{base}/support?ticket={ticket_id}"}]
+        ]
+    }
+
+
 async def _notify(title: str, body: str, *, severity: str, group_key: str, ticket_id: int) -> None:
     try:
         from web.backend.core.notification_service import create_notification
@@ -69,6 +90,7 @@ async def _notify(title: str, body: str, *, severity: str, group_key: str, ticke
             source_id=str(ticket_id),
             group_key=group_key,
             link=f"/support?ticket={ticket_id}",
+            reply_markup=_ticket_button(ticket_id),
         )
     except Exception as exc:  # noqa: BLE001 — алерт не должен ронять синк
         logger.warning("Support alert не отправлен (%s): %s", group_key, exc)
