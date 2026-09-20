@@ -96,6 +96,21 @@ function minutesBetween(fromIso: string, toIso: string): string {
   return hours < 24 ? `${hours} ч ${minutes % 60} мин` : `${Math.floor(hours / 24)} дн`
 }
 
+/** Трафик по-человечески.
+ *
+ * Поле называется `*_gb`, но бот отдаёт в нём сырые байты — на экране это
+ * выглядело как «Трафик: 5368709120». Значения меньше 1024 трактуем как
+ * гигабайты (так ведут себя старые ответы), остальное — как байты.
+ */
+function formatTraffic(value: number | null | undefined): string {
+  if (value == null) return '—'
+  const bytes = value < 1024 ? value * 1024 ** 3 : value
+  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} КБ`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} МБ`
+  if (bytes < 1024 ** 4) return `${(bytes / 1024 ** 3).toFixed(1)} ГБ`
+  return `${(bytes / 1024 ** 4).toFixed(2)} ТБ`
+}
+
 function timeOfDay(iso: string | null): string {
   if (!iso) return ''
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -971,7 +986,7 @@ export default function Support() {
             <EmptyState icon={Users} title={t('support.pickTicket')} />
           ) : (
             <>
-              <header className="flex flex-wrap items-center gap-2 border-b border-[var(--glass-border)] px-3 py-2.5 lg:flex-nowrap lg:gap-3 lg:px-4 lg:py-3">
+              <header className="flex flex-shrink-0 flex-wrap items-center gap-2 border-b border-[var(--glass-border)] px-3 py-2.5 lg:flex-nowrap lg:gap-3 lg:px-4 lg:py-3">
                 <button
                   type="button"
                   onClick={() => setMobileChatOpen(false)}
@@ -1053,12 +1068,12 @@ export default function Support() {
               </header>
 
               {!customer && detailUserId != null && (
-                <div className="flex h-9 items-center border-b border-[var(--glass-border)] px-3 md:px-4">
+                <div className="flex flex-shrink-0 h-9 items-center border-b border-[var(--glass-border)] px-3 lg:px-4">
                   <Skeleton className="h-3 w-56" />
                 </div>
               )}
               {customer && (
-                <div className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:px-4">
+                <div className="flex min-h-9 flex-shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 lg:px-4">
                   <span className="font-semibold text-dark-100">
                     {customer.full_name || customer.username || `#${customer.id}`}
                   </span>
@@ -1090,9 +1105,9 @@ export default function Support() {
                     <span className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5">
                       {t('support.customer.traffic')}:{' '}
                       <span className="text-dark-100">
-                        {customer.subscription.traffic_used_gb} /{' '}
+                        {formatTraffic(customer.subscription.traffic_used_gb)} /{' '}
                         {customer.subscription.traffic_limit_gb
-                          ? `${customer.subscription.traffic_limit_gb} ГБ`
+                          ? formatTraffic(customer.subscription.traffic_limit_gb)
                           : t('support.customer.unlimited')}
                       </span>
                     </span>
@@ -1141,14 +1156,14 @@ export default function Support() {
               )}
 
               {detailUserId != null && canEdit && (
-                <div className="flex items-start gap-2 border-b border-[var(--glass-border)] px-3 py-2 md:px-4">
+                <div className="flex flex-shrink-0 items-start gap-2 border-b border-[var(--glass-border)] px-3 py-2 lg:px-4">
                   <textarea
                     value={noteText}
                     onChange={(e) => setNoteDraft(e.target.value)}
                     rows={1}
                     placeholder={t('support.customer.notePlaceholder')}
                     aria-label={t('support.customer.note')}
-                    className="min-h-8 flex-1 resize-none rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-[11px] text-dark-100 outline-none focus:border-amber-400/40"
+                    className="h-8 flex-1 resize-none rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-[11px] text-dark-100 outline-none focus:border-amber-400/40"
                   />
                   {noteDraft !== null && noteDraft !== (noteData?.note ?? '') && (
                     <Button
@@ -1212,7 +1227,7 @@ export default function Support() {
               )}
 
               {siblings.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] md:px-4">
+                <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] lg:px-4">
                   <span className="text-dark-300">{t('support.siblings', { count: siblings.length })}</span>
                   {siblings.map((sibling) => (
                     <button
@@ -1228,7 +1243,7 @@ export default function Support() {
                 </div>
               )}
 
-              <div className="border-b border-[var(--glass-border)] px-3 md:px-4">
+              <div className="flex-shrink-0 border-b border-[var(--glass-border)] px-3 lg:px-4">
                 <button
                   type="button"
                   onClick={() => setHistoryOpen((open) => !open)}
@@ -1265,7 +1280,7 @@ export default function Support() {
                 )}
               </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
                 {detailLoading && messages.length === 0 ? (
                   <Skeleton className="h-24 w-2/3" />
                 ) : (
@@ -1373,7 +1388,7 @@ export default function Support() {
               </div>
 
               {canReply && (
-                <footer className="border-t border-[var(--glass-border)] p-3">
+                <footer className="flex-shrink-0 border-t border-[var(--glass-border)] p-3">
                   {macroSuggestions.length > 0 && (
                     <div className="mb-2 max-h-40 overflow-y-auto rounded-lg border border-cyan-400/25 bg-[var(--glass-bg)]">
                       {macroSuggestions.map((macro) => (
