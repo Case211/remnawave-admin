@@ -139,6 +139,25 @@ class ViolationPublic(_PublicBase):
     detected_at: Optional[str] = None
 
 
+class AbuseSummaryPublic(_PublicBase):
+    """Короткий вердикт по клиенту для внешней интеграции.
+
+    Интеграции нужен не список нарушений, а ответ на один вопрос: можно ли
+    доверять этому человеку. Поэтому здесь нет разбора по анализаторам —
+    подробности остаются в панели, наружу уходит уровень и пара чисел.
+    """
+
+    user_uuid: Optional[str] = None
+    telegram_id: Optional[int] = None
+    window_days: int
+    level: str = Field(description="clean | warned | limited")
+    violations: int = 0
+    max_score: Optional[float] = None
+    last_detected_at: Optional[str] = None
+    last_action: Optional[str] = None
+    whitelisted: bool = False
+
+
 class ViolationDetailPublic(ViolationPublic):
     email: Optional[str] = None
     telegram_id: Optional[int] = None
@@ -717,6 +736,7 @@ async def list_violations(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user_uuid: Optional[str] = Query(None, description="Filter by user UUID"),
+    telegram_id: Optional[int] = Query(None, description="Filter by Telegram id"),
     min_score: Optional[float] = Query(None, ge=0, description="Minimum violation score"),
     recommended_action: Optional[str] = Query(None, description="e.g. hard_block, monitor"),
     resolved: Optional[bool] = Query(None, description="true = action taken, false = open"),
@@ -737,6 +757,10 @@ async def list_violations(
         idx += 1
         conditions.append(f"user_uuid = ${idx}::uuid")
         args.append(user_uuid)
+    if telegram_id is not None:
+        idx += 1
+        conditions.append(f"telegram_id = ${idx}")
+        args.append(telegram_id)
     if min_score is not None:
         idx += 1
         conditions.append(f"score >= ${idx}")
@@ -772,6 +796,89 @@ async def list_violations(
         )
 
     return [ViolationPublic(**_violation_row_to_dict(r)) for r in rows]
+
+
+# Меры, после которых человек уже ограничен, а не просто замечен.
+_LIMITING_ACTIONS = ("hard_block", "block", "blocked", "disable", "disabled", "throttle")
+
+
+@router.get("/violations/summary", response_model=AbuseSummaryPublic)
+async def violations_summary(
+    telegram_id: Optional[int] = Query(None, description="Telegram id клиента"),
+    user_uuid: Optional[str] = Query(None, description="UUID пользователя панели"),
+    window_days: int = Query(30, ge=1, le=365, description="Окно, за которое считаем"),
+    api_key: ApiKeyUser = Depends(require_scope("violations:read")),
+):
+    """Вердикт по клиенту: чист, замечен или ограничен.
+
+    Сделано для интеграций, которые принимают решение (выдавать ли триал,
+    промокод, продление) и которым незачем разбирать список нарушений.
+    Аннулированные не считаются: детектор ошибся, и человек тут ни при чём.
+    Белый список перебивает всё — на то он и белый список.
+    """
+    if telegram_id is None and not user_uuid:
+        raise HTTPException(status_code=422, detail="Pass telegram_id or user_uuid")
+
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise _service_unavailable()
+
+    conditions = ["detected_at >= NOW() - ($1 || ' days')::interval",
+                  "(action_taken IS NULL OR action_taken <> 'annulled')"]
+    args: List[Any] = [str(window_days)]
+    if user_uuid:
+        args.append(user_uuid)
+        conditions.append(f"user_uuid = ${len(args)}::uuid")
+    else:
+        args.append(telegram_id)
+        conditions.append(f"telegram_id = ${len(args)}")
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT COUNT(*) AS violations,
+                   MAX(score) AS max_score,
+                   MAX(detected_at) AS last_detected_at,
+                   MAX(user_uuid::text) AS user_uuid,
+                   MAX(telegram_id) AS telegram_id,
+                   (ARRAY_REMOVE(ARRAY_AGG(action_taken ORDER BY detected_at DESC), NULL))[1] AS last_action
+            FROM violations
+            WHERE {' AND '.join(conditions)}
+            """,
+            *args,
+        )
+        resolved_uuid = (row or {}).get("user_uuid") or user_uuid
+        whitelisted = False
+        if resolved_uuid:
+            whitelisted = bool(await conn.fetchval(
+                "SELECT 1 FROM violation_whitelist WHERE user_uuid = $1::uuid "
+                "AND (expires_at IS NULL OR expires_at > NOW())",
+                resolved_uuid,
+            ))
+
+    data = dict(row) if row else {}
+    count = int(data.get("violations") or 0)
+    last_action = (data.get("last_action") or "").lower()
+
+    if whitelisted or count == 0:
+        level = "clean"
+    elif last_action in _LIMITING_ACTIONS:
+        level = "limited"
+    else:
+        level = "warned"
+
+    detected = data.get("last_detected_at")
+    return AbuseSummaryPublic(
+        user_uuid=resolved_uuid,
+        telegram_id=data.get("telegram_id") or telegram_id,
+        window_days=window_days,
+        level=level,
+        violations=0 if whitelisted else count,
+        max_score=data.get("max_score"),
+        last_detected_at=detected.isoformat() if detected else None,
+        last_action=data.get("last_action"),
+        whitelisted=whitelisted,
+    )
 
 
 @router.get("/violations/{violation_id}", response_model=ViolationDetailPublic)
