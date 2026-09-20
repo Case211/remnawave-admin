@@ -117,6 +117,17 @@ export const supportApi = {
     await client.post(`/support/tickets/${id}/read`, { last_message_id: lastMessageId })
   },
 
+  attach: async (id: number, file: File, messageText = '', close = false) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('message_text', messageText)
+    form.append('close', String(close))
+    const { data } = await client.post(`/support/tickets/${id}/attach`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data as { success: boolean; media_type: string; warnings: string[] }
+  },
+
   presence: async (id: number): Promise<{ watchers: SupportWatcher[] }> => {
     const { data } = await client.post(`/support/tickets/${id}/presence`)
     return data

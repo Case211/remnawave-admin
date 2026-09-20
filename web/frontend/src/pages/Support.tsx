@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -6,11 +7,13 @@ import {
   Archive,
   Check,
   ChevronLeft,
+  ExternalLink,
   Clock,
   Loader2,
   RefreshCw,
   Search,
   Send,
+  Upload,
   Users,
 } from '@/components/brand/icons'
 import {
@@ -27,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/EmptyState'
 import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
+import client from '@/api/client'
 
 const QUEUES = ['wait_us', 'mine', 'late', 'wait_client', 'snoozed', 'all'] as const
 type QueueId = (typeof QUEUES)[number]
@@ -72,6 +76,7 @@ export default function Support() {
   // Шаблон, вставленный в черновик: его побочные действия уйдут вместе с ответом.
   const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const { data: queues } = useQuery({
     queryKey: ['support-queues'],
@@ -133,6 +138,18 @@ export default function Support() {
       queryClient.invalidateQueries({ queryKey: ['support-tickets'] })
     })
   }, [activeId, detail?.messages, queryClient])
+
+  const detailUserId = detail?.ticket?.bot_user_id ?? null
+
+  // Кто пишет: подписка, баланс, ссылка в профиль. Оператору незачем уходить
+  // в другой раздел, чтобы понять, с кем он разговаривает.
+  const { data: customer } = useQuery({
+    queryKey: ['support-customer', detailUserId],
+    queryFn: () => client.get(`/bedolaga/customers/${detailUserId}`).then((r) => r.data),
+    enabled: detailUserId != null,
+    staleTime: 60_000,
+    retry: false,
+  })
 
   // Пока тикет открыт, отмечаемся каждые 20 секунд: коллега увидит, что им
   // уже занимаются, и не ответит вторым.
@@ -203,6 +220,16 @@ export default function Support() {
       toast.success(t('common.saved'))
     },
     onError: () => toast.error(t('common.error')),
+  })
+
+  const attachMutation = useMutation({
+    mutationFn: (file: File) => supportApi.attach(activeId as number, file, draft.trim()),
+    onSuccess: () => {
+      setDraft('')
+      invalidateAll()
+      toast.success(t('support.attached'))
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail?.message || t('support.attachFailed')),
   })
 
   const snoozeMutation = useMutation({
@@ -301,7 +328,7 @@ export default function Support() {
 
   return (
     <PermissionGate resource="bedolaga_support" action="view">
-      <div className="flex h-[calc(100dvh-8rem)] flex-col gap-3 md:h-[calc(100vh-5rem)] md:flex-row">
+      <div className="flex h-[calc(100dvh-5.5rem)] flex-col gap-3 md:h-[calc(100vh-5rem)] md:flex-row">
         {/* Очереди */}
         {/* Телефон: очереди лентой, метрики и синк прячем — там триаж, а не отчёты */}
         <div className={cn('flex gap-2 overflow-x-auto pb-1 md:hidden', mobileChatOpen && 'hidden')}>
@@ -517,6 +544,39 @@ export default function Support() {
                 )}
               </header>
 
+              {customer && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:px-4">
+                  <span className="font-semibold text-dark-100">
+                    {customer.full_name || customer.username || `#${customer.id}`}
+                  </span>
+                  {customer.subscription && (
+                    <span>
+                      {t('support.customer.subscription')}:{' '}
+                      <span className="text-dark-100">
+                        {customer.subscription.status === 'active'
+                          ? t('support.customer.active')
+                          : customer.subscription.status}
+                        {customer.subscription.end_date
+                          ? ` ${t('support.customer.until')} ${new Date(customer.subscription.end_date).toLocaleDateString()}`
+                          : ''}
+                      </span>
+                    </span>
+                  )}
+                  {typeof customer.balance_rubles === 'number' && (
+                    <span>
+                      {t('support.customer.balance')}: <span className="text-dark-100">{customer.balance_rubles} ₽</span>
+                    </span>
+                  )}
+                  <Link
+                    to={`/bedolaga/customers/${customer.id}`}
+                    className="ml-auto flex h-8 items-center gap-1 rounded-lg border border-[var(--glass-border)] px-2.5 text-cyan-300"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t('support.customer.openProfile')}
+                  </Link>
+                </div>
+              )}
+
               {(ticketTags?.length || allTags.length > 0) && canEdit && (
                 <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--glass-border)] px-4 py-2">
                   {ticketTags?.map((tag) => (
@@ -611,6 +671,30 @@ export default function Support() {
                     className="w-full resize-none rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-xs text-dark-100 outline-none focus:border-cyan-400/40"
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => {
+                        const picked = e.target.files?.[0]
+                        if (picked) attachMutation.mutate(picked)
+                        e.target.value = ''
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-11 w-11 p-0 md:h-9 md:w-9"
+                      aria-label={t('support.attach')}
+                      onClick={() => fileRef.current?.click()}
+                      disabled={attachMutation.isPending}
+                    >
+                      {attachMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                    </Button>
                     <span className="hidden text-[10px] text-dark-400 md:inline">{t('support.sendHint')}</span>
                     <span className="hidden flex-1 md:block" />
                     <Button

@@ -6802,6 +6802,16 @@
       "breached": "Overdue"
     },
     "hotkeys": "J/K to move, R to reply, / for a template, A to take",
-    "backToQueue": "Back to queue"
+    "backToQueue": "Back to queue",
+    "attach": "Attach a file",
+    "attached": "File sent to the customer",
+    "attachFailed": "Could not send the file",
+    "customer": {
+      "subscription": "Subscription",
+      "balance": "Balance",
+      "active": "active",
+      "until": "until",
+      "openProfile": "Profile"
+    }
   }
 }

@@ -6,11 +6,12 @@
 ответа, чтобы оператор увидел своё сообщение, не дожидаясь круга синка.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from shared.bedolaga_client import bedolaga_client
@@ -669,3 +670,74 @@ async def metrics(
         "breached_percent": (round(breached * 100 / created, 1) if created else 0.0) if sla_on else None,
         "by_admin": [dict(r) for r in by_admin],
     }
+
+
+# ── Вложения ──
+
+# Телеграм не примет что угодно, да и держать гигабайты в чате поддержки незачем.
+ATTACHMENT_LIMIT_BYTES = 20 * 1024 * 1024
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+VIDEO_SUFFIXES = {".mp4", ".mov", ".webm"}
+
+
+def _media_type_for(filename: str) -> str:
+    suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+    if suffix in IMAGE_SUFFIXES:
+        return "photo"
+    if suffix in VIDEO_SUFFIXES:
+        return "video"
+    return "document"
+
+
+@router.post("/tickets/{ticket_id}/attach")
+async def reply_with_attachment(
+    ticket_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    message_text: str = Form(""),
+    close: bool = Form(False),
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "create")),
+):
+    """Ответить с вложением: файл уходит в Telegram, оттуда — клиенту.
+
+    Бот принимает вложение по ``file_id``, поэтому сначала заливаем файл его
+    ручкой ``/media/upload`` и только потом отправляем ответ.
+    """
+    content = await file.read()
+    if not content:
+        raise api_error(400, E.INVALID_INPUT, "File is empty")
+    if len(content) > ATTACHMENT_LIMIT_BYTES:
+        raise api_error(400, E.INVALID_INPUT, "File is too large (max 20 MB)")
+
+    filename = file.filename or "attachment"
+    media_type = _media_type_for(filename)
+
+    uploaded = await proxy_request(lambda: bedolaga_client.upload_media(content, filename, media_type))
+    file_id = (uploaded or {}).get("file_id")
+    if not file_id:
+        raise api_error(502, E.INVALID_INPUT, "Bot did not return file_id")
+
+    text = message_text.strip() or filename
+    await proxy_request(
+        lambda: bedolaga_client.reply_ticket(ticket_id, text, media_type=media_type, media_file_id=file_id)
+    )
+
+    warnings: list[str] = []
+    if close:
+        try:
+            await proxy_request(lambda: bedolaga_client.set_ticket_status(ticket_id, "closed"))
+        except Exception as exc:  # noqa: BLE001 — файл уже у клиента
+            logger.warning("Support: вложение ушло, но тикет не закрылся (%s): %s", ticket_id, exc)
+            warnings.append("status_not_changed")
+
+    await sync_ticket(ticket_id)
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="support.attach",
+        resource="support",
+        resource_id=str(ticket_id),
+        details=json.dumps({"filename": filename, "media_type": media_type, "size": len(content)}),
+        ip_address=get_client_ip(request),
+    )
+    return {"success": True, "media_type": media_type, "warnings": warnings}

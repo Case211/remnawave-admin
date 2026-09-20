@@ -6798,6 +6798,16 @@
       "breached": "Просрочено"
     },
     "hotkeys": "J/K — по списку, R — ответить, / — шаблон, A — взять",
-    "backToQueue": "К очереди"
+    "backToQueue": "К очереди",
+    "attach": "Прикрепить файл",
+    "attached": "Файл отправлен клиенту",
+    "attachFailed": "Не удалось отправить файл",
+    "customer": {
+      "subscription": "Подписка",
+      "balance": "Баланс",
+      "active": "активна",
+      "until": "до",
+      "openProfile": "Профиль"
+    }
   }
 }

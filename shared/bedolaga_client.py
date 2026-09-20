@@ -172,8 +172,28 @@ class BedolagaClient:
     async def get_ticket(self, ticket_id: int) -> dict:
         return await self._get(f"/tickets/{ticket_id}")
 
-    async def reply_ticket(self, ticket_id: int, message_text: str) -> dict:
-        return await self._post(f"/tickets/{ticket_id}/reply", json={"message_text": message_text})
+    async def reply_ticket(
+        self,
+        ticket_id: int,
+        message_text: str,
+        media_type: str | None = None,
+        media_file_id: str | None = None,
+    ) -> dict:
+        payload: dict = {"message_text": message_text}
+        if media_file_id:
+            payload.update({"media_type": media_type or "document", "media_file_id": media_file_id})
+        return await self._post(f"/tickets/{ticket_id}/reply", json=payload)
+
+    async def upload_media(self, content: bytes, filename: str, media_type: str = "document") -> dict:
+        """Залить файл в Telegram через бота и получить его file_id."""
+        client = self._get_client()
+        response = await client.post(
+            "/media/upload",
+            files={"file": (filename, content)},
+            data={"media_type": media_type},
+        )
+        response.raise_for_status()
+        return response.json()
 
     async def set_ticket_status(self, ticket_id: int, status: str) -> dict:
         return await self._post(f"/tickets/{ticket_id}/status", json={"status": status})
