@@ -7,6 +7,7 @@ import {
   Archive,
   Check,
   ChevronLeft,
+  ChevronRight,
   Download,
   ExternalLink,
   Clock,
@@ -81,8 +82,8 @@ export default function Support() {
   const fileRef = useRef<HTMLInputElement>(null)
   // Ссылки на скачанные вложения: один blob на сообщение, чтобы не тянуть
   // файл заново при каждом ререндере.
-  const [mediaUrls, setMediaUrls] = useState<Record<number, string>>({})
-  const [viewerId, setViewerId] = useState<number | null>(null)
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
+  const [viewer, setViewer] = useState<{ key: string; list: string[]; at: number } | null>(null)
 
   const { data: queues } = useQuery({
     queryKey: ['support-queues'],
@@ -300,22 +301,32 @@ export default function Support() {
     const withMedia = (detail?.messages ?? []).filter((m) => m.has_media)
     if (activeId == null || withMedia.length === 0) return
 
+    // Одиночное вложение — один ключ, пачка — по ключу на файл.
+    const wanted: Array<{ key: string; id: number; index?: number }> = []
+    withMedia.forEach((m) => {
+      if (m.media_items?.length) {
+        m.media_items.forEach((item) => wanted.push({ key: `${m.id}:${item.index}`, id: m.id, index: item.index }))
+      } else {
+        wanted.push({ key: String(m.id), id: m.id })
+      }
+    })
+
     let alive = true
     const created: string[] = []
     Promise.all(
-      withMedia
-        .filter((m) => !mediaUrls[m.id])
-        .map(async (m) => {
+      wanted
+        .filter((item) => !mediaUrls[item.key])
+        .map(async (item) => {
           try {
-            const url = await supportApi.mediaBlobUrl(activeId, m.id)
+            const url = await supportApi.mediaBlobUrl(activeId, item.id, item.index)
             created.push(url)
-            return [m.id, url] as const
+            return [item.key, url] as const
           } catch {
             return null
           }
         }),
     ).then((pairs) => {
-      const fresh = pairs.filter(Boolean) as Array<readonly [number, string]>
+      const fresh = pairs.filter(Boolean) as Array<readonly [string, string]>
       if (!alive) {
         created.forEach((url) => URL.revokeObjectURL(url))
         return
@@ -337,13 +348,15 @@ export default function Support() {
   }, [activeId])
 
   useEffect(() => {
-    if (viewerId == null) return
+    if (!viewer) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setViewerId(null)
+      if (e.key === 'Escape') setViewer(null)
+      if (e.key === 'ArrowRight') setViewer((v) => (v ? { ...v, at: (v.at + 1) % v.list.length } : v))
+      if (e.key === 'ArrowLeft') setViewer((v) => (v ? { ...v, at: (v.at - 1 + v.list.length) % v.list.length } : v))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [viewerId])
+  }, [viewer])
 
   // Хоткеи: пока курсор не в поле ввода, клавиатура ведёт по очереди.
   useEffect(() => {
@@ -677,39 +690,71 @@ export default function Support() {
                           <span className="text-[10px] text-dark-400">{timeOfDay(m.created_at)}</span>
                         </div>
                         <div className="whitespace-pre-line text-xs leading-relaxed text-dark-100">{m.text}</div>
-                        {m.has_media && (
-                          <div className="mt-1.5">
-                            {mediaUrls[m.id] && m.media_type === 'photo' ? (
-                              <button
-                                type="button"
-                                onClick={() => setViewerId(m.id)}
-                                className="block overflow-hidden rounded-lg border border-[var(--glass-border)]"
-                              >
-                                <img
-                                  src={mediaUrls[m.id]}
-                                  alt={t('support.hasMedia', { type: 'photo' })}
-                                  className="max-h-60 w-full object-cover"
-                                />
-                              </button>
-                            ) : mediaUrls[m.id] && m.media_type === 'video' ? (
-                              <video src={mediaUrls[m.id]} controls className="max-h-60 w-full rounded-lg" />
-                            ) : mediaUrls[m.id] ? (
-                              <a
-                                href={mediaUrls[m.id]}
-                                download={`ticket-${m.ticket_id}-${m.id}`}
-                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--glass-border)] px-2.5 text-[11px] text-cyan-300"
-                              >
-                                <Download className="h-3.5 w-3.5" />
-                                {t('support.downloadFile')}
-                              </a>
-                            ) : (
-                              <span className="text-[11px] text-dark-400">
+                        {m.has_media && (() => {
+                          const keys = m.media_items?.length
+                            ? m.media_items.map((item) => `${m.id}:${item.index}`)
+                            : [String(m.id)]
+                          const ready = keys.filter((key) => mediaUrls[key])
+                          const types = m.media_items?.length
+                            ? m.media_items.map((item) => item.type)
+                            : [m.media_type || 'document']
+
+                          if (ready.length === 0) {
+                            return (
+                              <div className="mt-1.5 text-[11px] text-dark-400">
                                 <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
                                 {t('support.hasMedia', { type: m.media_type || 'file' })}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                              </div>
+                            )
+                          }
+
+                          const photos = keys.filter((key, i) => mediaUrls[key] && types[i] === 'photo')
+                          return (
+                            <div
+                              className={cn(
+                                'mt-1.5 gap-1.5',
+                                ready.length > 1 ? 'grid grid-cols-2' : 'flex flex-col',
+                              )}
+                            >
+                              {keys.map((key, i) => {
+                                const url = mediaUrls[key]
+                                if (!url) return null
+                                if (types[i] === 'photo') {
+                                  return (
+                                    <button
+                                      key={key}
+                                      type="button"
+                                      onClick={() =>
+                                        setViewer({ key, list: photos, at: Math.max(0, photos.indexOf(key)) })
+                                      }
+                                      className="block overflow-hidden rounded-lg border border-[var(--glass-border)]"
+                                    >
+                                      <img
+                                        src={url}
+                                        alt={t('support.hasMedia', { type: 'photo' })}
+                                        className={cn('w-full object-cover', ready.length > 1 ? 'h-28' : 'max-h-60')}
+                                      />
+                                    </button>
+                                  )
+                                }
+                                if (types[i] === 'video') {
+                                  return <video key={key} src={url} controls className="max-h-60 w-full rounded-lg" />
+                                }
+                                return (
+                                  <a
+                                    key={key}
+                                    href={url}
+                                    download={`ticket-${m.ticket_id}-${m.id}-${i}`}
+                                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--glass-border)] px-2.5 text-[11px] text-cyan-300"
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                    {t('support.downloadFile')}
+                                  </a>
+                                )
+                              })}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   ))
@@ -806,17 +851,23 @@ export default function Support() {
         </section>
       </div>
 
-      {viewerId != null && mediaUrls[viewerId] && (
+      {viewer && mediaUrls[viewer.list[viewer.at]] && (
         <div
           className="fixed inset-0 z-50 flex flex-col bg-black/90"
           role="dialog"
           aria-modal="true"
-          onClick={() => setViewerId(null)}
+          onClick={() => setViewer(null)}
         >
-          <div className="flex items-center justify-end gap-2 p-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 p-3" onClick={(e) => e.stopPropagation()}>
+            {viewer.list.length > 1 && (
+              <span className="text-xs text-white/70 tabular-nums">
+                {viewer.at + 1} / {viewer.list.length}
+              </span>
+            )}
+            <span className="flex-1" />
             <a
-              href={mediaUrls[viewerId]}
-              download={`ticket-${activeId}-${viewerId}`}
+              href={mediaUrls[viewer.list[viewer.at]]}
+              download={`ticket-${activeId}-${viewer.list[viewer.at]}`}
               className="flex h-11 items-center gap-1.5 rounded-lg border border-white/20 px-3 text-xs text-white"
             >
               <Download className="h-4 w-4" />
@@ -824,20 +875,47 @@ export default function Support() {
             </a>
             <button
               type="button"
-              onClick={() => setViewerId(null)}
+              onClick={() => setViewer(null)}
               aria-label={t('common.close')}
               className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 text-white"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex flex-1 items-center justify-center overflow-auto p-3">
+
+          <div className="flex flex-1 items-center gap-2 overflow-auto p-3">
+            {viewer.list.length > 1 && (
+              <button
+                type="button"
+                aria-label={t('support.prevMedia')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setViewer((v) => (v ? { ...v, at: (v.at - 1 + v.list.length) % v.list.length } : v))
+                }}
+                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-white/20 text-white"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
             <img
-              src={mediaUrls[viewerId]}
+              src={mediaUrls[viewer.list[viewer.at]]}
               alt={t('support.hasMedia', { type: 'photo' })}
-              className="max-h-full max-w-full object-contain"
+              className="mx-auto max-h-full max-w-full object-contain"
               onClick={(e) => e.stopPropagation()}
             />
+            {viewer.list.length > 1 && (
+              <button
+                type="button"
+                aria-label={t('support.nextMedia')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setViewer((v) => (v ? { ...v, at: (v.at + 1) % v.list.length } : v))
+                }}
+                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-white/20 text-white"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
       )}

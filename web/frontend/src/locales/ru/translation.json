@@ -6809,6 +6809,8 @@
       "until": "до",
       "openProfile": "Профиль"
     },
-    "downloadFile": "Скачать"
+    "downloadFile": "Скачать",
+    "prevMedia": "Предыдущее",
+    "nextMedia": "Следующее"
   }
 }

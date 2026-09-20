@@ -42,6 +42,8 @@ export interface SupportMessage {
   text: string
   has_media: boolean
   media_type: string | null
+  /** Пачка файлов одного сообщения; у одиночного вложения — null. */
+  media_items: Array<{ index: number; type: string }> | null
   created_at: string
 }
 
@@ -129,9 +131,10 @@ export const supportApi = {
   },
 
   /** Вложение приходит потоком через админку: ссылка бота содержит его токен. */
-  mediaBlobUrl: async (ticketId: number, messageId: number): Promise<string> => {
+  mediaBlobUrl: async (ticketId: number, messageId: number, index?: number): Promise<string> => {
     const { data } = await client.get(`/support/tickets/${ticketId}/messages/${messageId}/media`, {
       responseType: 'blob',
+      params: index === undefined ? undefined : { index },
     })
     return URL.createObjectURL(data as Blob)
   },

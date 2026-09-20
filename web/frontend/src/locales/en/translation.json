@@ -6813,6 +6813,8 @@
       "until": "until",
       "openProfile": "Profile"
     },
-    "downloadFile": "Download"
+    "downloadFile": "Download",
+    "prevMedia": "Previous",
+    "nextMedia": "Next"
   }
 }

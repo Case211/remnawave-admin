@@ -15,6 +15,7 @@ Web API бота отдаёт список тикетов и переписку,
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
@@ -183,12 +184,13 @@ async def _upsert_ticket(conn, ticket: dict, messages: list[dict], customer: dic
         await conn.execute(
             """
             INSERT INTO support_ticket_messages (
-                id, ticket_id, is_from_admin, author_name, text, has_media, media_type, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                id, ticket_id, is_from_admin, author_name, text, has_media, media_type, media_items, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (id) DO UPDATE SET
                 text = EXCLUDED.text,
                 has_media = EXCLUDED.has_media,
-                media_type = EXCLUDED.media_type
+                media_type = EXCLUDED.media_type,
+                media_items = EXCLUDED.media_items
             """,
             int(message["id"]),
             int(ticket["id"]),
@@ -197,6 +199,8 @@ async def _upsert_ticket(conn, ticket: dict, messages: list[dict], customer: dic
             str(message.get("message_text") or ""),
             bool(message.get("has_media")),
             message.get("media_type"),
+            # Пачку храним как есть: её элементы качаются по file_id.
+            json.dumps(message.get("media_items")) if message.get("media_items") else None,
             _parse_dt(message.get("created_at")) or datetime.now(timezone.utc),
         )
 

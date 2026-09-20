@@ -272,9 +272,26 @@ async def get_ticket(
         )
 
     _touch_presence(ticket_id, admin)
+    def _message_payload(row) -> dict:
+        data = dict(row)
+        raw_items = data.pop("media_items", None)
+        if isinstance(raw_items, str):
+            try:
+                raw_items = json.loads(raw_items)
+            except ValueError:
+                raw_items = None
+        # Наружу отдаём только то, что нужно для показа: тип и порядковый номер.
+        # file_id остаётся внутри — по нему ходит наш же прокси.
+        data["media_items"] = (
+            [{"index": i, "type": item.get("type") or "document"} for i, item in enumerate(raw_items)]
+            if isinstance(raw_items, list)
+            else None
+        )
+        return data
+
     return {
         "ticket": dict(ticket),
-        "messages": [dict(m) for m in messages],
+        "messages": [_message_payload(m) for m in messages],
         "watchers": _watchers(ticket_id, exclude_admin_id=admin.account_id),
         "tags": [dict(tag) for tag in tags],
     }
@@ -747,6 +764,7 @@ async def reply_with_attachment(
 async def message_media(
     ticket_id: int,
     message_id: int,
+    index: Optional[int] = Query(None, ge=0, description="Номер файла в пачке"),
     admin: AdminUser = Depends(require_permission("bedolaga_support", "view")),
 ):
     """Отдать вложение из переписки.
@@ -757,6 +775,34 @@ async def message_media(
     """
     import httpx
     from fastapi.responses import Response
+
+    # Файл из пачки качаем по его file_id: ручка медиа тикета знает только
+    # основное вложение.
+    if index is not None:
+        _require_db()
+        async with db_service.acquire() as conn:
+            raw = await conn.fetchval(
+                "SELECT media_items FROM support_ticket_messages WHERE id = $1 AND ticket_id = $2",
+                message_id, ticket_id,
+            )
+        items = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(items, list) or index >= len(items):
+            raise api_error(404, E.NOT_FOUND, "Media is not available")
+
+        item = items[index] or {}
+        file_id = item.get("file_id")
+        if not file_id:
+            raise api_error(404, E.NOT_FOUND, "Media is not available")
+
+        content = await proxy_request(lambda: bedolaga_client.download_media(file_id))
+        return Response(
+            content=content,
+            media_type="image/jpeg" if (item.get("type") == "photo") else "application/octet-stream",
+            headers={
+                "Cache-Control": "private, max-age=3600",
+                "Content-Disposition": f'inline; filename="ticket-{ticket_id}-{message_id}-{index}"',
+            },
+        )
 
     info = await proxy_request(lambda: bedolaga_client.get_ticket_message_media(ticket_id, message_id))
     media_url = (info or {}).get("media_url")

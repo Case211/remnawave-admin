@@ -201,6 +201,13 @@ class BedolagaClient:
     async def set_ticket_priority(self, ticket_id: int, priority: str) -> dict:
         return await self._post(f"/tickets/{ticket_id}/priority", json={"priority": priority})
 
+    async def download_media(self, file_id: str) -> bytes:
+        """Содержимое файла по его Telegram file_id (нужен для галерей)."""
+        client = self._get_client()
+        response = await client.get(f"/media/{file_id}")
+        response.raise_for_status()
+        return response.content
+
     async def get_ticket_message_media(self, ticket_id: int, message_id: int) -> dict:
         return await self._get(f"/tickets/{ticket_id}/messages/{message_id}/media")
 
