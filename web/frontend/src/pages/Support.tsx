@@ -96,6 +96,12 @@ function minutesBetween(fromIso: string, toIso: string): string {
   return hours < 24 ? `${hours} ч ${minutes % 60} мин` : `${Math.floor(hours / 24)} дн`
 }
 
+/** Вид кликабельного элемента: без фона и отклика действие читается как текст. */
+const ACTION_CLASS =
+  'rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] text-dark-100 ' +
+  'transition-colors hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-white ' +
+  'active:bg-cyan-400/15 disabled:opacity-50'
+
 /** Трафик по-человечески.
  *
  * Поле называется `*_gb`, но бот отдаёт в нём сырые байты — на экране это
@@ -1051,8 +1057,9 @@ export default function Support() {
                         onClick={() => snoozeMutation.mutate(option.minutes)}
                         disabled={snoozeMutation.isPending}
                         className={cn(
-                          'h-8 rounded px-1.5 text-[11px] text-dark-300 hover:text-white',
-                          (option.id === 'tomorrow' || option.id === 'week') && 'hidden xl:inline',
+                          'h-7 px-2 text-[11px] font-medium',
+                          ACTION_CLASS,
+                          (option.id === 'tomorrow' || option.id === 'week') && 'hidden xl:inline-block',
                         )}
                       >
                         {t(`support.snooze.${option.id}`)}
@@ -1131,7 +1138,7 @@ export default function Support() {
                         type="button"
                         onClick={() => quickActionMutation.mutate('extend')}
                         disabled={quickActionMutation.isPending}
-                        className="h-8 rounded-lg border border-[var(--glass-border)] px-2.5 text-[11px] text-dark-200 hover:text-white"
+                        className={cn('h-8 px-2.5 text-[11px] font-medium', ACTION_CLASS)}
                       >
                         {t('support.customer.extend3d')}
                       </button>
@@ -1139,7 +1146,7 @@ export default function Support() {
                         type="button"
                         onClick={() => quickActionMutation.mutate('reset-devices')}
                         disabled={quickActionMutation.isPending}
-                        className="h-8 rounded-lg border border-[var(--glass-border)] px-2.5 text-[11px] text-dark-200 hover:text-white"
+                        className={cn('h-8 px-2.5 text-[11px] font-medium', ACTION_CLASS)}
                       >
                         {t('support.customer.resetDevices')}
                       </button>
@@ -1147,7 +1154,7 @@ export default function Support() {
                   )}
                   <Link
                     to={`/bedolaga/customers/${customer.id}`}
-                    className="ml-auto flex h-8 items-center gap-1 rounded-lg border border-[var(--glass-border)] px-2.5 text-cyan-300"
+                    className={cn('ml-auto flex h-8 items-center gap-1 px-2.5 text-[11px] font-medium text-cyan-300', ACTION_CLASS)}
                   >
                     <ExternalLink className="h-3 w-3" />
                     {t('support.customer.openProfile')}
@@ -1205,7 +1212,7 @@ export default function Support() {
                         key={tag.id}
                         type="button"
                         onClick={() => tagMutation.mutate(tag.id)}
-                        className="rounded-md border border-dashed border-[var(--glass-border)] px-2 py-0.5 text-[11px] text-dark-300 hover:text-dark-200"
+                        className={cn('border-dashed px-2 py-0.5 text-[11px]', ACTION_CLASS)}
                       >
                         + {tag.name}
                       </button>
@@ -1234,7 +1241,7 @@ export default function Support() {
                       key={sibling.id}
                       type="button"
                       onClick={() => setSelectedId(sibling.id)}
-                      className="max-w-[220px] truncate rounded-md border border-[var(--glass-border)] px-2 py-0.5 text-dark-200 hover:text-white"
+                      className={cn('max-w-[220px] truncate px-2 py-1 text-[11px]', ACTION_CLASS)}
                       title={sibling.title}
                     >
                       #{sibling.id} · {sibling.title}
@@ -1247,7 +1254,7 @@ export default function Support() {
                 <button
                   type="button"
                   onClick={() => setHistoryOpen((open) => !open)}
-                  className="flex h-8 items-center gap-1.5 text-[11px] text-dark-300 hover:text-dark-100"
+                  className={cn('my-1.5 flex h-7 items-center gap-1.5 px-2 text-[11px]', ACTION_CLASS)}
                 >
                   <Clock className="h-3 w-3" />
                   {t('support.history.title')}
