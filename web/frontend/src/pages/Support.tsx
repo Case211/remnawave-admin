@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
@@ -91,7 +91,17 @@ export default function Support() {
   const canReply = useHasPermission('bedolaga_support', 'create')
   const canEdit = useHasPermission('bedolaga_support', 'edit')
 
-  const [queue, setQueue] = useState<QueueId>('wait_us')
+  // Очередь берём из адреса: так на неё можно сослаться из палитры и из
+  // уведомления об SLA.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const queueFromUrl = searchParams.get('queue') as QueueId | null
+  const [queue, setQueueState] = useState<QueueId>(
+    queueFromUrl && QUEUES.includes(queueFromUrl) ? queueFromUrl : 'wait_us',
+  )
+  const setQueue = (next: QueueId) => {
+    setQueueState(next)
+    setSearchParams(next === 'wait_us' ? {} : { queue: next }, { replace: true })
+  }
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)

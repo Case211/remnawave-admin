@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard,
+  MessageSquare,
   Users,
   Server,
   Globe,
@@ -161,6 +162,27 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           >
             <LayoutDashboard className="mr-2 h-4 w-4" />
             {t('nav.dashboard')}
+          </CommandItem>
+          <CommandItem
+            value="support обращения поддержка тикеты"
+            onSelect={() => runCommand(() => navigate('/support'))}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            {t('nav.bedolaga.support')}
+          </CommandItem>
+          <CommandItem
+            value="support waiting ждут нас очередь просрочены"
+            onSelect={() => runCommand(() => navigate('/support?queue=wait_us'))}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            {t('commandPalette.supportWaiting')}
+          </CommandItem>
+          <CommandItem
+            value="support mine мои обращения"
+            onSelect={() => runCommand(() => navigate('/support?queue=mine'))}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            {t('commandPalette.supportMine')}
           </CommandItem>
           <CommandItem
             value="users пользователи"

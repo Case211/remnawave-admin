@@ -238,7 +238,9 @@
     "settings": "Go to Settings",
     "createUser": "Create user",
     "searchUsers": "Search users",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "supportWaiting": "Support: waiting on us",
+    "supportMine": "Support: my tickets"
   },
   "appearance": {
     "title": "Appearance",
