@@ -3302,7 +3302,8 @@
       "support": "🎫 Support",
       "s3": "☁️ S3 storage",
       "throttle": "🐌 Soft block",
-      "node_attacks": "💥 Node attacks"
+      "node_attacks": "💥 Node attacks",
+      "main": "📌 Basics"
     },
     "faq": {
       "description": "Common questions, setup guides, and fixes for typical problems. Expand a question to see the answer.",

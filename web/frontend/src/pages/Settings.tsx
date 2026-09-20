@@ -1470,16 +1470,57 @@ export default function Settings() {
           <p className="text-xs text-dark-300 italic py-3">{t('settings.noLocalMatches')}</p>
         ) : (
           <>
+            {/* Разделов в категории бывает под десяток: оглавление даёт прыгнуть
+                в нужный, не прокручивая полсотни настроек глазами. */}
+            {Object.keys(subcategories).length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 pb-3 pt-1">
+                {Object.entries(subcategories).map(([sub, subItems]) => (
+                  <button
+                    key={sub}
+                    type="button"
+                    onClick={() =>
+                      document
+                        .getElementById(`settings-${category}-${sub}`)
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80',
+                      subcategoryTone(sub),
+                    )}
+                  >
+                    {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
+                    <span className="tabular-nums opacity-70">{subItems.length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {mainItems.length > 0 && (
-              <div className="divide-y divide-dark-700/50">
-                {mainItems.map((item) => renderConfigItem(item))}
+              <div>
+                {/* У безымянной группы заголовка не было вовсе: два десятка настроек
+                    начинались сразу после названия категории и сливались в простыню. */}
+                <div className="mb-2.5 flex items-center gap-2 px-1">
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold',
+                      subcategoryTone(`${category}-main`),
+                    )}
+                  >
+                    {t('settings.subcategories.main')}
+                  </span>
+                  <span className="text-[11px] tabular-nums text-dark-300">{mainItems.length}</span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-dark-700/50 to-transparent" />
+                </div>
+                <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30 border border-[var(--glass-border)]/10">
+                  {mainItems.map((item) => renderConfigItem(item))}
+                </div>
               </div>
             )}
             {Object.entries(subcategories).map(([sub, subItems], index) => (
               <div
                 key={sub}
+                id={`settings-${category}-${sub}`}
                 className={cn(
-                  'mt-6 pt-5',
+                  'mt-6 pt-5 scroll-mt-4',
                   // Настроек в категории десятки: без явной черты между разделами
                   // нужный пункт легко пролистать.
                   index > 0 || mainItems.length > 0 ? 'border-t border-[var(--glass-border)]/60' : '',
