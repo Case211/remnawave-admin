@@ -113,6 +113,23 @@ async def notify_new_ticket(ticket: dict) -> None:
     )
 
 
+async def notify_auto_reply(ticket_id: int, customer: str) -> None:
+    """Робот ответил за оператора — сказать об этом, но не тревожным тоном.
+
+    Уведомление уходит обычным порядком: спящий телефон его всё равно не
+    покажет, а утром в ленте видно, что клиент не остался в тишине.
+    """
+    if not alerts_enabled():
+        return
+    await _notify(
+        f"Автоответ по обращению #{ticket_id}",
+        f"{customer or 'клиент'} написал в часы тишины — робот подтвердил приём, ответ за вами.",
+        severity="info",
+        group_key=f"support_auto_{ticket_id}",
+        ticket_id=ticket_id,
+    )
+
+
 async def check_sla_breaches() -> int:
     """Найти обращения, где клиент ждёт дольше порога, и предупредить один раз."""
     from shared.database import db_service

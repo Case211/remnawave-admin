@@ -277,8 +277,16 @@ async def get_ticket(
 
     async with db_service.acquire() as conn:
 
+        # Автоответ помечаем: в ленте он выглядит как наш ответ, и оператор
+        # должен видеть, что это писал робот, а не коллега.
         messages = await conn.fetch(
-            "SELECT * FROM support_ticket_messages WHERE ticket_id = $1 ORDER BY created_at ASC",
+            """
+            SELECT m.*, (a.message_id IS NOT NULL) AS is_auto
+            FROM support_ticket_messages m
+            LEFT JOIN support_auto_replies a ON a.ticket_id = m.ticket_id AND a.message_id = m.id
+            WHERE m.ticket_id = $1
+            ORDER BY m.created_at ASC
+            """,
             ticket_id,
         )
         # Другие обращения того же человека: половина ответов начинается со

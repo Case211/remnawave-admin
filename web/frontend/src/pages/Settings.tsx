@@ -1356,6 +1356,21 @@ export default function Settings() {
             disabled={!isEditable || isSaving}
             placeholder={item.default_value || ''}
           />
+          {/* Свою зону в виде «Europe/Moscow» по памяти не напишет никто —
+              подставляем ту, в которой сейчас открыт браузер. */}
+          {item.key === 'support_quiet_hours_tz' && isEditable && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() =>
+                handleTextChange(item.key, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
+              }
+              disabled={isSaving}
+            >
+              {t('settings.fromBrowser')}
+            </Button>
+          )}
           {hasPendingStr && (
             <Button
               size="sm"

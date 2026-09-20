@@ -4366,7 +4366,8 @@
       "stop": "Stop",
       "progress": "Snapshots: {{taken}} · {{elapsed}} s of {{total}}",
       "lastSeries": "Last run: {{taken}} snapshots over {{elapsed}} s — files ready to download"
-    }
+    },
+    "fromBrowser": "From browser"
   },
   "notifications": {
     "title": "Notifications",
@@ -6930,6 +6931,8 @@
     "ticketGone": "This ticket no longer exists",
     "ticketGoneHint": "It was deleted in the bot and is already gone from the queue.",
     "fromUs": "You:",
-    "fromClient": "Client:"
+    "fromClient": "Client:",
+    "autoReply": "Auto-reply",
+    "autoReplyBadge": "bot"
   }
 }

@@ -47,6 +47,8 @@ export interface SupportMessage {
   media_type: string | null
   /** Пачка файлов одного сообщения; у одиночного вложения — null. */
   media_items: Array<{ index: number; type: string }> | null
+  /** Сообщение написал робот в часы тишины, а не оператор. */
+  is_auto?: boolean
   created_at: string
 }
 

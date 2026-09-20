@@ -1476,8 +1476,17 @@ export default function Support() {
                       >
                         <div className="mb-1 flex items-center gap-2">
                           <span className={cn('text-[11px] font-bold', m.is_from_admin ? 'text-emerald-300' : 'text-cyan-300')}>
-                            {m.author_name || (m.is_from_admin ? t('support.operator') : t('support.client'))}
+                            {m.is_auto
+                              ? t('support.autoReply')
+                              : m.author_name || (m.is_from_admin ? t('support.operator') : t('support.client'))}
                           </span>
+                          {/* Робота видно сразу: иначе оператор ищет, кто из коллег
+                              уже отвечал клиенту ночью. */}
+                          {m.is_auto && (
+                            <span className="rounded bg-[var(--glass-bg)] px-1.5 py-0.5 text-[11px] text-dark-300">
+                              {t('support.autoReplyBadge')}
+                            </span>
+                          )}
                           <span className="text-[11px] text-dark-300">{timeOfDay(m.created_at)}</span>
                         </div>
                         <div className="whitespace-pre-line text-sm leading-relaxed text-dark-100 lg:text-xs">{m.text}</div>

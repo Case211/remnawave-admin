@@ -103,20 +103,27 @@ def _customer_name(ticket: dict) -> str | None:
     return None
 
 
-def derive_fields(ticket: dict, messages: list[dict]) -> dict:
+def derive_fields(ticket: dict, messages: list[dict], auto_ids: set[int] | None = None) -> dict:
     """Производные поля проекции: по ним строятся очереди, SLA и поиск.
 
     ``waiting_since`` заполнен, только когда последним написал клиент — это и
     есть «ждут нас». Как только ответил оператор, ожидание обнуляется, и тикет
     уходит из очереди, не мозоля глаза.
+
+    ``auto_ids`` — сообщения робота. Живой лентой они остаются (клиент их
+    видел), но ответом оператора не считаются: иначе автоответ в часы тишины
+    убирал бы обращение из очереди и портил метрику первого ответа.
     """
     ordered = sorted(messages, key=lambda m: _parse_dt(m.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc))
     last = ordered[-1] if ordered else None
-    first_admin = next((m for m in ordered if m.get("is_from_admin")), None)
+    robots = auto_ids or set()
+    human = [m for m in ordered if int(m.get("id") or 0) not in robots]
+    last_human = human[-1] if human else None
+    first_admin = next((m for m in human if m.get("is_from_admin")), None)
 
     waiting_since = None
-    if last is not None and not last.get("is_from_admin") and ticket.get("status") != "closed":
-        waiting_since = _parse_dt(last.get("created_at"))
+    if last_human is not None and not last_human.get("is_from_admin") and ticket.get("status") != "closed":
+        waiting_since = _parse_dt(last_human.get("created_at"))
 
     search_parts: list[str] = [str(ticket.get("title") or ""), _customer_name(ticket) or ""]
     search_parts.extend(str(m.get("message_text") or "") for m in ordered)
@@ -134,7 +141,9 @@ def derive_fields(ticket: dict, messages: list[dict]) -> dict:
 
 
 async def _upsert_ticket(conn, ticket: dict, messages: list[dict], customer: dict | None = None) -> None:
-    derived = derive_fields(ticket, messages)
+    from web.backend.core.support_auto_reply import auto_message_ids
+
+    derived = derive_fields(ticket, messages, await auto_message_ids(conn, int(ticket["id"])))
     await conn.execute(
         """
         INSERT INTO support_tickets (
@@ -327,6 +336,14 @@ async def sync_tickets(*, full: bool = False) -> dict:
             async with db_service.acquire() as conn:
                 await _upsert_ticket(conn, ticket, messages, customer)
             updated += 1
+
+            # Страховка на случай, когда события бота до нас не доходят: без WS
+            # обращение находит только этот проход. От рассылки по всей истории
+            # защищает возраст обращения, который проверяет сам автоответ.
+            if ticket_id not in known:
+                from web.backend.core.support_auto_reply import maybe_auto_reply
+
+                await maybe_auto_reply({**ticket, "messages": messages})
 
         if len(items) < PAGE_SIZE:
             walked_to_end = True

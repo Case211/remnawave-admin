@@ -4362,7 +4362,8 @@
       "stop": "Остановить",
       "progress": "Снимков: {{taken}} · {{elapsed}} с из {{total}}",
       "lastSeries": "Последний сбор: {{taken}} снимков за {{elapsed}} с — файлы готовы к скачиванию"
-    }
+    },
+    "fromBrowser": "Из браузера"
   },
   "notifications": {
     "title": "Уведомления",
@@ -6927,6 +6928,8 @@
     "ticketGone": "Обращение больше не существует",
     "ticketGoneHint": "Его удалили в боте — из очереди оно уже убрано.",
     "fromUs": "Вы:",
-    "fromClient": "Клиент:"
+    "fromClient": "Клиент:",
+    "autoReply": "Автоответ",
+    "autoReplyBadge": "робот"
   }
 }

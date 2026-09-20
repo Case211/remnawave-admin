@@ -85,7 +85,12 @@ async def handle_event(event: str, payload: dict) -> bool:
                 )
             if row:
                 ticket = dict(row)
-        await notify_new_ticket(ticket)
+        # Робот отвечает первым: если он сработал, отдельный алерт о новом
+        # обращении не нужен — его уведомление и так рассказывает об обращении.
+        from web.backend.core.support_auto_reply import maybe_auto_reply
+
+        if not await maybe_auto_reply(ticket):
+            await notify_new_ticket(ticket)
 
     return synced
 
