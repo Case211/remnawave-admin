@@ -6770,7 +6770,6 @@
     "searchPlaceholder": "Search messages, subject, customer",
     "emptyQueue": "This queue is empty",
     "pickTicket": "Pick a ticket on the left",
-    "answeredShort": "answered",
     "waiting": "waiting",
     "takeIt": "Take it",
     "close": "Close",
@@ -6929,6 +6928,8 @@
     "truncated": "list is capped — narrow it with a filter or search",
     "emptySearchHint": "Search covers the conversation text, subject, customer name and ticket number.",
     "ticketGone": "This ticket no longer exists",
-    "ticketGoneHint": "It was deleted in the bot and is already gone from the queue."
+    "ticketGoneHint": "It was deleted in the bot and is already gone from the queue.",
+    "fromUs": "You:",
+    "fromClient": "Client:"
   }
 }

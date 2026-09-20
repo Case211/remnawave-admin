@@ -48,12 +48,34 @@ const SNOOZE_OPTIONS = [
   { id: 'week', minutes: 60 * 24 * 7 },
 ] as const
 
-/** Приоритет виден полоской: срочное должно выделяться до чтения текста. */
-const PRIORITY_BAR: Record<string, string> = {
-  urgent: 'bg-red-400',
-  high: 'bg-orange-400',
-  normal: 'bg-white/10',
-  low: 'bg-white/5',
+/** Чьего хода ждёт обращение — этим живёт очередь, поэтому полоска слева
+ *  показывает состояние, а не приоритет: приоритет и так висит бейджем. */
+type TicketState = 'late' | 'waiting' | 'answered' | 'snoozed' | 'closed'
+
+const STATE_BAR: Record<TicketState, string> = {
+  late: 'bg-red-400',
+  waiting: 'bg-amber-400',
+  answered: 'bg-emerald-400',
+  snoozed: 'bg-sky-400/60',
+  closed: 'bg-white/10',
+}
+
+const STATE_BADGE: Record<TicketState, string> = {
+  late: 'bg-red-400/15 text-red-300',
+  waiting: 'bg-amber-400/15 text-amber-300',
+  answered: 'bg-emerald-400/15 text-emerald-300',
+  snoozed: 'bg-sky-400/12 text-sky-300',
+  closed: 'bg-[var(--glass-bg)] text-dark-300',
+}
+
+/** Подписи берём от очередей — в списке и в фильтрах обращение должно
+ *  называться одинаково. */
+const STATE_LABEL: Record<TicketState, string> = {
+  late: 'support.queues.late',
+  waiting: 'support.queues.wait_us',
+  answered: 'support.queues.wait_client',
+  snoozed: 'support.queues.snoozed',
+  closed: 'support.status.closed',
 }
 type QueueId = (typeof QUEUES)[number]
 
@@ -115,6 +137,18 @@ function formatTraffic(value: number | null | undefined): string {
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} МБ`
   if (bytes < 1024 ** 4) return `${(bytes / 1024 ** 3).toFixed(1)} ГБ`
   return `${(bytes / 1024 ** 4).toFixed(2)} ТБ`
+}
+
+function stateOf(
+  item: { status: string; waiting_since: string | null; snooze_to: string | null },
+  slaMinutes: number,
+  slaOn: boolean,
+  now: number,
+): TicketState {
+  if (item.status === 'closed') return 'closed'
+  if (item.snooze_to && new Date(item.snooze_to).getTime() > now) return 'snoozed'
+  if (!item.waiting_since) return 'answered'
+  return isBreached(item.waiting_since, slaMinutes, slaOn, now) ? 'late' : 'waiting'
 }
 
 function timeOfDay(iso: string | null): string {
@@ -941,6 +975,7 @@ export default function Support() {
               <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
                 {rowVirtualizer.getVirtualItems().map((row) => {
                   const item = tickets[row.index]
+                  const state = stateOf(item, slaMinutes, slaOn, now)
                   return (
                     <button
                       key={item.id}
@@ -957,13 +992,10 @@ export default function Support() {
                       )}
                       style={{ transform: `translateY(${row.start}px)` }}
                     >
-                      {/* Приоритет — полоска слева: цвет читается боковым зрением,
+                      {/* Состояние — полоска слева: цвет читается боковым зрением,
                           не занимая места в и без того плотной карточке. */}
                       <span
-                        className={cn(
-                          'w-[3px] flex-shrink-0 rounded-r',
-                          PRIORITY_BAR[item.priority] || PRIORITY_BAR.normal,
-                        )}
+                        className={cn('w-[3px] flex-shrink-0 rounded-r', STATE_BAR[state])}
                         aria-hidden="true"
                       />
                       {canEdit && (
@@ -1020,31 +1052,40 @@ export default function Support() {
                               {t(`support.priority.${item.priority}`)}
                             </span>
                           )}
+                          {/* После ответа время тоже нужно: «ответ дан» без него не
+                              говорит, вчера это было или пять минут назад. */}
                           <span
                             className={cn(
                               'ml-auto flex-shrink-0 text-[11px] tabular-nums',
-                              waitTone(item.waiting_since, slaMinutes, slaOn, now),
+                              item.waiting_since ? waitTone(item.waiting_since, slaMinutes, slaOn, now) : 'text-dark-300',
                             )}
                           >
-                            {item.waiting_since ? (
-                              <>
-                                {isBreached(item.waiting_since, slaMinutes, slaOn, now) && (
-                                  <AlertTriangle className="mr-1 inline h-3 w-3" aria-hidden="true" />
-                                )}
-                                {waitedFor(item.waiting_since, now)}
-                              </>
-                            ) : (
-                              t('support.answeredShort')
-                            )}
+                            {state === 'late' && <AlertTriangle className="mr-1 inline h-3 w-3" aria-hidden="true" />}
+                            {waitedFor(item.waiting_since || item.last_message_at, now)}
                           </span>
                         </span>
                         <span className="mt-1 block truncate text-sm text-dark-100 lg:text-xs">{item.title}</span>
                         {item.last_message_text && (
                           <span className="mt-0.5 block truncate text-xs text-dark-300 lg:text-[11px]">
+                            {/* Без автора превью читается как слова клиента, даже когда
+                                это наш собственный ответ. */}
+                            {item.last_message_from && (
+                              <span className="font-semibold text-dark-200">
+                                {item.last_message_from === 'admin' ? t('support.fromUs') : t('support.fromClient')}{' '}
+                              </span>
+                            )}
                             {item.last_message_text}
                           </span>
                         )}
                         <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={cn(
+                              'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                              STATE_BADGE[state],
+                            )}
+                          >
+                            {t(STATE_LABEL[state])}
+                          </span>
                           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
                             {channelOf(item.telegram_id) === 'telegram' ? (
                               <Send className="h-2.5 w-2.5" />
