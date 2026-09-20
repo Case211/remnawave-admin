@@ -179,14 +179,6 @@ class AbuseNoticePublic(_PublicBase):
     sent_at: Optional[str] = None
 
 
-class CustomerNoticePublic(_PublicBase):
-    """Предупреждение в том виде, в каком его показывают самому клиенту."""
-
-    subject: Optional[str] = None
-    body: Optional[str] = None
-    sent_at: Optional[str] = None
-
-
 class ViolationDetailPublic(ViolationPublic):
     email: Optional[str] = None
     telegram_id: Optional[int] = None
@@ -926,31 +918,6 @@ async def violations_summary(
         whitelisted=whitelisted,
         notice=notice,
     )
-
-
-@router.get("/violations/notices", response_model=List[CustomerNoticePublic])
-async def customer_notices(
-    telegram_id: int = Query(..., description="Telegram id клиента"),
-    limit: int = Query(20, ge=1, le=100),
-    api_key: ApiKeyUser = Depends(require_scope("violations:read")),
-):
-    """История предупреждений клиента — для показа ему самому.
-
-    Здесь нет ни вида нарушения, ни скоринга, ни признаков: это те же тексты,
-    которые человек уже получил, и ничего сверх них. Подробности детекта на
-    руках у нарушителя становятся инструкцией по обходу.
-    """
-    from web.backend.core.violation_notices import notices_for_user
-
-    rows = await notices_for_user(telegram_id, limit=limit)
-    return [
-        CustomerNoticePublic(
-            subject=row.get("subject"),
-            body=row.get("body"),
-            sent_at=row["sent_at"].isoformat() if row.get("sent_at") else None,
-        )
-        for row in rows
-    ]
 
 
 @router.get("/violations/{violation_id}", response_model=ViolationDetailPublic)

@@ -298,31 +298,3 @@ async def last_notice_for_user(telegram_id: int, *, days: int = 14) -> Optional[
             str(days),
         )
     return dict(row) if row else None
-
-
-async def notices_for_user(telegram_id: int, *, limit: int = 20) -> list[dict]:
-    """История предупреждений клиента — то, что он сам может открыть в кабинете.
-
-    Отдаём только дату и текст: вид нарушения, скоринг и признаки детекта сюда
-    не попадают намеренно. Клиент и так получил эти сообщения, а подробности
-    детекта на руках у нарушителя превращаются в инструкцию по обходу.
-    """
-    from shared.database import db_service
-
-    if not telegram_id or not db_service.is_connected:
-        return []
-    async with db_service.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT n.subject, n.body, n.sent_at
-              FROM violation_notices n
-              JOIN violations v ON v.id = n.violation_id
-             WHERE n.telegram_id = $1
-               AND (v.action_taken IS NULL OR v.action_taken <> 'annulled')
-             ORDER BY n.sent_at DESC
-             LIMIT $2
-            """,
-            telegram_id,
-            limit,
-        )
-    return [dict(row) for row in rows]
