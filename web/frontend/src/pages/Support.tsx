@@ -88,6 +88,14 @@ function isBreached(iso: string | null, slaMinutes: number, slaOn: boolean, now:
   return (now - new Date(iso).getTime()) / 60000 >= slaMinutes
 }
 
+/** «Ответили через 8 мин» — сухая цифра, по которой видно качество работы. */
+function minutesBetween(fromIso: string, toIso: string): string {
+  const minutes = Math.max(0, Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 60000))
+  if (minutes < 60) return `${minutes} мин`
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours} ч ${minutes % 60} мин` : `${Math.floor(hours / 24)} дн`
+}
+
 function timeOfDay(iso: string | null): string {
   if (!iso) return ''
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -943,6 +951,20 @@ export default function Support() {
                     #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} ·{' '}
                     {t(`support.channel.${channelOf(ticket?.telegram_id ?? null)}`)} · {t(`support.status.${ticket?.status}`)}
                     {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since, now)}` : ''}
+                    {ticket?.first_response_at && ticket?.created_at && (
+                      <span className="rounded bg-[var(--glass-bg)] px-1.5">
+                        {t('support.firstResponse')}:{' '}
+                        <span className="text-dark-100">
+                          {minutesBetween(ticket.created_at, ticket.first_response_at)}
+                        </span>
+                      </span>
+                    )}
+                    {ticket?.created_at && (
+                      <span className="rounded bg-[var(--glass-bg)] px-1.5">
+                        {t('support.age')}:{' '}
+                        <span className="text-dark-100">{waitedFor(ticket.created_at, now)}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
                 {watchers.length > 0 && (

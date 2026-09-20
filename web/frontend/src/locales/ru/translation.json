@@ -6886,6 +6886,8 @@
     "siblings_few": "Ещё {{count}} обращения клиента:",
     "siblings_many": "Ещё {{count}} обращений клиента:",
     "tagRemove": "Снять тег {{name}}",
-    "tagNew": "+ новый тег"
+    "tagNew": "+ новый тег",
+    "firstResponse": "Первый ответ",
+    "age": "В работе"
   }
 }

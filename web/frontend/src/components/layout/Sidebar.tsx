@@ -50,6 +50,20 @@ interface SidebarProps {
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const { t } = useTranslation()
   const location = useLocation()
+
+  // Сколько обращений ждёт ответа — чтобы это было видно из любого раздела,
+  // а не только когда оператор сам заглянул в поддержку.
+  const { data: supportQueues } = useQuery({
+    queryKey: ['support-queues'],
+    queryFn: async () => {
+      const { data } = await client.get('/support/queues')
+      return data as { wait_us: number }
+    },
+    refetchInterval: 60_000,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const supportWaiting = supportQueues?.wait_us ?? 0
   const { logout, user } = useAuthStore()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const role = usePermissionStore((s) => s.role)
@@ -300,6 +314,11 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                                   )}
                                 />
                                 <span className="sidebar-nav-text">{t(item.name)}</span>
+                                {item.href === '/support' && supportWaiting > 0 && (
+                                  <span className="sidebar-nav-text ml-auto rounded-full bg-cyan-400/15 px-1.5 text-[11px] font-semibold tabular-nums text-cyan-300">
+                                    {supportWaiting}
+                                  </span>
+                                )}
                               </Link>
                             </TooltipTrigger>
                             <TooltipContent side="right">

@@ -6889,6 +6889,8 @@
     "siblings_one": "{{count}} more ticket from this customer:",
     "siblings_other": "{{count}} more tickets from this customer:",
     "tagRemove": "Remove tag {{name}}",
-    "tagNew": "+ new tag"
+    "tagNew": "+ new tag",
+    "firstResponse": "First reply",
+    "age": "Age"
   }
 }
