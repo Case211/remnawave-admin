@@ -634,10 +634,10 @@ export default function Support() {
 
   return (
     <PermissionGate resource="bedolaga_support" action="view">
-      <div className="flex h-[calc(100dvh-5.5rem)] flex-col gap-3 md:h-[calc(100vh-5rem)] md:flex-row">
+      <div className="flex h-[calc(100dvh-5.5rem)] flex-col gap-3 lg:h-[calc(100vh-5rem)] lg:flex-row">
         {/* Очереди */}
         {/* Телефон: очереди лентой, метрики и синк прячем — там триаж, а не отчёты */}
-        <div className={cn('flex gap-2 overflow-x-auto pb-1 md:hidden', mobileChatOpen && 'hidden')}>
+        <div className={cn('flex gap-2 overflow-x-auto pb-1 lg:hidden', mobileChatOpen && 'hidden')}>
           {visibleQueues.map((id) => (
             <button
               key={id}
@@ -659,7 +659,7 @@ export default function Support() {
           ))}
         </div>
 
-        <aside className="hidden w-52 flex-shrink-0 flex-col gap-4 md:flex">
+        <aside className="hidden w-52 flex-shrink-0 flex-col gap-4 lg:flex">
           <div className="space-y-1">
             {visibleQueues.map((id) => (
               <button
@@ -736,8 +736,8 @@ export default function Support() {
         {/* Список */}
         <section
           className={cn(
-            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--glass-border)] md:w-80 md:flex-none',
-            mobileChatOpen && 'hidden md:flex',
+            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--glass-border)] lg:w-80 lg:flex-none',
+            mobileChatOpen && 'hidden lg:flex',
           )}
         >
           <div className="p-3 border-b border-[var(--glass-border)]">
@@ -955,7 +955,7 @@ export default function Support() {
               </div>
             )}
           </div>
-          <div className="hidden border-t border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:block">
+          <div className="hidden border-t border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 lg:block">
             {t('support.hotkeys')}
           </div>
         </section>
@@ -964,30 +964,30 @@ export default function Support() {
         <section
           className={cn(
             'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--glass-border)]',
-            !mobileChatOpen && 'hidden md:flex',
+            !mobileChatOpen && 'hidden lg:flex',
           )}
         >
           {activeId == null ? (
             <EmptyState icon={Users} title={t('support.pickTicket')} />
           ) : (
             <>
-              <header className="flex flex-wrap items-center gap-2 border-b border-[var(--glass-border)] px-3 py-2.5 md:flex-nowrap md:gap-3 md:px-4 md:py-3">
+              <header className="flex flex-wrap items-center gap-2 border-b border-[var(--glass-border)] px-3 py-2.5 lg:flex-nowrap lg:gap-3 lg:px-4 lg:py-3">
                 <button
                   type="button"
                   onClick={() => setMobileChatOpen(false)}
                   aria-label={t('support.backToQueue')}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--glass-border)] text-dark-200 md:hidden"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--glass-border)] text-dark-200 lg:hidden"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <div className="min-w-0 flex-1 basis-full md:basis-auto">
+                <div className="min-w-0 flex-1 basis-full lg:basis-auto">
                   <div className="text-sm font-semibold text-white truncate">{ticket?.title}</div>
                   <div className="text-[11px] text-dark-300">
                     #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} ·{' '}
                     {t(`support.channel.${channelOf(ticket?.telegram_id ?? null)}`)} · {t(`support.status.${ticket?.status}`)}
                     {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since, now)}` : ''}
                     {ticket?.first_response_at && ticket?.created_at && (
-                      <span className="rounded bg-[var(--glass-bg)] px-1.5">
+                      <span className="hidden whitespace-nowrap rounded bg-[var(--glass-bg)] px-1.5 xl:inline">
                         {t('support.firstResponse')}:{' '}
                         <span className="text-dark-100">
                           {minutesBetween(ticket.created_at, ticket.first_response_at)}
@@ -995,7 +995,7 @@ export default function Support() {
                       </span>
                     )}
                     {ticket?.created_at && (
-                      <span className="rounded bg-[var(--glass-bg)] px-1.5">
+                      <span className="hidden whitespace-nowrap rounded bg-[var(--glass-bg)] px-1.5 xl:inline">
                         {t('support.age')}:{' '}
                         <span className="text-dark-100">{waitedFor(ticket.created_at, now)}</span>
                       </span>
@@ -1035,7 +1035,10 @@ export default function Support() {
                         type="button"
                         onClick={() => snoozeMutation.mutate(option.minutes)}
                         disabled={snoozeMutation.isPending}
-                        className="h-8 rounded px-1.5 text-[11px] text-dark-300 hover:text-white"
+                        className={cn(
+                          'h-8 rounded px-1.5 text-[11px] text-dark-300 hover:text-white',
+                          (option.id === 'tomorrow' || option.id === 'week') && 'hidden xl:inline',
+                        )}
                       >
                         {t(`support.snooze.${option.id}`)}
                       </button>
@@ -1055,7 +1058,7 @@ export default function Support() {
                 </div>
               )}
               {customer && (
-                <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:px-4">
+                <div className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:px-4">
                   <span className="font-semibold text-dark-100">
                     {customer.full_name || customer.username || `#${customer.id}`}
                   </span>
@@ -1451,7 +1454,7 @@ export default function Support() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-11 flex-1 md:h-9 md:flex-none"
+                      className="h-11 flex-1 lg:h-9 lg:flex-none"
                       onClick={() => send(false)}
                       disabled={!draft.trim() || replyMutation.isPending}
                     >
@@ -1460,7 +1463,7 @@ export default function Support() {
                     </Button>
                     <Button
                       size="sm"
-                      className="h-11 flex-1 md:h-9 md:flex-none"
+                      className="h-11 flex-1 lg:h-9 lg:flex-none"
                       onClick={() => setConfirming('replyClose')}
                       disabled={!draft.trim() || replyMutation.isPending}
                     >
