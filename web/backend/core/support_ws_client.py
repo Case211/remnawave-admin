@@ -92,6 +92,13 @@ async def handle_event(event: str, payload: dict) -> bool:
         if not await maybe_auto_reply(ticket):
             await notify_new_ticket(ticket)
 
+    elif event == "ticket.message_added" and synced:
+        # Кто написал — решает проекция: событие приходит и на наш собственный
+        # ответ, а дёргать оператора собственным сообщением незачем.
+        from web.backend.core.support_alerts import notify_customer_reply
+
+        await notify_customer_reply({"id": ticket_id})
+
     return synced
 
 

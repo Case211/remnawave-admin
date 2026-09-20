@@ -4416,6 +4416,14 @@
       "metrics_retention_days": {
         "label": "Node metrics retention (days)",
         "description": "How long per-node metrics are kept before cleanup"
+      },
+      "notifications_topic_support": {
+        "label": "Topic: Support",
+        "description": "Topic id for tickets: new ticket, customer reply, missed deadline (empty falls back to the service topic)"
+      },
+      "support_alert_new_message": {
+        "label": "Support: customer reply alert",
+        "description": "Send a notification when a customer writes into an already open ticket"
       }
     },
     "inDb": "In DB",

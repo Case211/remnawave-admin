@@ -22,6 +22,12 @@ DEFAULT_SLA_MINUTES = 30
 # уведомление повторится один раз, что лучше молчания.
 _sla_alerted: set[int] = set()
 
+# Ответы клиента, о которых уже сказали: ключ по времени сообщения, поэтому
+# событие бота и догоняющий синк не дадут двух уведомлений об одном и том же.
+_reply_alerted: set[tuple[int, str]] = set()
+_REPLY_MEMORY_LIMIT = 5000
+FRESH_REPLY_MINUTES = 30
+
 
 def sla_minutes() -> int:
     from shared.config_service import config_service
@@ -47,6 +53,12 @@ def alerts_enabled() -> bool:
     from shared.config_service import config_service
 
     return bool(config_service.get("support_alerts_enabled", True))
+
+
+def new_message_alerts_enabled() -> bool:
+    from shared.config_service import config_service
+
+    return alerts_enabled() and bool(config_service.get("support_alert_new_message", True))
 
 
 def new_ticket_alerts_enabled() -> bool:
@@ -94,7 +106,8 @@ async def _notify(
             type="alert",
             severity=severity,
             channels=["in_app", "telegram"],
-            topic_type="service",
+            # Обращения идут своим топиком, иначе тонут среди сервисных сообщений.
+            topic_type="support",
             source="support",
             source_id=str(ticket_id),
             group_key=group_key,
@@ -245,6 +258,71 @@ async def notify_auto_reply(ticket_id: int, customer: str) -> None:
         severity="info",
         group_key=f"support_auto_{ticket_id}",
         ticket_id=ticket_id,
+    )
+
+
+async def notify_customer_reply(ticket: dict) -> None:
+    """Клиент дописал в открытое обращение.
+
+    Уведомление о новом обращении приходило, а дальше переписка шла молча:
+    оператор узнавал об ответе, только когда сам заходил в раздел. Шлём то же,
+    что и по новому обращению, но короче — контекст клиента он уже видел.
+    """
+    if not new_message_alerts_enabled():
+        return
+    ticket_id = int(ticket.get("id") or 0)
+    if not ticket_id:
+        return
+
+    row = await _ticket_row(ticket_id)
+    data = {**ticket, **row}
+    if str(data.get("status") or "") == "closed":
+        return
+    # Ответ оператора — не повод дёргать оператора.
+    if str(data.get("last_message_from") or "") != "user":
+        return
+
+    stamp = str(data.get("last_message_at") or "")
+    if not stamp:
+        return
+    # Догоняющий синк после простоя переберёт всю очередь: уведомляем только о
+    # том, что написано только что, иначе оператор получит пачку старых ответов.
+    written = data.get("last_message_at")
+    if isinstance(written, str):
+        try:
+            written = datetime.fromisoformat(written.replace("Z", "+00:00"))
+        except ValueError:
+            written = None
+    if isinstance(written, datetime):
+        if written.tzinfo is None:
+            written = written.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - written > timedelta(minutes=FRESH_REPLY_MINUTES):
+            return
+    mark = (ticket_id, stamp)
+    if mark in _reply_alerted:
+        return
+    if len(_reply_alerted) >= _REPLY_MEMORY_LIMIT:
+        _reply_alerted.clear()
+    _reply_alerted.add(mark)
+
+    customer = str(data.get("customer_name") or "") or f"#{data.get('bot_user_id') or '—'}"
+    title = str(data.get("title") or "без темы")
+    lines = [f"👤 <b>{escape(customer)}</b>", f"📝 {escape(title)}"]
+
+    message = _short(data.get("last_message_text") or "")
+    if message:
+        lines.append(f"💬 {escape(message)}")
+    attachments = int(data.get("attachments") or 0)
+    if attachments:
+        lines.append(f"📎 Вложений: {attachments}")
+
+    await _notify(
+        f"Ответ клиента по #{ticket_id}",
+        f"{customer}: {_short(message or title, 120)}",
+        severity="info",
+        group_key=f"support_reply_{ticket_id}_{stamp}",
+        ticket_id=ticket_id,
+        telegram_body="\n".join(lines),
     )
 
 

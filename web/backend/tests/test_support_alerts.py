@@ -314,3 +314,102 @@ def test_card_escapes_customer_text():
     """Имя и текст приходят от клиента: разметку в них ломать нельзя."""
     assert support_alerts._short("  много   пробелов  ") == "много пробелов"
     assert len(support_alerts._short("x" * 400)) == 300
+
+
+# ── Ответ клиента в открытом обращении ──
+
+
+def _reply_row(**extra):
+    row = {
+        "id": 65,
+        "title": "Не подключается",
+        "customer_name": "Игорь",
+        "bot_user_id": 667,
+        "status": "answered",
+        "last_message_from": "user",
+        "last_message_text": "всё ещё не работает",
+        "last_message_at": datetime.now(timezone.utc).isoformat(),
+        "attachments": 0,
+    }
+    row.update(extra)
+    return row
+
+
+@pytest.fixture(autouse=True)
+def _forget_replies():
+    support_alerts._reply_alerted.clear()
+    yield
+    support_alerts._reply_alerted.clear()
+
+
+@pytest.mark.asyncio
+async def test_customer_reply_alerts_once(monkeypatch, sent):
+    row = _reply_row()
+
+    async def fetch(ticket_id):
+        return row
+
+    monkeypatch.setattr(support_alerts, "_ticket_row", fetch)
+    monkeypatch.setattr(support_alerts, "new_message_alerts_enabled", lambda: True)
+
+    await support_alerts.notify_customer_reply({"id": 65})
+    await support_alerts.notify_customer_reply({"id": 65})
+
+    assert len(sent) == 1, "событие бота и синк не должны дублировать уведомление"
+    assert "всё ещё не работает" in sent[0]["telegram_body"]
+    assert sent[0]["title"] == "Ответ клиента по #65"
+
+
+@pytest.mark.asyncio
+async def test_own_reply_does_not_alert(monkeypatch, sent):
+    async def fetch(ticket_id):
+        return _reply_row(last_message_from="admin")
+
+    monkeypatch.setattr(support_alerts, "_ticket_row", fetch)
+    monkeypatch.setattr(support_alerts, "new_message_alerts_enabled", lambda: True)
+
+    await support_alerts.notify_customer_reply({"id": 65})
+
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_closed_ticket_does_not_alert(monkeypatch, sent):
+    async def fetch(ticket_id):
+        return _reply_row(status="closed")
+
+    monkeypatch.setattr(support_alerts, "_ticket_row", fetch)
+    monkeypatch.setattr(support_alerts, "new_message_alerts_enabled", lambda: True)
+
+    await support_alerts.notify_customer_reply({"id": 65})
+
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_old_reply_does_not_alert(monkeypatch, sent):
+    # Синк после простоя переберёт всю очередь — вчерашние ответы не новость.
+    stale = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+
+    async def fetch(ticket_id):
+        return _reply_row(last_message_at=stale)
+
+    monkeypatch.setattr(support_alerts, "_ticket_row", fetch)
+    monkeypatch.setattr(support_alerts, "new_message_alerts_enabled", lambda: True)
+
+    await support_alerts.notify_customer_reply({"id": 65})
+
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_reply_alert_respects_setting(monkeypatch, sent):
+    async def fetch(ticket_id):
+        return _reply_row()
+
+    monkeypatch.setattr(support_alerts, "_ticket_row", fetch)
+    monkeypatch.setattr(support_alerts, "new_message_alerts_enabled", lambda: False)
+
+    await support_alerts.notify_customer_reply({"id": 65})
+
+    assert sent == []

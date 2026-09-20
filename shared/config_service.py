@@ -390,6 +390,17 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "env_var_name": "NOTIFICATIONS_TOPIC_BACKUPS",
         "sort_order": 18,
     },
+    {
+        "key": "notifications_topic_support",
+        "value_type": "int",
+        "category": "notifications",
+        "subcategory": "topics",
+        "display_name": "Топик: Поддержка",
+        "description": "ID топика для обращений: новое обращение, ответ клиента, просрочка "
+                       "(пусто — сервисный топик)",
+        "env_var_name": "NOTIFICATIONS_TOPIC_SUPPORT",
+        "sort_order": 19,
+    },
 
     # === FINANCE ===
     {
@@ -779,6 +790,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "subcategory": "support",
         "display_name": "Поддержка: алерт о новом обращении",
         "description": "Слать уведомление, как только клиент создал обращение",
+        "default_value": "true",
+        "sort_order": 62,
+    },
+    {
+        "key": "support_alert_new_message",
+        "value_type": "bool",
+        "category": "general",
+        "subcategory": "support",
+        "display_name": "Поддержка: алерт об ответе клиента",
+        "description": "Слать уведомление, когда клиент дописал в уже открытое обращение",
         "default_value": "true",
         "sort_order": 62,
     },

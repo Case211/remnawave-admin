@@ -344,6 +344,12 @@ async def sync_tickets(*, full: bool = False) -> dict:
                 from web.backend.core.support_auto_reply import maybe_auto_reply
 
                 await maybe_auto_reply({**ticket, "messages": messages})
+            else:
+                # Без WS ответ клиента находит только этот проход. Дубли и старые
+                # сообщения отсекает сам алерт: он помнит время сообщения.
+                from web.backend.core.support_alerts import notify_customer_reply
+
+                await notify_customer_reply({"id": ticket_id})
 
         if len(items) < PAGE_SIZE:
             walked_to_end = True
