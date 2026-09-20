@@ -614,6 +614,9 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.support_alerts import support_alerts_loop
                     _bg("support_alerts", support_alerts_loop())
 
+                    from web.backend.core.support_media_cache import cleanup_loop as support_media_cleanup_loop
+                    _bg("support_media_cleanup", support_media_cleanup_loop())
+
                     from web.backend.core.bscheck_scheduler import bscheck_scheduler_loop
                     _bg("bscheck_scheduler", bscheck_scheduler_loop())
 

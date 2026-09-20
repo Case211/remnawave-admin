@@ -20,6 +20,7 @@ from web.backend.api.deps import AdminUser, get_client_ip, require_permission
 from web.backend.api.v2.bedolaga import proxy_request
 from web.backend.core.audit import write_audit_log
 from web.backend.core.errors import E, api_error
+from web.backend.core import support_media_cache as media_cache
 from web.backend.core.support_alerts import sla_enabled, sla_minutes
 from web.backend.core.support_sync import sync_ticket, sync_tickets
 
@@ -794,7 +795,11 @@ async def message_media(
         if not file_id:
             raise api_error(404, E.NOT_FOUND, "Media is not available")
 
-        content = await proxy_request(lambda: bedolaga_client.download_media(file_id))
+        content = media_cache.read(file_id)
+        if content is None:
+            content = await proxy_request(lambda: bedolaga_client.download_media(file_id))
+            media_cache.write(file_id, content)
+
         return Response(
             content=content,
             media_type="image/jpeg" if (item.get("type") == "photo") else "application/octet-stream",
@@ -809,6 +814,19 @@ async def message_media(
     if not media_url:
         raise api_error(404, E.NOT_FOUND, "Media is not available")
 
+    media_type = str((info or {}).get("media_type") or "document")
+    cache_key = str((info or {}).get("media_file_id") or f"{ticket_id}:{message_id}")
+    cached = media_cache.read(cache_key)
+    if cached is not None:
+        return Response(
+            content=cached,
+            media_type={"photo": "image/jpeg", "video": "video/mp4"}.get(media_type, "application/octet-stream"),
+            headers={
+                "Cache-Control": "private, max-age=3600",
+                "Content-Disposition": f'inline; filename="ticket-{ticket_id}-{message_id}"',
+            },
+        )
+
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:
             response = await http.get(media_url)
@@ -817,7 +835,7 @@ async def message_media(
         logger.warning("Support: вложение %s/%s не скачалось: %s", ticket_id, message_id, exc)
         raise api_error(502, E.NOT_FOUND, "Could not fetch media from the bot")
 
-    media_type = str((info or {}).get("media_type") or "document")
+    media_cache.write(cache_key, response.content)
     content_type = response.headers.get("content-type") or {
         "photo": "image/jpeg",
         "video": "video/mp4",

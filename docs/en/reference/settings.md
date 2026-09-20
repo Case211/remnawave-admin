@@ -318,6 +318,9 @@ Schedule, retention and the dead-man switch that warns when backups have stopped
 | **S3: upload automatically** | `backup_s3_auto_upload` | `false` | Send every scheduled backup to the storage |
 | **S3: files to keep** | `backup_s3_keep_count` | `0` | How many recent files to keep in the bucket after an automatic upload (0 = keep everything) |
 | **S3: access keys** | `backup_s3_creds` | — | Access Key and Secret Key, encrypted; editable only on the Storage tab |
+| **Support: media cache** | `support_media_cache_enabled` | `true` | Keep downloaded attachments on disk instead of fetching them from the bot every time |
+| **Support: media retention** | `support_media_cache_days` | `14` | Days without access before a file is dropped; an old ticket downloads it again |
+| **Support: media cache limit (MB)** | `support_media_cache_max_mb` | `2048` | Above this the least recently used files are removed (0 — no limit) |
 | **Support: response deadline** | `support_sla_enabled` | `true` | Overdue queue, wait-time highlighting and breach alerts |
 | **Support: first reply target** | `support_sla_minutes` | `30` | Minutes of waiting after which a ticket counts as overdue |
 | **Support: alerts** | `support_alerts_enabled` | `true` | Notify about new tickets and missed first replies |
