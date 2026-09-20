@@ -6863,6 +6863,16 @@
         "title": "Take over assigned tickets?",
         "description": "Some of the selected tickets belong to other operators — they will leave their queues.",
         "action": "Take over"
+      },
+      "extend": {
+        "title": "Extend subscription by 3 days?",
+        "description": "The end date moves immediately and this button cannot undo it.",
+        "action": "Extend"
+      },
+      "resetDevices": {
+        "title": "Reset the customer devices?",
+        "description": "Every current device is unlinked and the customer has to connect again.",
+        "action": "Reset"
       }
     },
     "channel": {

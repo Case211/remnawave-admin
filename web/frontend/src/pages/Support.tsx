@@ -224,7 +224,9 @@ export default function Support() {
   const [now, setNow] = useState(() => Date.now())
   // Закрытие уходит клиенту уведомлением и не отменяется, перехват тикета
   // забирает работу у коллеги — оба действия спрашивают подтверждение.
-  const [confirming, setConfirming] = useState<null | 'close' | 'replyClose' | 'steal' | 'bulkSteal' | 'bulkClose'>(null)
+  const [confirming, setConfirming] = useState<
+    null | 'close' | 'replyClose' | 'steal' | 'bulkSteal' | 'bulkClose' | 'extend' | 'resetDevices'
+  >(null)
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(timer)
@@ -1239,7 +1241,7 @@ export default function Support() {
                     <>
                       <button
                         type="button"
-                        onClick={() => quickActionMutation.mutate('extend')}
+                        onClick={() => setConfirming('extend')}
                         disabled={quickActionMutation.isPending}
                         className={cn('h-8 px-2.5 text-[11px] font-medium', ACTION_CLASS)}
                       >
@@ -1247,7 +1249,7 @@ export default function Support() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => quickActionMutation.mutate('reset-devices')}
+                        onClick={() => setConfirming('resetDevices')}
                         disabled={quickActionMutation.isPending}
                         className={cn('h-8 px-2.5 text-[11px] font-medium', ACTION_CLASS)}
                       >
@@ -1619,12 +1621,14 @@ export default function Support() {
         title={confirming ? t(`support.confirm.${confirming}.title`) : ''}
         description={confirming ? t(`support.confirm.${confirming}.description`) : undefined}
         confirmLabel={confirming ? t(`support.confirm.${confirming}.action`) : undefined}
-        variant={confirming === 'steal' || confirming === 'bulkSteal' ? 'default' : 'destructive'}
+        variant={['steal', 'bulkSteal', 'extend'].includes(confirming ?? '') ? 'default' : 'destructive'}
         onConfirm={() => {
           if (confirming === 'close') statusMutation.mutate('closed')
           if (confirming === 'replyClose') send(true)
           if (confirming === 'steal') assignMutation.mutate()
           if (confirming === 'bulkSteal') bulkMutation.mutate('assign')
+          if (confirming === 'extend') quickActionMutation.mutate('extend')
+          if (confirming === 'resetDevices') quickActionMutation.mutate('reset-devices')
           if (confirming === 'bulkClose') bulkMutation.mutate('close')
           setConfirming(null)
         }}
