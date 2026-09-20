@@ -49,7 +49,7 @@ function waitedFor(iso: string | null): string {
 }
 
 function waitTone(iso: string | null, slaMinutes: number, slaOn = true): string {
-  if (!iso) return 'text-dark-400'
+  if (!iso) return 'text-dark-300'
   if (!slaOn) return 'text-dark-300'
   const minutes = (Date.now() - new Date(iso).getTime()) / 60000
   if (minutes >= slaMinutes) return 'text-red-400 font-bold'
@@ -440,7 +440,7 @@ export default function Support() {
                 )}
               >
                 <span>{t(`support.queues.${id}`)}</span>
-                <span className={cn('text-xs tabular-nums', queue === id ? 'text-cyan-300' : 'text-dark-400')}>
+                <span className={cn('text-xs tabular-nums', queue === id ? 'text-cyan-300' : 'text-dark-300')}>
                   {queues ? (queues as any)[id] : '—'}
                 </span>
               </button>
@@ -449,7 +449,7 @@ export default function Support() {
 
           {metrics && (
             <div className="rounded-lg border border-[var(--glass-border)] p-2.5 text-[11px] text-dark-300 space-y-1">
-              <div className="text-[10px] uppercase tracking-wider text-dark-400">
+              <div className="text-[11px] uppercase tracking-wider text-dark-300">
                 {t('support.metrics.title', { days: metrics.days })}
               </div>
               <div className="flex justify-between">
@@ -530,17 +530,17 @@ export default function Support() {
                     <span className="text-xs font-semibold text-white truncate">
                       {item.customer_name || `#${item.bot_user_id}`}
                     </span>
-                    <span className="text-[10px] text-dark-400">#{item.id}</span>
+                    <span className="text-[11px] text-dark-300">#{item.id}</span>
                     <span className={cn('ml-auto text-[11px] tabular-nums', waitTone(item.waiting_since, slaMinutes, slaOn))}>
                       {item.waiting_since ? waitedFor(item.waiting_since) : t('support.answeredShort')}
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-dark-100 truncate">{item.title}</div>
                   {item.last_message_text && (
-                    <div className="mt-0.5 text-[11px] text-dark-400 truncate">{item.last_message_text}</div>
+                    <div className="mt-0.5 text-[11px] text-dark-300 truncate">{item.last_message_text}</div>
                   )}
                   {item.assignee_id != null && (
-                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[10px] text-dark-300">
+                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
                       <Users className="w-2.5 h-2.5" />
                       {t('support.assignedTo', { id: item.assignee_id })}
                     </div>
@@ -549,7 +549,7 @@ export default function Support() {
               ))
             )}
           </div>
-          <div className="hidden border-t border-[var(--glass-border)] px-3 py-2 text-[10px] text-dark-400 md:block">
+          <div className="hidden border-t border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:block">
             {t('support.hotkeys')}
           </div>
         </section>
@@ -576,7 +576,7 @@ export default function Support() {
                 </button>
                 <div className="min-w-0 flex-1 basis-full md:basis-auto">
                   <div className="text-sm font-semibold text-white truncate">{ticket?.title}</div>
-                  <div className="text-[11px] text-dark-400">
+                  <div className="text-[11px] text-dark-300">
                     #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} · {t(`support.status.${ticket?.status}`)}
                     {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since)}` : ''}
                   </div>
@@ -649,7 +649,7 @@ export default function Support() {
               {(ticketTags?.length || allTags.length > 0) && canEdit && (
                 <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--glass-border)] px-4 py-2">
                   {ticketTags?.map((tag) => (
-                    <span key={tag.id} className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5 text-[10px] text-dark-200">
+                    <span key={tag.id} className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-200">
                       {tag.name}
                     </span>
                   ))}
@@ -661,7 +661,7 @@ export default function Support() {
                         key={tag.id}
                         type="button"
                         onClick={() => tagMutation.mutate(tag.id)}
-                        className="rounded-md border border-dashed border-[var(--glass-border)] px-2 py-0.5 text-[10px] text-dark-400 hover:text-dark-200"
+                        className="rounded-md border border-dashed border-[var(--glass-border)] px-2 py-0.5 text-[11px] text-dark-300 hover:text-dark-200"
                       >
                         + {tag.name}
                       </button>
@@ -687,7 +687,7 @@ export default function Support() {
                           <span className={cn('text-[11px] font-bold', m.is_from_admin ? 'text-emerald-300' : 'text-cyan-300')}>
                             {m.author_name || (m.is_from_admin ? t('support.operator') : t('support.client'))}
                           </span>
-                          <span className="text-[10px] text-dark-400">{timeOfDay(m.created_at)}</span>
+                          <span className="text-[11px] text-dark-300">{timeOfDay(m.created_at)}</span>
                         </div>
                         <div className="whitespace-pre-line text-xs leading-relaxed text-dark-100">{m.text}</div>
                         {m.has_media && (() => {
@@ -701,7 +701,7 @@ export default function Support() {
 
                           if (ready.length === 0) {
                             return (
-                              <div className="mt-1.5 text-[11px] text-dark-400">
+                              <div className="mt-1.5 text-[11px] text-dark-300">
                                 <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
                                 {t('support.hasMedia', { type: m.media_type || 'file' })}
                               </div>
@@ -773,9 +773,9 @@ export default function Support() {
                           className="block w-full border-b border-[var(--glass-border)] px-3 py-2 text-left last:border-0 hover:bg-cyan-400/8"
                         >
                           <span className="block text-xs font-semibold text-white">{macro.title}</span>
-                          <span className="block truncate text-[11px] text-dark-400">{macro.body}</span>
+                          <span className="block truncate text-[11px] text-dark-300">{macro.body}</span>
                           {macro.set_status && (
-                            <span className="mt-1 inline-block rounded bg-emerald-400/12 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                            <span className="mt-1 inline-block rounded bg-emerald-400/12 px-1.5 py-0.5 text-[11px] text-emerald-300">
                               {t('support.macroSetsStatus', { status: t(`support.status.${macro.set_status}`) })}
                             </span>
                           )}
@@ -823,7 +823,7 @@ export default function Support() {
                         <Upload className="h-4 w-4" />
                       )}
                     </Button>
-                    <span className="hidden text-[10px] text-dark-400 md:inline">{t('support.sendHint')}</span>
+                    <span className="hidden text-[11px] text-dark-300 md:inline">{t('support.sendHint')}</span>
                     <span className="hidden flex-1 md:block" />
                     <Button
                       variant="outline"
