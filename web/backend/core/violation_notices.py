@@ -40,7 +40,9 @@ async def list_templates() -> list[dict]:
         return []
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT id, {', '.join(_TEMPLATE_FIELDS)} FROM violation_notice_templates ORDER BY kind"
+            # Общий шаблон первым: с него начинают, остальные — уточнения к нему.
+            f"SELECT id, {', '.join(_TEMPLATE_FIELDS)} FROM violation_notice_templates "
+            "ORDER BY (kind = 'default') DESC, kind"
         )
     return [dict(row) for row in rows]
 

@@ -1720,7 +1720,8 @@
       "topViolators": "Top violators",
       "hwids": "Shared HWIDs",
       "reports": "Reports & ASN",
-      "tuning": "Tuning"
+      "tuning": "Tuning",
+      "notices": "Warnings"
     },
     "sharedHwids": {
       "title": "Shared HWID Devices",
@@ -2058,6 +2059,28 @@
       "title": "History over {{days}} days",
       "summary": "{{total}} total, {{annulled}} annulled",
       "annulled": "annulled"
+    },
+    "notices": {
+      "hint": "The customer gets these texts when an operator warns them or applies an action. Do not spell out what the detector saw: such hints are simply worked around.",
+      "saved": "Template saved",
+      "enabled": "Warn",
+      "alsoEmail": "and by email",
+      "minScore": "Score threshold",
+      "off": "off",
+      "updatedBy": "edited by {{name}}",
+      "subjectPlaceholder": "Email subject",
+      "bodyPlaceholder": "Warning text",
+      "kinds": {
+        "default": "General",
+        "temporal": "Connection timing",
+        "geo": "Geography",
+        "asn": "Networks and providers",
+        "profile": "Behaviour profile",
+        "device": "Devices",
+        "hwid": "Device fingerprints",
+        "user_agent": "Clients and versions",
+        "torrent": "Torrents"
+      }
     }
   },
   "admins": {
