@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from html import escape
@@ -88,6 +89,57 @@ def _ticket_button(ticket_id: int) -> dict | None:
     }
 
 
+CAPTION_LIMIT = 1024
+
+
+async def _send_with_attachment(title: str, card: str, ticket_id: int, attachment: dict) -> bool:
+    """Отправить карточку вместе со скриншотом клиента.
+
+    Бот прикладывает вложение к своему уведомлению, а у нас в чат уходил один
+    текст — понять, что человек прислал, можно было только открыв панель.
+    Файл качаем через API бота: file_id принадлежит его боту и нашим токеном
+    не отправляется, поэтому пересылаем байтами.
+    """
+    import httpx
+
+    from shared import tg_http
+    from web.backend.core.notification_service import _get_global_telegram_config
+
+    bot_token, chat_id, topic_id = _get_global_telegram_config("support")
+    if not bot_token or not chat_id:
+        return False
+
+    caption = f"<b>{escape(title)}</b>\n\n{card}"
+    if len(caption) > CAPTION_LIMIT:
+        caption = caption[: CAPTION_LIMIT - 1] + "…"
+
+    is_photo = attachment.get("kind") == "photo"
+    method = "sendPhoto" if is_photo else "sendDocument"
+    field = "photo" if is_photo else "document"
+    data = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}
+    if topic_id and str(topic_id) != "0":
+        data["message_thread_id"] = str(topic_id)
+    button = _ticket_button(ticket_id)
+    if button:
+        import json as _json
+
+        data["reply_markup"] = _json.dumps(button)
+
+    try:
+        async with httpx.AsyncClient(**tg_http.client_kwargs(60)) as client:
+            response = await client.post(
+                tg_http.method_url(bot_token, method),
+                data=data,
+                files={field: (attachment.get("name") or "attachment", attachment["content"])},
+            )
+        if response.status_code == 200:
+            return True
+        logger.warning("Support alert: вложение не ушло (%s): %s", ticket_id, response.text[:200])
+    except Exception as exc:  # noqa: BLE001 — сеть до Telegram: обойдёмся текстом
+        logger.warning("Support alert: вложение не ушло (%s): %s", ticket_id, exc)
+    return False
+
+
 async def _notify(
     title: str,
     body: str,
@@ -96,16 +148,26 @@ async def _notify(
     group_key: str,
     ticket_id: int,
     telegram_body: str | None = None,
+    attachment: dict | None = None,
 ) -> None:
     try:
         from web.backend.core.notification_service import create_notification
+
+        # Вложение уходит отдельным вызовом вместе с подписью — тогда в чате
+        # одно сообщение, а не картинка следом за текстом. Не получилось —
+        # отправляем карточку обычным путём.
+        sent_with_file = False
+        if attachment:
+            sent_with_file = await _send_with_attachment(
+                title, telegram_body or body, ticket_id, attachment
+            )
 
         await create_notification(
             title=title,
             body=body,
             type="alert",
             severity=severity,
-            channels=["in_app", "telegram"],
+            channels=["in_app"] if sent_with_file else ["in_app", "telegram"],
             # Обращения идут своим топиком, иначе тонут среди сервисных сообщений.
             topic_type="support",
             source="support",
@@ -117,11 +179,6 @@ async def _notify(
         )
     except Exception as exc:  # noqa: BLE001 — алерт не должен ронять синк
         logger.warning("Support alert не отправлен (%s): %s", group_key, exc)
-
-
-def escape_line(line: str) -> str:
-    """Строка контекста наполовину наша, наполовину из бота — экранируем целиком."""
-    return escape(line)
 
 
 def _short(text: str, limit: int = 300) -> str:
@@ -152,8 +209,103 @@ async def _ticket_row(ticket_id: int) -> dict:
         return {}
 
 
-async def _customer_lines(bot_user_id: int) -> list[str]:
-    """Подписка, баланс, устройства — то, чего в уведомлении бота нет.
+async def _last_message(ticket_id: int) -> dict:
+    """Сообщение, из-за которого пришёл алерт: оно же последнее в переписке."""
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        return {}
+    try:
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, text, has_media, media_type, media_items, is_from_admin
+                FROM support_ticket_messages
+                WHERE ticket_id = $1
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                ticket_id,
+            )
+        return dict(row) if row else {}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Support alert: сообщение по %s не прочиталось: %s", ticket_id, exc)
+        return {}
+
+
+def _media_count(message: dict) -> int:
+    """Сколько файлов в этом сообщении — не во всём обращении."""
+    if not message:
+        return 0
+    raw = message.get("media_items")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raw = None
+    if isinstance(raw, list) and raw:
+        return len(raw)
+    return 1 if message.get("has_media") else 0
+
+
+async def _attachment(ticket_id: int, message: dict) -> dict | None:
+    """Первый файл сообщения байтами — для пересылки в чат."""
+    if not message or not message.get("has_media"):
+        return None
+    from shared.bedolaga_client import bedolaga_client
+    from web.backend.core import support_media_cache as media_cache
+
+    file_id = None
+    kind = str(message.get("media_type") or "document")
+    raw = message.get("media_items")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raw = None
+    if isinstance(raw, list) and raw:
+        first = raw[0] or {}
+        file_id = first.get("file_id")
+        kind = str(first.get("type") or kind)
+
+    try:
+        if not file_id:
+            info = await bedolaga_client.get_ticket_message_media(ticket_id, int(message["id"]))
+            file_id = (info or {}).get("media_file_id")
+            kind = str((info or {}).get("media_type") or kind)
+        if not file_id:
+            return None
+        content = media_cache.read(file_id)
+        if content is None:
+            content = await bedolaga_client.download_media(file_id)
+            media_cache.write(file_id, content)
+    except Exception as exc:  # noqa: BLE001 — бот не отдал файл: уведомим текстом
+        logger.warning("Support alert: вложение %s не скачалось: %s", ticket_id, exc)
+        return None
+
+    extension = {"photo": "jpg", "video": "mp4"}.get(kind, "bin")
+    return {"content": content, "kind": kind, "name": f"ticket-{ticket_id}.{extension}"}
+
+
+def _card(fields: list[tuple[str, str, str]], message: str, attachments: int) -> str:
+    """Карточка в разметке rich-уведомлений.
+
+    Конвертер блоков читает строки с отступом как элементы списка, а
+    ``blockquote expandable`` — как сворачиваемую секцию: длинное обращение не
+    растягивает чат, но раскрывается одним касанием.
+    """
+    lines = [f"   {icon} <b>{escape(label)}:</b> {escape(str(value))}" for icon, label, value in fields]
+    # «Вложений: 0» строкой не пишем — пустая строка в карточке хуже её отсутствия.
+    if attachments:
+        lines.append(f"   📎 <b>Вложений:</b> {attachments}")
+    if message:
+        lines.append("")
+        lines.append(f"<blockquote expandable>{escape(message)}</blockquote>")
+    return "\n".join(lines)
+
+
+async def _customer_fields(bot_user_id: int) -> list[tuple[str, str, str]]:
+    """Подписка и баланс — то, чего в уведомлении бота нет.
 
     Бот шлёт свою карточку тикета, и повторять её смысла нет: ценность нашего
     письма в том, что мы знаем про клиента то, что видно в панели.
@@ -168,26 +320,26 @@ async def _customer_lines(bot_user_id: int) -> list[str]:
         logger.debug("Support alert: клиент %s не прочитался: %s", bot_user_id, exc)
         return []
 
-    lines: list[str] = []
+    fields: list[tuple[str, str, str]] = []
     subscription = (user or {}).get("subscription") or {}
     if subscription:
         status = str(subscription.get("actual_status") or subscription.get("status") or "")
-        end = str(subscription.get("end_date") or "")[:10]
         parts = [SUBSCRIPTION_STATUS.get(status, status or "—")]
+        end = str(subscription.get("end_date") or "")[:10]
         if end:
             parts.append(f"до {end}")
         if subscription.get("is_trial"):
             parts.append("триал")
         if subscription.get("device_limit"):
             parts.append(f"устройств: {subscription['device_limit']}")
-        lines.append("💳 Подписка: " + " · ".join(parts))
+        fields.append(("💳", "Подписка", " · ".join(parts)))
     else:
-        lines.append("💳 Подписки нет")
+        fields.append(("💳", "Подписка", "нет"))
 
     balance = (user or {}).get("balance_rubles")
     if balance is not None:
-        lines.append(f"💰 Баланс: {balance} ₽")
-    return lines
+        fields.append(("💰", "Баланс", f"{balance} ₽"))
+    return fields
 
 
 SUBSCRIPTION_STATUS = {
@@ -215,24 +367,15 @@ async def notify_new_ticket(ticket: dict) -> None:
     data = {**ticket, **row}
     customer = str(data.get("customer_name") or "") or f"#{data.get('bot_user_id') or '—'}"
     title = str(data.get("title") or "без темы")
+    message = await _last_message(ticket_id)
 
-    lines = [f"👤 <b>{escape(customer)}</b>"]
+    fields = [("👤", "Клиент", customer)]
     telegram_id = data.get("telegram_id")
-    channel = f"Telegram {telegram_id}" if telegram_id else "кабинет"
-    lines.append(f"🆔 Клиент #{data.get('bot_user_id') or '—'} · {escape(channel)}")
-    lines.append(f"📝 {escape(title)}")
+    fields.append(("🆔", "Откуда", f"Telegram {telegram_id}" if telegram_id else "кабинет"))
+    fields.append(("📝", "Тема", title))
+    fields.extend(await _customer_fields(int(data.get("bot_user_id") or 0)))
 
-    message = _short(data.get("last_message_text") or "")
-    if message:
-        lines.append(f"💬 {escape(message)}")
-    attachments = int(data.get("attachments") or 0)
-    if attachments:
-        lines.append(f"📎 Вложений: {attachments}")
-
-    context = await _customer_lines(int(data.get("bot_user_id") or 0))
-    if context:
-        lines.append("")
-        lines.extend(escape_line(line) for line in context)
+    card = _card(fields, _short(data.get("last_message_text") or ""), _media_count(message))
 
     await _notify(
         f"Новое обращение #{ticket_id}",
@@ -240,7 +383,8 @@ async def notify_new_ticket(ticket: dict) -> None:
         severity="info",
         group_key=f"support_new_{ticket_id}",
         ticket_id=ticket_id,
-        telegram_body="\n".join(lines),
+        telegram_body=card,
+        attachment=await _attachment(ticket_id, message),
     )
 
 
@@ -307,22 +451,23 @@ async def notify_customer_reply(ticket: dict) -> None:
 
     customer = str(data.get("customer_name") or "") or f"#{data.get('bot_user_id') or '—'}"
     title = str(data.get("title") or "без темы")
-    lines = [f"👤 <b>{escape(customer)}</b>", f"📝 {escape(title)}"]
+    message = await _last_message(ticket_id)
+    text = _short(data.get("last_message_text") or "")
 
-    message = _short(data.get("last_message_text") or "")
-    if message:
-        lines.append(f"💬 {escape(message)}")
-    attachments = int(data.get("attachments") or 0)
-    if attachments:
-        lines.append(f"📎 Вложений: {attachments}")
+    card = _card(
+        [("👤", "Клиент", customer), ("📝", "Тема", title)],
+        text,
+        _media_count(message),
+    )
 
     await _notify(
         f"Ответ клиента по #{ticket_id}",
-        f"{customer}: {_short(message or title, 120)}",
+        f"{customer}: {_short(text or title, 120)}",
         severity="info",
         group_key=f"support_reply_{ticket_id}_{stamp}",
         ticket_id=ticket_id,
-        telegram_body="\n".join(lines),
+        telegram_body=card,
+        attachment=await _attachment(ticket_id, message),
     )
 
 

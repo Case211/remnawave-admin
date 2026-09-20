@@ -4420,6 +4420,10 @@
       "support_alert_new_message": {
         "label": "Поддержка: алерт об ответе клиента",
         "description": "Слать уведомление, когда клиент дописал в уже открытое обращение"
+      },
+      "notifications_support_enabled": {
+        "label": "Уведомления: Поддержка",
+        "description": "Слать в Telegram сообщения об обращениях"
       }
     },
     "inDb": "В БД",

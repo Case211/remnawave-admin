@@ -391,6 +391,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 18,
     },
     {
+        "key": "notifications_support_enabled",
+        "value_type": "bool",
+        "category": "notifications",
+        "subcategory": "types",
+        "display_name": "Уведомления: Поддержка",
+        "description": "Слать в Telegram сообщения об обращениях",
+        "default_value": "true",
+        "sort_order": 9,
+    },
+    {
         "key": "notifications_topic_support",
         "value_type": "int",
         "category": "notifications",

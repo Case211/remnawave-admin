@@ -73,7 +73,7 @@ def _clean_state(monkeypatch):
 def sent(monkeypatch):
     calls: list[dict] = []
 
-    async def fake_notify(title, body, *, severity, group_key, ticket_id, telegram_body=None):
+    async def fake_notify(title, body, *, severity, group_key, ticket_id, telegram_body=None, attachment=None):
         calls.append({
             "title": title,
             "body": body,
@@ -81,6 +81,7 @@ def sent(monkeypatch):
             "group_key": group_key,
             "ticket_id": ticket_id,
             "telegram_body": telegram_body,
+            "attachment": attachment,
         })
 
     monkeypatch.setattr(support_alerts, "_notify", fake_notify)
@@ -273,10 +274,18 @@ async def test_new_ticket_alert_carries_the_card(monkeypatch, sent):
         }
 
     async def context(bot_user_id):
-        return ["💳 Подписка: активна · до 2026-10-19", "💰 Баланс: 100 ₽"]
+        return [("💳", "Подписка", "активна · до 2026-10-19"), ("💰", "Баланс", "100 ₽")]
+
+    async def last_message(ticket_id):
+        return {"id": 9, "has_media": True, "media_type": "photo", "media_items": None}
+
+    async def attachment(ticket_id, message):
+        return {"content": b"jpeg", "kind": "photo", "name": "ticket-65.jpg"}
 
     monkeypatch.setattr(support_alerts, "_ticket_row", row)
-    monkeypatch.setattr(support_alerts, "_customer_lines", context)
+    monkeypatch.setattr(support_alerts, "_customer_fields", context)
+    monkeypatch.setattr(support_alerts, "_last_message", last_message)
+    monkeypatch.setattr(support_alerts, "_attachment", attachment)
     monkeypatch.setattr(support_alerts, "new_ticket_alerts_enabled", lambda: True)
 
     await support_alerts.notify_new_ticket({"id": 65})
@@ -285,8 +294,9 @@ async def test_new_ticket_alert_carries_the_card(monkeypatch, sent):
     assert "Илья" in card
     assert "Тест тикет-системы" in card
     assert "тест тикет системы админки" in card
-    assert "Вложений: 1" in card
-    assert "Баланс: 100 ₽" in card
+    assert "Вложений:</b> 1" in card
+    assert sent[0]["attachment"]["kind"] == "photo", "скриншот клиента уходит файлом"
+    assert "Баланс:</b> 100 ₽" in card
     # Колокольчик в панели остаётся коротким — там рядом сама карточка.
     assert sent[0]["body"] == "Илья: Тест тикет-системы"
 
@@ -301,7 +311,7 @@ async def test_new_ticket_alert_survives_silent_bot(monkeypatch, sent):
         return []
 
     monkeypatch.setattr(support_alerts, "_ticket_row", row)
-    monkeypatch.setattr(support_alerts, "_customer_lines", no_context)
+    monkeypatch.setattr(support_alerts, "_customer_fields", no_context)
     monkeypatch.setattr(support_alerts, "new_ticket_alerts_enabled", lambda: True)
 
     await support_alerts.notify_new_ticket({"id": 7})
@@ -413,3 +423,19 @@ async def test_reply_alert_respects_setting(monkeypatch, sent):
     await support_alerts.notify_customer_reply({"id": 65})
 
     assert sent == []
+
+
+def test_card_hides_empty_attachments():
+    """Ноль вложений строкой не пишем: пустая графа хуже её отсутствия."""
+    card = support_alerts._card([("👤", "Клиент", "Илья")], "текст", 0)
+
+    assert "Вложений" not in card
+    assert "<blockquote expandable>текст</blockquote>" in card
+    assert card.startswith("   👤 <b>Клиент:</b>"), "поля идут списком rich-разметки"
+
+
+def test_media_count_looks_at_this_message():
+    """Считаем файлы сообщения, а не всего обращения."""
+    assert support_alerts._media_count({"has_media": False}) == 0
+    assert support_alerts._media_count({"has_media": True}) == 1
+    assert support_alerts._media_count({"has_media": True, "media_items": '[{"file_id": "a"}, {"file_id": "b"}]'}) == 2

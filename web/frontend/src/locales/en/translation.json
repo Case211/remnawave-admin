@@ -4424,6 +4424,10 @@
       "support_alert_new_message": {
         "label": "Support: customer reply alert",
         "description": "Send a notification when a customer writes into an already open ticket"
+      },
+      "notifications_support_enabled": {
+        "label": "Notifications: Support",
+        "description": "Send ticket messages to Telegram"
       }
     },
     "inDb": "In DB",
