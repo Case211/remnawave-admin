@@ -636,7 +636,10 @@ export default function Support() {
       } else if ((e.key === 'a' || e.key === 'ф') && activeId != null && canEdit) {
         // Закрытие хоткеем не делаем: оно уходит клиенту уведомлением и не
         // отменяется — случайная «c» на странице стоила бы дороже экономии клика.
-        assignMutation.mutate()
+        // Чужое обращение и с клавиатуры спрашивает подтверждение, как кнопка.
+        const current = tickets.find((item) => item.id === activeId)
+        if (current?.assignee_id != null && !current.assignee_is_me) setConfirming('steal')
+        else if (!current?.assignee_is_me) assignMutation.mutate()
       }
     }
     window.addEventListener('keydown', onKey)
