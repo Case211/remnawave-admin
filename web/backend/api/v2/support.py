@@ -741,3 +741,48 @@ async def reply_with_attachment(
         ip_address=get_client_ip(request),
     )
     return {"success": True, "media_type": media_type, "warnings": warnings}
+
+
+@router.get("/tickets/{ticket_id}/messages/{message_id}/media")
+async def message_media(
+    ticket_id: int,
+    message_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "view")),
+):
+    """Отдать вложение из переписки.
+
+    Файл лежит в Telegram, ссылку на него знает только бот, и она содержит его
+    токен. Поэтому админка не отдаёт эту ссылку в браузер, а скачивает файл
+    сама и стримит клиенту — наружу не утекает ни адрес бота, ни ключ.
+    """
+    import httpx
+    from fastapi.responses import Response
+
+    info = await proxy_request(lambda: bedolaga_client.get_ticket_message_media(ticket_id, message_id))
+    media_url = (info or {}).get("media_url")
+    if not media_url:
+        raise api_error(404, E.NOT_FOUND, "Media is not available")
+
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:
+            response = await http.get(media_url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Support: вложение %s/%s не скачалось: %s", ticket_id, message_id, exc)
+        raise api_error(502, E.NOT_FOUND, "Could not fetch media from the bot")
+
+    media_type = str((info or {}).get("media_type") or "document")
+    content_type = response.headers.get("content-type") or {
+        "photo": "image/jpeg",
+        "video": "video/mp4",
+    }.get(media_type, "application/octet-stream")
+
+    return Response(
+        content=response.content,
+        media_type=content_type,
+        headers={
+            # Вложения не меняются: браузер может держать их у себя.
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f'inline; filename="ticket-{ticket_id}-{message_id}"',
+        },
+    )

@@ -7,6 +7,7 @@ import {
   Archive,
   Check,
   ChevronLeft,
+  Download,
   ExternalLink,
   Clock,
   Loader2,
@@ -15,6 +16,7 @@ import {
   Send,
   Upload,
   Users,
+  X,
 } from '@/components/brand/icons'
 import {
   supportApi,
@@ -77,6 +79,10 @@ export default function Support() {
   const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Ссылки на скачанные вложения: один blob на сообщение, чтобы не тянуть
+  // файл заново при каждом ререндере.
+  const [mediaUrls, setMediaUrls] = useState<Record<number, string>>({})
+  const [viewerId, setViewerId] = useState<number | null>(null)
 
   const { data: queues } = useQuery({
     queryKey: ['support-queues'],
@@ -288,6 +294,56 @@ export default function Support() {
       send(e.shiftKey)
     }
   }
+
+  // Вложения открытого тикета тянем один раз и держим как object-url.
+  useEffect(() => {
+    const withMedia = (detail?.messages ?? []).filter((m) => m.has_media)
+    if (activeId == null || withMedia.length === 0) return
+
+    let alive = true
+    const created: string[] = []
+    Promise.all(
+      withMedia
+        .filter((m) => !mediaUrls[m.id])
+        .map(async (m) => {
+          try {
+            const url = await supportApi.mediaBlobUrl(activeId, m.id)
+            created.push(url)
+            return [m.id, url] as const
+          } catch {
+            return null
+          }
+        }),
+    ).then((pairs) => {
+      const fresh = pairs.filter(Boolean) as Array<readonly [number, string]>
+      if (!alive) {
+        created.forEach((url) => URL.revokeObjectURL(url))
+        return
+      }
+      if (fresh.length) setMediaUrls((prev) => ({ ...prev, ...Object.fromEntries(fresh) }))
+    })
+
+    return () => {
+      alive = false
+    }
+  }, [activeId, detail?.messages, mediaUrls])
+
+  // Сменили тикет — старые ссылки больше не нужны.
+  useEffect(() => {
+    return () => {
+      Object.values(mediaUrls).forEach((url) => URL.revokeObjectURL(url))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId])
+
+  useEffect(() => {
+    if (viewerId == null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewerId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [viewerId])
 
   // Хоткеи: пока курсор не в поле ввода, клавиатура ведёт по очереди.
   useEffect(() => {
@@ -622,9 +678,36 @@ export default function Support() {
                         </div>
                         <div className="whitespace-pre-line text-xs leading-relaxed text-dark-100">{m.text}</div>
                         {m.has_media && (
-                          <div className="mt-1.5 text-[11px] text-dark-400">
-                            <Clock className="mr-1 inline w-3 h-3" />
-                            {t('support.hasMedia', { type: m.media_type || 'file' })}
+                          <div className="mt-1.5">
+                            {mediaUrls[m.id] && m.media_type === 'photo' ? (
+                              <button
+                                type="button"
+                                onClick={() => setViewerId(m.id)}
+                                className="block overflow-hidden rounded-lg border border-[var(--glass-border)]"
+                              >
+                                <img
+                                  src={mediaUrls[m.id]}
+                                  alt={t('support.hasMedia', { type: 'photo' })}
+                                  className="max-h-60 w-full object-cover"
+                                />
+                              </button>
+                            ) : mediaUrls[m.id] && m.media_type === 'video' ? (
+                              <video src={mediaUrls[m.id]} controls className="max-h-60 w-full rounded-lg" />
+                            ) : mediaUrls[m.id] ? (
+                              <a
+                                href={mediaUrls[m.id]}
+                                download={`ticket-${m.ticket_id}-${m.id}`}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--glass-border)] px-2.5 text-[11px] text-cyan-300"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                {t('support.downloadFile')}
+                              </a>
+                            ) : (
+                              <span className="text-[11px] text-dark-400">
+                                <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+                                {t('support.hasMedia', { type: m.media_type || 'file' })}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -722,6 +805,42 @@ export default function Support() {
           )}
         </section>
       </div>
+
+      {viewerId != null && mediaUrls[viewerId] && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-black/90"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setViewerId(null)}
+        >
+          <div className="flex items-center justify-end gap-2 p-3" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={mediaUrls[viewerId]}
+              download={`ticket-${activeId}-${viewerId}`}
+              className="flex h-11 items-center gap-1.5 rounded-lg border border-white/20 px-3 text-xs text-white"
+            >
+              <Download className="h-4 w-4" />
+              {t('support.downloadFile')}
+            </a>
+            <button
+              type="button"
+              onClick={() => setViewerId(null)}
+              aria-label={t('common.close')}
+              className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex flex-1 items-center justify-center overflow-auto p-3">
+            <img
+              src={mediaUrls[viewerId]}
+              alt={t('support.hasMedia', { type: 'photo' })}
+              className="max-h-full max-w-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </PermissionGate>
   )
 }

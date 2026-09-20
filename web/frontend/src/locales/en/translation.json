@@ -6812,6 +6812,7 @@
       "active": "active",
       "until": "until",
       "openProfile": "Profile"
-    }
+    },
+    "downloadFile": "Download"
   }
 }

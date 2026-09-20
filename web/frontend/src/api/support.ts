@@ -128,6 +128,14 @@ export const supportApi = {
     return data as { success: boolean; media_type: string; warnings: string[] }
   },
 
+  /** Вложение приходит потоком через админку: ссылка бота содержит его токен. */
+  mediaBlobUrl: async (ticketId: number, messageId: number): Promise<string> => {
+    const { data } = await client.get(`/support/tickets/${ticketId}/messages/${messageId}/media`, {
+      responseType: 'blob',
+    })
+    return URL.createObjectURL(data as Blob)
+  },
+
   presence: async (id: number): Promise<{ watchers: SupportWatcher[] }> => {
     const { data } = await client.post(`/support/tickets/${id}/presence`)
     return data
