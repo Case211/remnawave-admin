@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
@@ -24,7 +25,6 @@ import {
   supportExtraApi,
   type SupportMacro,
   type SupportTag,
-  type SupportTicket,
   type SupportWatcher,
 } from '../api/support'
 import { Button } from '@/components/ui/button'
@@ -36,22 +36,30 @@ import { cn } from '@/lib/utils'
 import client from '@/api/client'
 
 const QUEUES = ['wait_us', 'mine', 'late', 'wait_client', 'snoozed', 'all'] as const
+
+/** Приоритет виден полоской: срочное должно выделяться до чтения текста. */
+const PRIORITY_BAR: Record<string, string> = {
+  urgent: 'bg-red-400',
+  high: 'bg-orange-400',
+  normal: 'bg-white/10',
+  low: 'bg-white/5',
+}
 type QueueId = (typeof QUEUES)[number]
 
 /** Время ожидания словами: оператору важны минуты, а не дата создания. */
-function waitedFor(iso: string | null): string {
+function waitedFor(iso: string | null, now = Date.now()): string {
   if (!iso) return ''
-  const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000))
+  const minutes = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000))
   if (minutes < 60) return `${minutes} мин`
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} ч ${minutes % 60} мин`
   return `${Math.floor(hours / 24)} дн`
 }
 
-function waitTone(iso: string | null, slaMinutes: number, slaOn = true): string {
+function waitTone(iso: string | null, slaMinutes: number, slaOn = true, now = Date.now()): string {
   if (!iso) return 'text-dark-300'
   if (!slaOn) return 'text-dark-300'
-  const minutes = (Date.now() - new Date(iso).getTime()) / 60000
+  const minutes = (now - new Date(iso).getTime()) / 60000
   if (minutes >= slaMinutes) return 'text-red-400 font-bold'
   if (minutes >= slaMinutes / 2) return 'text-amber-400'
   return 'text-dark-300'
@@ -80,10 +88,17 @@ export default function Support() {
   const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const feedEndRef = useRef<HTMLDivElement>(null)
   // Ссылки на скачанные вложения: один blob на сообщение, чтобы не тянуть
   // файл заново при каждом ререндере.
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
   const [viewer, setViewer] = useState<{ key: string; list: string[]; at: number } | null>(null)
+  // Время ожидания должно идти само, а не замирать до следующей загрузки списка.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(timer)
+  }, [])
 
   const { data: queues } = useQuery({
     queryKey: ['support-queues'],
@@ -128,6 +143,15 @@ export default function Support() {
   })
 
   const tickets = useMemo(() => list?.items ?? [], [list])
+
+  // Очередь может вырасти до сотен обращений: рисуем только видимые строки.
+  const listRef = useRef<HTMLDivElement>(null)
+  const rowVirtualizer = useVirtualizer({
+    count: tickets.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 92,
+    overscan: 8,
+  })
   const activeId = selectedId ?? tickets[0]?.id ?? null
 
   const { data: detail, isFetching: detailLoading } = useQuery({
@@ -358,6 +382,12 @@ export default function Support() {
     return () => window.removeEventListener('keydown', onKey)
   }, [viewer])
 
+  // Длинный тред открывается на последнем сообщении: листать вручную вверх
+  // от начала переписки — не то, чего ждёт оператор.
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [activeId, detail?.messages?.length])
+
   // Хоткеи: пока курсор не в поле ввода, клавиатура ведёт по очереди.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -503,50 +533,89 @@ export default function Support() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div ref={listRef} className="flex-1 overflow-y-auto">
             {listLoading ? (
               <div className="p-3 space-y-2">
                 <Skeleton className="h-16 w-full" />
                 <Skeleton className="h-16 w-full" />
               </div>
             ) : tickets.length === 0 ? (
-              <EmptyState icon={Archive} title={t('support.emptyQueue')} />
+              search ? (
+                <EmptyState
+                  icon={Search}
+                  title={t('support.emptySearch')}
+                  action={
+                    <Button variant="outline" size="sm" onClick={() => setSearchInput('')}>
+                      {t('support.resetSearch')}
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState icon={Archive} title={t('support.emptyQueue')} />
+              )
             ) : (
-              tickets.map((item: SupportTicket) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(item.id)
-                    setMobileChatOpen(true)
-                  }}
-                  className={cn(
-                    'w-full border-b border-[var(--glass-border)] px-3 py-2.5 text-left transition-colors',
-                    item.id === activeId ? 'bg-cyan-400/8' : 'hover:bg-[var(--glass-bg)]',
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    {(item.unread_count ?? 0) > 0 && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
-                    <span className="text-xs font-semibold text-white truncate">
-                      {item.customer_name || `#${item.bot_user_id}`}
-                    </span>
-                    <span className="text-[11px] text-dark-300">#{item.id}</span>
-                    <span className={cn('ml-auto text-[11px] tabular-nums', waitTone(item.waiting_since, slaMinutes, slaOn))}>
-                      {item.waiting_since ? waitedFor(item.waiting_since) : t('support.answeredShort')}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-dark-100 truncate">{item.title}</div>
-                  {item.last_message_text && (
-                    <div className="mt-0.5 text-[11px] text-dark-300 truncate">{item.last_message_text}</div>
-                  )}
-                  {item.assignee_id != null && (
-                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
-                      <Users className="w-2.5 h-2.5" />
-                      {t('support.assignedTo', { id: item.assignee_id })}
-                    </div>
-                  )}
-                </button>
-              ))
+              <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+                {rowVirtualizer.getVirtualItems().map((row) => {
+                  const item = tickets[row.index]
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      ref={rowVirtualizer.measureElement}
+                      data-index={row.index}
+                      onClick={() => {
+                        setSelectedId(item.id)
+                        setMobileChatOpen(true)
+                      }}
+                      className={cn(
+                        'absolute left-0 top-0 flex w-full gap-2.5 border-b border-[var(--glass-border)] py-2.5 pr-3 text-left transition-colors',
+                        item.id === activeId ? 'bg-cyan-400/8' : 'hover:bg-[var(--glass-bg)]',
+                      )}
+                      style={{ transform: `translateY(${row.start}px)` }}
+                    >
+                      {/* Приоритет — полоска слева: цвет читается боковым зрением,
+                          не занимая места в и без того плотной карточке. */}
+                      <span
+                        className={cn(
+                          'w-[3px] flex-shrink-0 rounded-r',
+                          PRIORITY_BAR[item.priority] || PRIORITY_BAR.normal,
+                        )}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          {(item.unread_count ?? 0) > 0 && (
+                            <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-cyan-400" />
+                          )}
+                          <span className="truncate text-xs font-semibold text-white">
+                            {item.customer_name || `#${item.bot_user_id}`}
+                          </span>
+                          <span className="text-[11px] text-dark-300">#{item.id}</span>
+                          <span
+                            className={cn(
+                              'ml-auto flex-shrink-0 text-[11px] tabular-nums',
+                              waitTone(item.waiting_since, slaMinutes, slaOn, now),
+                            )}
+                          >
+                            {item.waiting_since ? waitedFor(item.waiting_since, now) : t('support.answeredShort')}
+                          </span>
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-dark-100">{item.title}</span>
+                        {item.last_message_text && (
+                          <span className="mt-0.5 block truncate text-[11px] text-dark-300">
+                            {item.last_message_text}
+                          </span>
+                        )}
+                        {item.assignee_id != null && (
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
+                            <Users className="h-2.5 w-2.5" />
+                            {t('support.assignedTo', { id: item.assignee_id })}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </div>
           <div className="hidden border-t border-[var(--glass-border)] px-3 py-2 text-[11px] text-dark-300 md:block">
@@ -578,7 +647,7 @@ export default function Support() {
                   <div className="text-sm font-semibold text-white truncate">{ticket?.title}</div>
                   <div className="text-[11px] text-dark-300">
                     #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} · {t(`support.status.${ticket?.status}`)}
-                    {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since)}` : ''}
+                    {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since, now)}` : ''}
                   </div>
                 </div>
                 {watchers.length > 0 && (
@@ -759,6 +828,7 @@ export default function Support() {
                     </div>
                   ))
                 )}
+                <div ref={feedEndRef} />
               </div>
 
               {canReply && (

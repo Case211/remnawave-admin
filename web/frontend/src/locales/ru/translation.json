@@ -6811,6 +6811,8 @@
     },
     "downloadFile": "Скачать",
     "prevMedia": "Предыдущее",
-    "nextMedia": "Следующее"
+    "nextMedia": "Следующее",
+    "emptySearch": "Ничего не нашлось",
+    "resetSearch": "Сбросить поиск"
   }
 }

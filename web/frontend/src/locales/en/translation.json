@@ -6815,6 +6815,8 @@
     },
     "downloadFile": "Download",
     "prevMedia": "Previous",
-    "nextMedia": "Next"
+    "nextMedia": "Next",
+    "emptySearch": "Nothing found",
+    "resetSearch": "Clear search"
   }
 }
