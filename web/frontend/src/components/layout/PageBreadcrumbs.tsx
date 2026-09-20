@@ -32,6 +32,7 @@ export const ROUTE_LABEL_KEYS: Record<string, string> = {
   audit: 'nav.audit',
   logs: 'nav.logs',
   settings: 'nav.settings',
+  support: 'nav.bedolaga.support',
   dns: 'nav.dns',
   bscheck: 'nav.bscheck',
   finance: 'nav.finance',

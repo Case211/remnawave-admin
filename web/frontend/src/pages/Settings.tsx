@@ -112,6 +112,23 @@ const fetchInternalSquads = async (): Promise<InternalSquad[]> => {
 }
 
 // Entity keys that can be synced manually (maps display key -> API trigger key)
+/** Цвет бейджа раздела. Оттенок закреплён за именем: раздел должен выглядеть
+ *  одинаково при каждом заходе, иначе глаз перестаёт его узнавать. */
+const SUBCATEGORY_TONES = [
+  'border-cyan-400/25 bg-cyan-400/12 text-cyan-200',
+  'border-emerald-400/25 bg-emerald-400/12 text-emerald-200',
+  'border-amber-400/25 bg-amber-400/12 text-amber-200',
+  'border-violet-400/25 bg-violet-400/12 text-violet-200',
+  'border-sky-400/25 bg-sky-400/12 text-sky-200',
+  'border-rose-400/25 bg-rose-400/12 text-rose-200',
+]
+
+function subcategoryTone(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  return SUBCATEGORY_TONES[hash % SUBCATEGORY_TONES.length]
+}
+
 const SYNCABLE_ENTITIES: Record<string, string> = {
   users: 'users',
   nodes: 'nodes',
@@ -1458,14 +1475,27 @@ export default function Settings() {
                 {mainItems.map((item) => renderConfigItem(item))}
               </div>
             )}
-            {Object.entries(subcategories).map(([sub, subItems]) => (
-              <div key={sub} className="mt-4">
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <div className="h-4 w-1 rounded-full bg-gradient-to-b from-cyan-500 to-teal-500" />
-                  <span className="text-xs font-semibold text-dark-200 tracking-wide">
+            {Object.entries(subcategories).map(([sub, subItems], index) => (
+              <div
+                key={sub}
+                className={cn(
+                  'mt-6 pt-5',
+                  // Настроек в категории десятки: без явной черты между разделами
+                  // нужный пункт легко пролистать.
+                  index > 0 || mainItems.length > 0 ? 'border-t border-[var(--glass-border)]/60' : '',
+                )}
+              >
+                <div className="mb-2.5 flex items-center gap-2 px-1">
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold',
+                      subcategoryTone(sub),
+                    )}
+                  >
                     {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
                   </span>
-                  <div className="flex-1 h-px bg-gradient-to-r from-dark-700/50 to-transparent" />
+                  <span className="text-[11px] tabular-nums text-dark-300">{subItems.length}</span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-dark-700/50 to-transparent" />
                 </div>
                 <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30 border border-[var(--glass-border)]/10">
                   {subItems.map((item) => renderConfigItem(item))}

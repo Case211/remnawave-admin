@@ -3297,7 +3297,12 @@
       "rate_limits": "🚦 Rate limits",
       "cache": "💾 Cache",
       "violation_pipeline": "🔍 Violation detection pipeline",
-      "admin_restrictions": "🔐 Admin restrictions"
+      "admin_restrictions": "🔐 Admin restrictions",
+      "general": "⚙️ General",
+      "support": "🎫 Support",
+      "s3": "☁️ S3 storage",
+      "throttle": "🐌 Soft block",
+      "node_attacks": "💥 Node attacks"
     },
     "faq": {
       "description": "Common questions, setup guides, and fixes for typical problems. Expand a question to see the answer.",
@@ -4315,6 +4320,90 @@
       "attack_small_packet_bytes": {
         "label": "Small packet, bytes",
         "description": "An average packet size below this is treated as a sign of flooding: useful traffic is made of bigger packets"
+      },
+      "support_media_cache_enabled": {
+        "label": "Support: attachment cache",
+        "description": "Keep downloaded attachments on disk so an old ticket does not pull them from the bot again"
+      },
+      "support_media_cache_days": {
+        "label": "Support: attachment retention (days)",
+        "description": "How long a downloaded attachment stays on disk; opening an older ticket downloads it again"
+      },
+      "support_media_cache_max_mb": {
+        "label": "Support: attachment cache limit (MB)",
+        "description": "Once the cache grows past this, the oldest files go first"
+      },
+      "support_sla_enabled": {
+        "label": "Support: response deadline",
+        "description": "The \"late\" queue, the coloured waiting time and the breach alerts"
+      },
+      "support_sla_minutes": {
+        "label": "Support: first response deadline",
+        "description": "After how many minutes of waiting a ticket counts as late"
+      },
+      "support_alerts_enabled": {
+        "label": "Support: alerts",
+        "description": "Notify about new tickets and about a missed first response"
+      },
+      "support_alert_new_ticket": {
+        "label": "Support: new ticket alert",
+        "description": "Send a notification as soon as a customer opens a ticket"
+      },
+      "support_auto_reply_enabled": {
+        "label": "Support: auto-reply during quiet hours",
+        "description": "Answer the customer while the operator is asleep. One reply per ticket; the waiting time and the first-response metric ignore it"
+      },
+      "support_auto_reply_text": {
+        "label": "Support: auto-reply text",
+        "description": "{id} inserts the ticket number, {until} the hour the operator is back. Keep it honest: promising an answer within the hour at night is worse than silence"
+      },
+      "support_quiet_hours_start": {
+        "label": "Support: quiet hours from",
+        "description": "Time as HH:MM, when the operator is already away"
+      },
+      "support_quiet_hours_end": {
+        "label": "Support: quiet hours until",
+        "description": "Time as HH:MM, when the operator is back"
+      },
+      "support_quiet_hours_tz": {
+        "label": "Support: quiet hours time zone",
+        "description": "IANA zone, for example Europe/Moscow. Empty or unknown zone is treated as UTC"
+      },
+      "backup_s3_endpoint": {
+        "label": "S3: endpoint",
+        "description": "For example https://s3.timeweb.cloud or https://s3.storage.selcloud.ru"
+      },
+      "backup_s3_bucket": {
+        "label": "S3: bucket",
+        "description": "Name of the bucket the backup files go to"
+      },
+      "backup_s3_region": {
+        "label": "S3: region",
+        "description": "Most S3-compatible providers accept any value here"
+      },
+      "backup_s3_prefix": {
+        "label": "S3: folder",
+        "description": "Key prefix inside the bucket, for example panel-backups"
+      },
+      "backup_s3_path_style": {
+        "label": "S3: path-style addressing",
+        "description": "Turn on when the provider does not serve bucket.endpoint virtual hosts"
+      },
+      "backup_s3_auto_upload": {
+        "label": "S3: upload automatically",
+        "description": "Send every fresh backup to the storage right after it is created"
+      },
+      "backup_s3_keep_count": {
+        "label": "S3: files to keep",
+        "description": "Uploads beyond this count are removed from the bucket, oldest first"
+      },
+      "backup_s3_creds": {
+        "label": "S3: access keys",
+        "description": "Access key and secret of the storage"
+      },
+      "metrics_retention_days": {
+        "label": "Node metrics retention (days)",
+        "description": "How long per-node metrics are kept before cleanup"
       }
     },
     "inDb": "In DB",
