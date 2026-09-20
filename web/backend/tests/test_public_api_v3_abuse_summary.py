@@ -38,21 +38,25 @@ async def v3_client(v3_app):
 
 
 class _Conn:
-    def __init__(self, row: dict | None, whitelisted: bool):
+    def __init__(self, row: dict | None, whitelisted: bool, notice: dict | None = None):
         self.row = row
         self.whitelisted = whitelisted
+        self.notice = notice
 
-    async def fetchrow(self, *args, **kwargs):
+    async def fetchrow(self, sql, *args, **kwargs):
+        # Запросов два: сводка по нарушениям и последнее предупреждение.
+        if "violation_notices" in sql:
+            return self.notice
         return self.row
 
     async def fetchval(self, *args, **kwargs):
         return 1 if self.whitelisted else None
 
 
-def _db(row: dict | None, whitelisted: bool = False):
+def _db(row: dict | None, whitelisted: bool = False, notice: dict | None = None):
     class _Acquire:
         async def __aenter__(self):
-            return _Conn(row, whitelisted)
+            return _Conn(row, whitelisted, notice)
 
         async def __aexit__(self, *exc):
             return False
@@ -165,3 +169,39 @@ async def test_whitelist_overrides_everything(_key, v3_client, monkeypatch):
     assert body["level"] == "clean"
     assert body["whitelisted"] is True
     assert body["violations"] == 0
+
+
+@pytest.mark.asyncio
+@patch("web.backend.core.api_key_auth.validate_api_key", new_callable=AsyncMock, return_value=VALID_KEY)
+async def test_summary_carries_the_warning_customer_got(_key, v3_client, monkeypatch):
+    """Кабинет рисует плашку по тексту, который человек реально получил."""
+    notice = {
+        "violation_id": 5,
+        "kind": "device",
+        "subject": "Устройства на подписке",
+        "body": "Текст, который ушёл клиенту",
+        "sent_at": datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc),
+    }
+    monkeypatch.setattr("shared.database.db_service", _db(_row(), notice=notice))
+
+    resp = await v3_client.get(
+        "/api/v3/violations/summary?telegram_id=366945364", headers={"X-API-Key": "rwa_test"}
+    )
+
+    body = resp.json()
+    assert body["notice"]["body"] == "Текст, который ушёл клиенту"
+    assert body["notice"]["violation_id"] == 5
+
+
+@pytest.mark.asyncio
+@patch("web.backend.core.api_key_auth.validate_api_key", new_callable=AsyncMock, return_value=VALID_KEY)
+async def test_whitelisted_customer_sees_no_warning(_key, v3_client, monkeypatch):
+    """Оправданному оператором человеку плашку не показываем."""
+    notice = {"violation_id": 5, "kind": "device", "subject": "s", "body": "b", "sent_at": None}
+    monkeypatch.setattr("shared.database.db_service", _db(_row(), whitelisted=True, notice=notice))
+
+    resp = await v3_client.get(
+        "/api/v3/violations/summary?telegram_id=366945364", headers={"X-API-Key": "rwa_test"}
+    )
+
+    assert resp.json()["notice"] is None
