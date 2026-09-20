@@ -6927,6 +6927,8 @@
     "waitingCount": "{{count}} tickets waiting for a reply",
     "shownOf": "Showing {{shown}} of {{total}}",
     "truncated": "list is capped — narrow it with a filter or search",
-    "emptySearchHint": "Search covers the conversation text, subject, customer name and ticket number."
+    "emptySearchHint": "Search covers the conversation text, subject, customer name and ticket number.",
+    "ticketGone": "This ticket no longer exists",
+    "ticketGoneHint": "It was deleted in the bot and is already gone from the queue."
   }
 }

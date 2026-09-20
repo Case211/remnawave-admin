@@ -103,7 +103,7 @@ async def test_sync_survives_unreachable_bot(monkeypatch):
 
     result = await support_sync.sync_tickets()
 
-    assert result == {"scanned": 0, "updated": 0, "skipped": 0}
+    assert result == {"scanned": 0, "updated": 0, "skipped": 0, "forgotten": 0}
 
 
 # ── Очереди ──
@@ -159,3 +159,135 @@ def test_unconfigured_client_stops_sync_quietly(monkeypatch):
 
 def _raise_not_configured():
     raise RuntimeError("Bedolaga API is not configured")
+
+
+# ── Исчезнувшие обращения ──
+
+
+class _RecordingConn:
+    """Соединение, запоминающее запросы; счётчики отдаёт по заранее заданным ответам."""
+
+    def __init__(self, *, missing: int = 0, total: int = 0, deleted: list[int] | None = None):
+        self.missing = missing
+        self.total = total
+        self.deleted = deleted or []
+        self.queries: list[str] = []
+
+    async def fetch(self, sql, *args):
+        self.queries.append(sql)
+        if "DELETE FROM support_tickets" in sql:
+            return [{"id": i} for i in self.deleted]
+        return []
+
+    async def fetchval(self, sql, *args):
+        self.queries.append(sql)
+        return self.missing if "NOT (id = ANY" in sql else self.total
+
+    async def execute(self, sql, *args):
+        self.queries.append(sql)
+        return "DELETE 1"
+
+
+def _db_with(conn):
+    class _Acquire:
+        async def __aenter__(self):
+            return conn
+
+        async def __aexit__(self, *args):
+            return False
+
+    class _DB:
+        is_connected = True
+
+        def acquire(self):
+            return _Acquire()
+
+    return _DB()
+
+
+@pytest.mark.asyncio
+async def test_forget_ticket_deletes_projection_row(monkeypatch):
+    conn = _RecordingConn()
+    monkeypatch.setattr("shared.database.db_service", _db_with(conn))
+
+    assert await support_sync.forget_ticket(77) is True
+    assert any("DELETE FROM support_tickets" in q for q in conn.queries)
+
+
+@pytest.mark.asyncio
+async def test_missing_ticket_is_forgotten_on_404(monkeypatch):
+    import httpx
+
+    conn = _RecordingConn()
+    monkeypatch.setattr("shared.database.db_service", _db_with(conn))
+    monkeypatch.setattr(support_sync, "_ensure_client", lambda: True)
+
+    async def not_found(*args, **kwargs):
+        request = httpx.Request("GET", "http://bot/tickets/5")
+        raise httpx.HTTPStatusError("404", request=request, response=httpx.Response(404, request=request))
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_ticket", not_found)
+
+    assert await support_sync.sync_ticket(5) is False
+    assert any("DELETE FROM support_tickets" in q for q in conn.queries)
+
+
+@pytest.mark.asyncio
+async def test_bot_outage_does_not_forget_ticket(monkeypatch):
+    conn = _RecordingConn()
+    monkeypatch.setattr("shared.database.db_service", _db_with(conn))
+    monkeypatch.setattr(support_sync, "_ensure_client", lambda: True)
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("bot is down")
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_ticket", boom)
+
+    assert await support_sync.sync_ticket(5) is False
+    assert not any("DELETE FROM support_tickets" in q for q in conn.queries)
+
+
+@pytest.mark.asyncio
+async def test_finished_pass_forgets_tickets_absent_in_bot(monkeypatch):
+    conn = _RecordingConn(missing=1, total=10, deleted=[42])
+    monkeypatch.setattr("shared.database.db_service", _db_with(conn))
+    monkeypatch.setattr(support_sync, "_ensure_client", lambda: True)
+
+    async def one_page(*args, **kwargs):
+        return [{"id": 1, "updated_at": "2026-09-20T00:00:00+00:00", "messages": [], "user_id": 1}]
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.list_tickets", one_page)
+    monkeypatch.setattr(support_sync, "_customer_title", _none_title)
+    monkeypatch.setattr(support_sync, "_upsert_ticket", _noop_upsert)
+
+    result = await support_sync.sync_tickets()
+
+    assert result["forgotten"] == 1
+
+
+@pytest.mark.asyncio
+async def test_truncated_bot_list_does_not_wipe_queue(monkeypatch):
+    # Бот вернул одно обращение из сотни: это его сбой, а не сотня удалений.
+    conn = _RecordingConn(missing=99, total=100)
+    monkeypatch.setattr("shared.database.db_service", _db_with(conn))
+    monkeypatch.setattr(support_sync, "_ensure_client", lambda: True)
+
+    async def one_page(*args, **kwargs):
+        return [{"id": 1, "updated_at": "2026-09-20T00:00:00+00:00", "messages": [], "user_id": 1}]
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.list_tickets", one_page)
+    monkeypatch.setattr(support_sync, "_customer_title", _none_title)
+    monkeypatch.setattr(support_sync, "_upsert_ticket", _noop_upsert)
+
+    result = await support_sync.sync_tickets()
+
+    assert result["forgotten"] == 0
+    assert not any("DELETE FROM support_tickets" in q for q in conn.queries)
+
+
+async def _none_title(user_id):
+    return None
+
+
+async def _noop_upsert(conn, ticket, messages, customer=None):
+    return None

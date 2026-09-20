@@ -335,12 +335,15 @@ export default function Support() {
     data: detail,
     isFetching: detailLoading,
     isError: detailFailed,
+    error: detailError,
     refetch: refetchDetail,
   } = useQuery({
     queryKey: ['support-ticket', activeId],
     queryFn: () => supportApi.getTicket(activeId as number),
     enabled: activeId != null,
     refetchInterval: 20_000,
+    // «Такого обращения нет» — окончательный ответ, повторять его незачем.
+    retry: (count, error) => (error as any)?.response?.status !== 404 && count < 2,
   })
 
   const { data: history } = useQuery({
@@ -440,6 +443,13 @@ export default function Support() {
       document.removeEventListener('visibilitychange', ping)
     }
   }, [activeId])
+
+  // Бот ответил «нет такого обращения»: оно уже вычищено из проекции, поэтому
+  // очередь нужно перечитать, иначе строка провисит до следующего круга синка.
+  const detailGone = (detailError as any)?.response?.status === 404
+  useEffect(() => {
+    if (detailGone) queryClient.invalidateQueries({ queryKey: ['support-tickets'] })
+  }, [detailGone, queryClient])
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['support-queues'] })
@@ -1396,11 +1406,18 @@ export default function Support() {
                 {detailFailed && messages.length === 0 ? (
                   <EmptyState
                     icon={AlertTriangle}
-                    title={t('support.ticketLoadFailed')}
+                    title={detailGone ? t('support.ticketGone') : t('support.ticketLoadFailed')}
+                    description={detailGone ? t('support.ticketGoneHint') : undefined}
                     action={
-                      <Button variant="outline" size="sm" onClick={() => refetchDetail()}>
-                        {t('common.retry')}
-                      </Button>
+                      detailGone ? (
+                        <Button variant="outline" size="sm" onClick={backToQueue}>
+                          {t('support.backToQueue')}
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => refetchDetail()}>
+                          {t('common.retry')}
+                        </Button>
+                      )
                     }
                   />
                 ) : detailLoading && messages.length === 0 ? (

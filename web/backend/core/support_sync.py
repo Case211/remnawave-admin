@@ -20,6 +20,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
 SYNC_INTERVAL_SECONDS = 300
@@ -205,6 +207,27 @@ async def _upsert_ticket(conn, ticket: dict, messages: list[dict], customer: dic
         )
 
 
+async def forget_ticket(ticket_id: int) -> bool:
+    """Убрать из проекции обращение, которого больше нет в боте.
+
+    Бот — источник правды: если он отвечает 404, держать копию незачем, иначе
+    обращение висит в очереди вечно и открывается ошибкой. Всё связанное
+    (переписка, назначение, отложка, метки прочтения, теги) уезжает каскадом;
+    заметка о клиенте привязана к человеку, а не к обращению, и остаётся.
+    Скачанные вложения не трогаем — их сметёт обычная чистка кэша по сроку.
+    """
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        return False
+    async with db_service.acquire() as conn:
+        result = await conn.execute("DELETE FROM support_tickets WHERE id = $1", ticket_id)
+    removed = result.rsplit(" ", 1)[-1] not in ("0", "")
+    if removed:
+        logger.info("Support sync: тикет %s исчез в боте, убран из проекции", ticket_id)
+    return removed
+
+
 async def sync_ticket(ticket_id: int) -> bool:
     """Подтянуть один тикет целиком. False — бот недоступен или тикета нет."""
     from shared.bedolaga_client import bedolaga_client
@@ -214,6 +237,13 @@ async def sync_ticket(ticket_id: int) -> bool:
         return False
     try:
         ticket = await bedolaga_client.get_ticket(ticket_id)
+    except httpx.HTTPStatusError as exc:
+        # 404 — это ответ бота «такого обращения нет», а не сбой связи.
+        if exc.response.status_code == 404:
+            await forget_ticket(ticket_id)
+        else:
+            logger.warning("Support sync: тикет %s не получен: %s", ticket_id, exc)
+        return False
     except Exception as exc:  # noqa: BLE001 — бот недоступен: синк молча ждёт следующего круга
         logger.warning("Support sync: тикет %s не получен: %s", ticket_id, exc)
         return False
@@ -240,9 +270,15 @@ async def sync_tickets(*, full: bool = False) -> dict:
     from shared.database import db_service
 
     if not db_service.is_connected or not _ensure_client():
-        return {"scanned": 0, "updated": 0, "skipped": 0}
+        return {"scanned": 0, "updated": 0, "skipped": 0, "forgotten": 0}
 
-    scanned = updated = skipped = 0
+    started_at = datetime.now(timezone.utc)
+    scanned = updated = skipped = forgotten = 0
+    # Чистим проекцию только после честного полного прохода: оборвался он на
+    # ошибке или упёрся в потолок страниц — удалять нельзя, иначе снесём живые
+    # обращения, до которых просто не дошли.
+    seen: set[int] = set()
+    walked_to_end = False
     # Соединение берём точечно: проход по тысяче тикетов — это тысяча HTTP-вызовов
     # к боту, и держать всё это время занятым коннект из пула нельзя.
     if full:
@@ -261,6 +297,7 @@ async def sync_tickets(*, full: bool = False) -> dict:
         items: Iterable[dict] = batch if isinstance(batch, list) else (batch or {}).get("items") or []
         items = list(items)
         if not items:
+            walked_to_end = True
             break
 
         for ticket in items:
@@ -268,6 +305,7 @@ async def sync_tickets(*, full: bool = False) -> dict:
             ticket_id = int(ticket.get("id") or 0)
             if not ticket_id:
                 continue
+            seen.add(ticket_id)
 
             remote_updated = _parse_dt(ticket.get("updated_at"))
             local_updated = known.get(ticket_id)
@@ -291,11 +329,46 @@ async def sync_tickets(*, full: bool = False) -> dict:
             updated += 1
 
         if len(items) < PAGE_SIZE:
+            walked_to_end = True
             break
+
+    # Проход идёт по всем страницам списка, даже когда почти всё пропускается по
+    # ``updated_at``, — значит после честного завершения ``seen`` описывает всё,
+    # что есть в боте, и лишнее в проекции можно убрать.
+    if walked_to_end and seen:
+        async with db_service.acquire() as conn:
+            # Обращение, появившееся уже во время прохода, синк тронуть не мог —
+            # его защищает synced_at.
+            missing = await conn.fetchval(
+                "SELECT COUNT(*) FROM support_tickets WHERE synced_at < $1 AND NOT (id = ANY($2::bigint[]))",
+                started_at,
+                list(seen),
+            )
+            total = await conn.fetchval("SELECT COUNT(*) FROM support_tickets")
+            # Бот, отдавший обрезанный список из-за своей ошибки, не должен
+            # уносить с собой всю очередь: массовое расхождение — повод
+            # пожаловаться в лог, а не удалять.
+            if missing and total > 20 and missing > total / 2:
+                logger.warning(
+                    "Support sync: бот не вернул %s из %s обращений — чистку пропускаем",
+                    missing, total,
+                )
+            elif missing:
+                gone = await conn.fetch(
+                    """
+                    DELETE FROM support_tickets
+                     WHERE synced_at < $1 AND NOT (id = ANY($2::bigint[]))
+                    RETURNING id
+                    """,
+                    started_at,
+                    list(seen),
+                )
+                forgotten = len(gone)
+                logger.info("Support sync: убрано %s обращений, которых больше нет в боте", forgotten)
 
     if updated:
         logger.info("Support sync: обновлено %s тикетов из %s просмотренных", updated, scanned)
-    return {"scanned": scanned, "updated": updated, "skipped": skipped}
+    return {"scanned": scanned, "updated": updated, "skipped": skipped, "forgotten": forgotten}
 
 
 async def support_sync_loop() -> None:
