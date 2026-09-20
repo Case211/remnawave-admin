@@ -910,3 +910,19 @@ async def set_customer_note(
             bot_user_id, note, admin.account_id,
         )
     return dict(row)
+
+
+@router.get("/tickets/{ticket_id}/history")
+async def ticket_history(
+    ticket_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "view")),
+):
+    """Что делали с обращением: кто взял, кто ответил, кто закрыл.
+
+    Данные уже пишутся в аудит — здесь только выборка по этому тикету, чтобы
+    оператор не искал их в общем журнале панели.
+    """
+    from web.backend.core.audit import get_audit_logs
+
+    items, total = await get_audit_logs(limit=30, resource="support", resource_id=str(ticket_id))
+    return {"items": [dict(item) for item in items], "total": total}

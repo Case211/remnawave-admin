@@ -105,6 +105,7 @@ export default function Support() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [tagFilter, setTagFilter] = useState<number | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   // На узком экране колонки не помещаются рядом: показываем либо очередь,
   // либо переписку. Флаг переключает панели, на десктопе он ни на что не влияет.
@@ -211,6 +212,15 @@ export default function Support() {
     enabled: activeId != null,
     refetchInterval: 20_000,
   })
+
+  const { data: history } = useQuery({
+    queryKey: ['support-history', activeId],
+    queryFn: () => supportApi.history(activeId as number),
+    enabled: activeId != null && historyOpen,
+    staleTime: 30_000,
+    retry: false,
+  })
+
 
   // Открыли тикет — он прочитан; иначе счётчик непрочитанных живёт вечно.
   useEffect(() => {
@@ -977,6 +987,43 @@ export default function Support() {
                     ))}
                 </div>
               )}
+
+              <div className="border-b border-[var(--glass-border)] px-3 md:px-4">
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen((open) => !open)}
+                  className="flex h-8 items-center gap-1.5 text-[11px] text-dark-300 hover:text-dark-100"
+                >
+                  <Clock className="h-3 w-3" />
+                  {t('support.history.title')}
+                </button>
+                {historyOpen && (
+                  <div className="max-h-28 space-y-1 overflow-y-auto pb-2">
+                    {history?.items?.length ? (
+                      history.items.map((entry, i) => (
+                        <div key={`${entry.action}-${i}`} className="flex gap-2 text-[11px] text-dark-300">
+                          <span className="tabular-nums">
+                            {new Date(entry.created_at).toLocaleString(undefined, {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          <span className="text-dark-100">
+                            {t(`support.history.actions.${entry.action.replace('support.', '')}`, {
+                              defaultValue: entry.action,
+                            })}
+                          </span>
+                          <span>{entry.admin_username || t('support.history.system')}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="pb-1 text-[11px] text-dark-300">{t('support.history.empty')}</div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                 {detailLoading && messages.length === 0 ? (

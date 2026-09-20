@@ -146,6 +146,11 @@ export const supportApi = {
     return data
   },
 
+  history: async (ticketId: number) => {
+    const { data } = await client.get(`/support/tickets/${ticketId}/history`)
+    return data as { items: Array<{ action: string; admin_username: string | null; created_at: string }> }
+  },
+
   getNote: async (botUserId: number) => {
     const { data } = await client.get(`/support/customers/${botUserId}/note`)
     return data as { note: string; updated_at: string | null }

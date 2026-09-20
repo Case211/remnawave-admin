@@ -6856,6 +6856,18 @@
       "cabinet": "Cabinet"
     },
     "sending": "sending…",
-    "macroDrop": "drop template"
+    "macroDrop": "drop template",
+    "history": {
+      "title": "Ticket history",
+      "empty": "No actions yet",
+      "system": "system",
+      "actions": {
+        "reply": "reply",
+        "status": "status change",
+        "attach": "attachment",
+        "s3_upload": "upload",
+        "assign": "assigned"
+      }
+    }
   }
 }
