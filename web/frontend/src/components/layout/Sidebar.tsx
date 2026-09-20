@@ -115,9 +115,11 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   })
   const panelName = panelNameData?.panel_name || 'Remnawave Admin'
 
+  // Заголовок вкладки: имя панели плюс счётчик ждущих обращений. Админку
+  // держат открытой в фоне, и «(3)» в списке вкладок — единственное, что видно.
   useEffect(() => {
-    document.title = panelName
-  }, [panelName])
+    document.title = supportWaiting > 0 ? `(${supportWaiting}) ${panelName}` : panelName
+  }, [panelName, supportWaiting])
 
   const handleNavClick = () => {
     if (onClose) onClose()

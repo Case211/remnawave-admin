@@ -181,6 +181,28 @@ export default function Support() {
     refetchInterval: 30_000,
   })
   const slaMinutes = queues?.sla_minutes ?? 30
+
+  // Уведомления браузера: разрешение просим только по кнопке — без действия
+  // оператора браузер всё равно откажет, а всплывающий запрос раздражает.
+  const [notifyAllowed, setNotifyAllowed] = useState(
+    typeof Notification !== 'undefined' && Notification.permission === 'granted',
+  )
+  const prevWaiting = useRef<number | null>(null)
+  useEffect(() => {
+    const waiting = queues?.wait_us ?? 0
+    const previous = prevWaiting.current
+    prevWaiting.current = waiting
+    if (!notifyAllowed || previous === null || waiting <= previous) return
+    if (document.visibilityState === 'visible') return
+    try {
+      new Notification(t('support.notify.title'), {
+        body: t('support.notify.body', { count: waiting }),
+        tag: 'support-queue',
+      })
+    } catch {
+      // уведомления могут быть заблокированы политикой — это не повод падать
+    }
+  }, [queues?.wait_us, notifyAllowed, t])
   // Контроль срока выключен — ни очереди «просрочены», ни цветного таймера:
   // подсвечивать нечего, а красное время без SLA только пугает.
   const slaOn = queues?.sla_enabled !== false
@@ -684,6 +706,19 @@ export default function Support() {
                 </div>
               )}
             </div>
+          )}
+
+          {typeof Notification !== 'undefined' && !notifyAllowed && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-[11px]"
+              onClick={() =>
+                Notification.requestPermission().then((result) => setNotifyAllowed(result === 'granted'))
+              }
+            >
+              {t('support.notify.enable')}
+            </Button>
           )}
 
           <Button

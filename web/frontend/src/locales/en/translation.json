@@ -6891,6 +6891,11 @@
     "tagRemove": "Remove tag {{name}}",
     "tagNew": "+ new tag",
     "firstResponse": "First reply",
-    "age": "Age"
+    "age": "Age",
+    "notify": {
+      "title": "New ticket",
+      "body": "Waiting for a reply: {{count}}",
+      "enable": "Enable notifications"
+    }
   }
 }
