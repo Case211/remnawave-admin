@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Clock,
   Loader2,
+  Mail,
   RefreshCw,
   Search,
   Send,
@@ -55,7 +56,8 @@ function waitedFor(iso: string | null, now = Date.now()): string {
   if (minutes < 60) return `${minutes} мин`
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} ч ${minutes % 60} мин`
-  return `${Math.floor(hours / 24)} дн`
+  const days = Math.floor(hours / 24)
+  return `${days} дн · ${new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })}`
 }
 
 function waitTone(iso: string | null, slaMinutes: number, slaOn = true, now = Date.now()): string {
@@ -65,6 +67,11 @@ function waitTone(iso: string | null, slaMinutes: number, slaOn = true, now = Da
   if (minutes >= slaMinutes) return 'text-red-400 font-bold'
   if (minutes >= slaMinutes / 2) return 'text-amber-400'
   return 'text-dark-300'
+}
+
+/** Канал обращения: у клиента из Telegram есть его id, остальные пишут из кабинета. */
+function channelOf(telegramId: number | null): 'telegram' | 'cabinet' {
+  return telegramId ? 'telegram' : 'cabinet'
 }
 
 /** Просрочен ли ответ — отдельно от цвета: значок и подпись говорят то же самое. */
@@ -640,12 +647,28 @@ export default function Support() {
                             {item.last_message_text}
                           </span>
                         )}
-                        {item.assignee_id != null && (
-                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
-                            <Users className="h-2.5 w-2.5" />
-                            {t('support.assignedTo', { id: item.assignee_id })}
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
+                            {channelOf(item.telegram_id) === 'telegram' ? (
+                              <Send className="h-2.5 w-2.5" />
+                            ) : (
+                              <Mail className="h-2.5 w-2.5" />
+                            )}
+                            {t(`support.channel.${channelOf(item.telegram_id)}`)}
                           </span>
-                        )}
+                          {(item.attachments_count ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
+                              <Upload className="h-2.5 w-2.5" />
+                              {item.attachments_count}
+                            </span>
+                          )}
+                          {item.assignee_id != null && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[11px] text-dark-300">
+                              <Users className="h-2.5 w-2.5" />
+                              {t('support.assignedTo', { id: item.assignee_id })}
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </button>
                   )
@@ -681,7 +704,8 @@ export default function Support() {
                 <div className="min-w-0 flex-1 basis-full md:basis-auto">
                   <div className="text-sm font-semibold text-white truncate">{ticket?.title}</div>
                   <div className="text-[11px] text-dark-300">
-                    #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} · {t(`support.status.${ticket?.status}`)}
+                    #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} ·{' '}
+                    {t(`support.channel.${channelOf(ticket?.telegram_id ?? null)}`)} · {t(`support.status.${ticket?.status}`)}
                     {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since, now)}` : ''}
                   </div>
                 </div>
@@ -746,8 +770,38 @@ export default function Support() {
                     </span>
                   )}
                   {typeof customer.balance_rubles === 'number' && (
-                    <span>
+                    <span className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5">
                       {t('support.customer.balance')}: <span className="text-dark-100">{customer.balance_rubles} ₽</span>
+                    </span>
+                  )}
+                  {customer.subscription?.device_limit != null && (
+                    <span className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5">
+                      {t('support.customer.devices')}:{' '}
+                      <span className="text-dark-100">{customer.subscription.device_limit}</span>
+                    </span>
+                  )}
+                  {customer.subscription?.traffic_used_gb != null && (
+                    <span className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5">
+                      {t('support.customer.traffic')}:{' '}
+                      <span className="text-dark-100">
+                        {customer.subscription.traffic_used_gb} /{' '}
+                        {customer.subscription.traffic_limit_gb
+                          ? `${customer.subscription.traffic_limit_gb} ГБ`
+                          : t('support.customer.unlimited')}
+                      </span>
+                    </span>
+                  )}
+                  {customer.last_activity && (
+                    <span className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5">
+                      {t('support.customer.lastSeen')}:{' '}
+                      <span className="text-dark-100">
+                        {new Date(customer.last_activity).toLocaleString(undefined, {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
                     </span>
                   )}
                   <Link

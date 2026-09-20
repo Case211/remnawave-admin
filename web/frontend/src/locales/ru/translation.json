@@ -6807,7 +6807,11 @@
       "balance": "Баланс",
       "active": "активна",
       "until": "до",
-      "openProfile": "Профиль"
+      "openProfile": "Профиль",
+      "devices": "Устройств",
+      "traffic": "Трафик",
+      "unlimited": "безлимит",
+      "lastSeen": "Был"
     },
     "downloadFile": "Скачать",
     "prevMedia": "Предыдущее",
@@ -6834,6 +6838,10 @@
         "description": "Сейчас им занимается другой оператор — он потеряет его из своей очереди.",
         "action": "Забрать"
       }
+    },
+    "channel": {
+      "telegram": "Telegram",
+      "cabinet": "Кабинет"
     }
   }
 }

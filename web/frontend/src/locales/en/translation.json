@@ -6811,7 +6811,11 @@
       "balance": "Balance",
       "active": "active",
       "until": "until",
-      "openProfile": "Profile"
+      "openProfile": "Profile",
+      "devices": "Devices",
+      "traffic": "Traffic",
+      "unlimited": "unlimited",
+      "lastSeen": "Last seen"
     },
     "downloadFile": "Download",
     "prevMedia": "Previous",
@@ -6838,6 +6842,10 @@
         "description": "Another operator is handling it — they will lose it from their queue.",
         "action": "Take over"
       }
+    },
+    "channel": {
+      "telegram": "Telegram",
+      "cabinet": "Cabinet"
     }
   }
 }

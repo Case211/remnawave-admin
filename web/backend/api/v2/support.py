@@ -200,7 +200,10 @@ async def list_tickets(
                COALESCE(r.last_read_message_id, 0) AS last_read_message_id,
                (SELECT COUNT(*) FROM support_ticket_messages m
                  WHERE m.ticket_id = t.id AND m.id > COALESCE(r.last_read_message_id, 0)
-                   AND NOT m.is_from_admin) AS unread_count
+                   AND NOT m.is_from_admin) AS unread_count,
+               -- Вложения видно в списке: скриншот часто и есть всё обращение.
+               (SELECT COUNT(*) FROM support_ticket_messages m2
+                 WHERE m2.ticket_id = t.id AND m2.has_media) AS attachments_count
         FROM support_tickets t
         LEFT JOIN support_assignments a ON a.ticket_id = t.id
         LEFT JOIN support_snoozes s ON s.ticket_id = t.id

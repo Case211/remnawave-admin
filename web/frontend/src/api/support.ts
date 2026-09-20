@@ -31,6 +31,7 @@ export interface SupportTicket {
   assignee_id: number | null
   snooze_to: string | null
   unread_count?: number
+  attachments_count?: number
   customer_note?: string | null
 }
 
