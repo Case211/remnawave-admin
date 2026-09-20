@@ -19,6 +19,7 @@ from src.handlers.ip_actions import router as ip_actions_router
 from src.handlers.violation_actions import router as violation_actions_router
 from src.handlers.finance_actions import router as finance_actions_router
 from src.handlers.plugin_actions import router as plugin_actions_router
+from src.handlers.support_actions import router as support_actions_router
 
 
 def register_handlers(dp: Dispatcher) -> None:
@@ -30,6 +31,7 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.include_router(ip_actions_router)
     dp.include_router(finance_actions_router)
     dp.include_router(plugin_actions_router)
+    dp.include_router(support_actions_router)
     dp.include_router(filters_router)
     dp.include_router(users_router)
     dp.include_router(nodes_router)

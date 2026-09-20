@@ -68,31 +68,62 @@ def new_ticket_alerts_enabled() -> bool:
     return alerts_enabled() and bool(config_service.get("support_alert_new_ticket", True))
 
 
-def _ticket_button(ticket_id: int) -> dict | None:
-    """Кнопка «Открыть обращение» под уведомлением в Telegram.
+def _panel_base() -> str:
+    """Адрес панели для кнопок-ссылок; пусто — ссылок не будет.
 
     Внутрипанельный путь в чате бесполезен — нужен абсолютный адрес, а его
     знает только настройка «Публичный URL панели». Telegram принимает в кнопке
     исключительно https и отклоняет всё сообщение целиком, если адрес не
-    подошёл, поэтому на пустой или http-настройке кнопки просто нет: лучше
-    уведомление без ссылки, чем молчание.
+    подошёл, поэтому на пустой или http-настройке ссылок просто нет: лучше
+    уведомление без них, чем молчание.
     """
     from shared.config_service import config_service
 
     base = str(config_service.get("web_panel_public_url", "") or "").strip().rstrip("/")
-    if not base.startswith("https://"):
-        return None
-    return {
-        "inline_keyboard": [
-            [{"text": "🔎 Открыть обращение", "url": f"{base}/support?ticket={ticket_id}"}]
-        ]
-    }
+    return base if base.startswith("https://") else ""
+
+
+def _ticket_button(
+    ticket_id: int,
+    *,
+    bot_user_id: int | None = None,
+    username: str | None = None,
+) -> dict | None:
+    """Клавиатура уведомления: куда перейти и что можно сделать не переходя.
+
+    Ссылки ведут в панель, действия обрабатывает бот админки (``sact:``) — тем
+    же RBAC, что и веб-интерфейс. Без публичного адреса панели остаются одни
+    действия: они работают и без ссылок.
+    """
+    base = _panel_base()
+    rows: list[list[dict]] = []
+
+    links: list[dict] = []
+    if base:
+        links.append({"text": "🔎 Открыть обращение", "url": f"{base}/support?ticket={ticket_id}"})
+        if bot_user_id:
+            links.append({"text": "👤 Профиль", "url": f"{base}/bedolaga/customers/{bot_user_id}"})
+    if username:
+        # Личка открывается только по имени: у клиента без username Telegram
+        # ссылку не примет и отклонит всё сообщение.
+        links.append({"text": "✉️ Написать", "url": f"https://t.me/{username.lstrip('@')}"})
+    if links:
+        rows.extend([links[i : i + 2] for i in range(0, len(links), 2)])
+
+    rows.append([
+        {"text": "✅ Взять себе", "callback_data": f"sact:take:{ticket_id}"},
+        {"text": "💤 Отложить 1 ч", "callback_data": f"sact:snooze:{ticket_id}"},
+    ])
+    rows.append([{"text": "🔒 Закрыть обращение", "callback_data": f"sact:close:{ticket_id}"}])
+    return {"inline_keyboard": rows}
 
 
 CAPTION_LIMIT = 1024
 
 
-async def _send_with_attachment(title: str, card: str, ticket_id: int, attachment: dict) -> bool:
+async def _send_with_attachment(
+    title: str, card: str, ticket_id: int, attachment: dict, keyboard: dict | None
+) -> bool:
     """Отправить карточку вместе со скриншотом клиента.
 
     Бот прикладывает вложение к своему уведомлению, а у нас в чат уходил один
@@ -119,11 +150,8 @@ async def _send_with_attachment(title: str, card: str, ticket_id: int, attachmen
     data = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}
     if topic_id and str(topic_id) != "0":
         data["message_thread_id"] = str(topic_id)
-    button = _ticket_button(ticket_id)
-    if button:
-        import json as _json
-
-        data["reply_markup"] = _json.dumps(button)
+    if keyboard:
+        data["reply_markup"] = json.dumps(keyboard)
 
     try:
         async with httpx.AsyncClient(**tg_http.client_kwargs(60)) as client:
@@ -149,6 +177,8 @@ async def _notify(
     ticket_id: int,
     telegram_body: str | None = None,
     attachment: dict | None = None,
+    bot_user_id: int | None = None,
+    username: str | None = None,
 ) -> None:
     try:
         from web.backend.core.notification_service import create_notification
@@ -156,10 +186,11 @@ async def _notify(
         # Вложение уходит отдельным вызовом вместе с подписью — тогда в чате
         # одно сообщение, а не картинка следом за текстом. Не получилось —
         # отправляем карточку обычным путём.
+        keyboard = _ticket_button(ticket_id, bot_user_id=bot_user_id, username=username)
         sent_with_file = False
         if attachment:
             sent_with_file = await _send_with_attachment(
-                title, telegram_body or body, ticket_id, attachment
+                title, telegram_body or body, ticket_id, attachment, keyboard
             )
 
         await create_notification(
@@ -174,7 +205,7 @@ async def _notify(
             source_id=str(ticket_id),
             group_key=group_key,
             link=f"/support?ticket={ticket_id}",
-            reply_markup=_ticket_button(ticket_id),
+            reply_markup=keyboard,
             telegram_body=telegram_body,
         )
     except Exception as exc:  # noqa: BLE001 — алерт не должен ронять синк
@@ -233,21 +264,6 @@ async def _last_message(ticket_id: int) -> dict:
         return {}
 
 
-def _media_count(message: dict) -> int:
-    """Сколько файлов в этом сообщении — не во всём обращении."""
-    if not message:
-        return 0
-    raw = message.get("media_items")
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except ValueError:
-            raw = None
-    if isinstance(raw, list) and raw:
-        return len(raw)
-    return 1 if message.get("has_media") else 0
-
-
 async def _attachment(ticket_id: int, message: dict) -> dict | None:
     """Первый файл сообщения байтами — для пересылки в чат."""
     if not message or not message.get("has_media"):
@@ -287,41 +303,54 @@ async def _attachment(ticket_id: int, message: dict) -> dict | None:
     return {"content": content, "kind": kind, "name": f"ticket-{ticket_id}.{extension}"}
 
 
-def _card(fields: list[tuple[str, str, str]], message: str, attachments: int) -> str:
+def _card(fields: list[tuple[str, str, str]], message: str) -> str:
     """Карточка в разметке rich-уведомлений.
 
     Конвертер блоков читает строки с отступом как элементы списка, а
     ``blockquote expandable`` — как сворачиваемую секцию: длинное обращение не
     растягивает чат, но раскрывается одним касанием.
+
+    Числа вложений в карточке нет: сам файл приходит следом, и строка «вложений
+    столько-то» повторяла бы то, что и так видно.
     """
     lines = [f"   {icon} <b>{escape(label)}:</b> {escape(str(value))}" for icon, label, value in fields]
-    # «Вложений: 0» строкой не пишем — пустая строка в карточке хуже её отсутствия.
-    if attachments:
-        lines.append(f"   📎 <b>Вложений:</b> {attachments}")
     if message:
         lines.append("")
         lines.append(f"<blockquote expandable>{escape(message)}</blockquote>")
     return "\n".join(lines)
 
 
-async def _customer_fields(bot_user_id: int) -> list[tuple[str, str, str]]:
-    """Подписка и баланс — то, чего в уведомлении бота нет.
+async def _customer_fields(bot_user_id: int) -> tuple[list[tuple[str, str, str]], dict]:
+    """Контакты, подписка и баланс — всё, с чем оператор решает, что делать.
 
-    Бот шлёт свою карточку тикета, и повторять её смысла нет: ценность нашего
-    письма в том, что мы знаем про клиента то, что видно в панели.
+    Контакты нужны, чтобы написать человеку не заходя в панель, а подписка с
+    балансом — то, чего в уведомлении бота нет: повторять его карточку смысла
+    не было бы, ценность нашей в том, что мы видим панель.
     """
     if not bot_user_id:
-        return []
+        return [], {}
     from shared.bedolaga_client import bedolaga_client
 
     try:
         user = await bedolaga_client.get_user(bot_user_id)
     except Exception as exc:  # noqa: BLE001 — бот недоступен: обойдёмся без контекста
         logger.debug("Support alert: клиент %s не прочитался: %s", bot_user_id, exc)
-        return []
+        return [], {}
 
+    user = user or {}
     fields: list[tuple[str, str, str]] = []
-    subscription = (user or {}).get("subscription") or {}
+
+    username = str(user.get("username") or "").lstrip("@")
+    if username:
+        fields.append(("📱", "Username", f"@{username}"))
+    telegram_id = user.get("telegram_id")
+    if telegram_id:
+        fields.append(("🆔", "Telegram ID", str(telegram_id)))
+    email = str(user.get("email") or "")
+    if email:
+        fields.append(("✉️", "Email", email))
+
+    subscription = user.get("subscription") or {}
     if subscription:
         status = str(subscription.get("actual_status") or subscription.get("status") or "")
         parts = [SUBSCRIPTION_STATUS.get(status, status or "—")]
@@ -336,10 +365,11 @@ async def _customer_fields(bot_user_id: int) -> list[tuple[str, str, str]]:
     else:
         fields.append(("💳", "Подписка", "нет"))
 
-    balance = (user or {}).get("balance_rubles")
+    balance = user.get("balance_rubles")
     if balance is not None:
         fields.append(("💰", "Баланс", f"{balance} ₽"))
-    return fields
+
+    return fields, {"username": username, "telegram_id": telegram_id}
 
 
 SUBSCRIPTION_STATUS = {
@@ -369,13 +399,14 @@ async def notify_new_ticket(ticket: dict) -> None:
     title = str(data.get("title") or "без темы")
     message = await _last_message(ticket_id)
 
-    fields = [("👤", "Клиент", customer)]
-    telegram_id = data.get("telegram_id")
-    fields.append(("🆔", "Откуда", f"Telegram {telegram_id}" if telegram_id else "кабинет"))
-    fields.append(("📝", "Тема", title))
-    fields.extend(await _customer_fields(int(data.get("bot_user_id") or 0)))
+    bot_user_id = int(data.get("bot_user_id") or 0)
+    contacts, meta = await _customer_fields(bot_user_id)
 
-    card = _card(fields, _short(data.get("last_message_text") or ""), _media_count(message))
+    fields = [("👤", "Клиент", customer), ("📝", "Тема", title)]
+    fields.append(("📨", "Канал", "Telegram" if data.get("telegram_id") else "кабинет"))
+    fields.extend(contacts)
+
+    card = _card(fields, _short(data.get("last_message_text") or ""))
 
     await _notify(
         f"Новое обращение #{ticket_id}",
@@ -385,6 +416,8 @@ async def notify_new_ticket(ticket: dict) -> None:
         ticket_id=ticket_id,
         telegram_body=card,
         attachment=await _attachment(ticket_id, message),
+        bot_user_id=bot_user_id,
+        username=meta.get("username"),
     )
 
 
@@ -453,12 +486,14 @@ async def notify_customer_reply(ticket: dict) -> None:
     title = str(data.get("title") or "без темы")
     message = await _last_message(ticket_id)
     text = _short(data.get("last_message_text") or "")
+    bot_user_id = int(data.get("bot_user_id") or 0)
+    # Контакты нужны и здесь: решение «ответить сейчас или позже» принимают по
+    # тому же, по чему и на новом обращении.
+    contacts, meta = await _customer_fields(bot_user_id)
 
-    card = _card(
-        [("👤", "Клиент", customer), ("📝", "Тема", title)],
-        text,
-        _media_count(message),
-    )
+    fields = [("👤", "Клиент", customer), ("📝", "Тема", title)]
+    fields.extend(contacts)
+    card = _card(fields, text)
 
     await _notify(
         f"Ответ клиента по #{ticket_id}",
@@ -468,6 +503,8 @@ async def notify_customer_reply(ticket: dict) -> None:
         ticket_id=ticket_id,
         telegram_body=card,
         attachment=await _attachment(ticket_id, message),
+        bot_user_id=bot_user_id,
+        username=meta.get("username"),
     )
 
 

@@ -73,7 +73,10 @@ def _clean_state(monkeypatch):
 def sent(monkeypatch):
     calls: list[dict] = []
 
-    async def fake_notify(title, body, *, severity, group_key, ticket_id, telegram_body=None, attachment=None):
+    async def fake_notify(
+        title, body, *, severity, group_key, ticket_id, telegram_body=None, attachment=None,
+        bot_user_id=None, username=None,
+    ):
         calls.append({
             "title": title,
             "body": body,
@@ -242,18 +245,21 @@ def test_alert_carries_button_to_the_ticket(monkeypatch):
     assert markup["inline_keyboard"][0][0]["url"] == "https://panel.example.com/support?ticket=42"
 
 
-def test_no_button_without_public_url(monkeypatch):
-    # Пустая настройка — уведомление уходит просто без кнопки.
+def test_no_link_without_public_url(monkeypatch):
+    # Пустая настройка — ссылок нет, но действия остаются: они работают без панели.
     _panel_url(monkeypatch, "")
 
-    assert support_alerts._ticket_button(42) is None
+    flat = [b for row in support_alerts._ticket_button(42)["inline_keyboard"] for b in row]
+    assert not any(b.get("url") for b in flat)
+    assert any(b.get("callback_data") == "sact:take:42" for b in flat)
 
 
-def test_no_button_for_plain_http(monkeypatch):
+def test_no_link_for_plain_http(monkeypatch):
     # Telegram отклоняет http-кнопку вместе со всем сообщением — лучше без неё.
     _panel_url(monkeypatch, "http://panel.example.com")
 
-    assert support_alerts._ticket_button(42) is None
+    flat = [b for row in support_alerts._ticket_button(42)["inline_keyboard"] for b in row]
+    assert not any(b.get("url") for b in flat)
 
 
 # ── Карточка нового обращения ──
@@ -274,7 +280,11 @@ async def test_new_ticket_alert_carries_the_card(monkeypatch, sent):
         }
 
     async def context(bot_user_id):
-        return [("💳", "Подписка", "активна · до 2026-10-19"), ("💰", "Баланс", "100 ₽")]
+        return (
+            [("📱", "Username", "@ispanec_nn"), ("🆔", "Telegram ID", "366945364"),
+             ("💳", "Подписка", "активна · до 2026-10-19"), ("💰", "Баланс", "100 ₽")],
+            {"username": "ispanec_nn", "telegram_id": 366945364},
+        )
 
     async def last_message(ticket_id):
         return {"id": 9, "has_media": True, "media_type": "photo", "media_items": None}
@@ -294,7 +304,8 @@ async def test_new_ticket_alert_carries_the_card(monkeypatch, sent):
     assert "Илья" in card
     assert "Тест тикет-системы" in card
     assert "тест тикет системы админки" in card
-    assert "Вложений:</b> 1" in card
+    assert "Telegram ID:</b> 366945364" in card, "оператору нужен id, а не только имя"
+    assert "Вложений" not in card, "число вложений в карточке не нужно — файл приходит следом"
     assert sent[0]["attachment"]["kind"] == "photo", "скриншот клиента уходит файлом"
     assert "Баланс:</b> 100 ₽" in card
     # Колокольчик в панели остаётся коротким — там рядом сама карточка.
@@ -308,7 +319,7 @@ async def test_new_ticket_alert_survives_silent_bot(monkeypatch, sent):
         return {"id": ticket_id, "title": "Не работает", "customer_name": "Пётр", "bot_user_id": 5}
 
     async def no_context(bot_user_id):
-        return []
+        return [], {}
 
     monkeypatch.setattr(support_alerts, "_ticket_row", row)
     monkeypatch.setattr(support_alerts, "_customer_fields", no_context)
@@ -425,17 +436,35 @@ async def test_reply_alert_respects_setting(monkeypatch, sent):
     assert sent == []
 
 
-def test_card_hides_empty_attachments():
-    """Ноль вложений строкой не пишем: пустая графа хуже её отсутствия."""
-    card = support_alerts._card([("👤", "Клиент", "Илья")], "текст", 0)
+def test_card_has_no_attachment_counter():
+    """Число вложений не пишем: файл приходит следом и говорит сам за себя."""
+    card = support_alerts._card([("👤", "Клиент", "Илья")], "текст")
 
     assert "Вложений" not in card
     assert "<blockquote expandable>текст</blockquote>" in card
     assert card.startswith("   👤 <b>Клиент:</b>"), "поля идут списком rich-разметки"
 
 
-def test_media_count_looks_at_this_message():
-    """Считаем файлы сообщения, а не всего обращения."""
-    assert support_alerts._media_count({"has_media": False}) == 0
-    assert support_alerts._media_count({"has_media": True}) == 1
-    assert support_alerts._media_count({"has_media": True, "media_items": '[{"file_id": "a"}, {"file_id": "b"}]'}) == 2
+def test_keyboard_offers_actions_without_panel_url(monkeypatch):
+    """Кнопки действий работают и без публичного адреса — ссылки просто пропадают."""
+    monkeypatch.setattr(support_alerts, "_panel_base", lambda: "")
+
+    keyboard = support_alerts._ticket_button(65, bot_user_id=667, username="ispanec_nn")
+    flat = [button for row in keyboard["inline_keyboard"] for button in row]
+
+    assert any(b.get("callback_data") == "sact:take:65" for b in flat)
+    assert any(b.get("callback_data") == "sact:close:65" for b in flat)
+    assert any(b.get("url") == "https://t.me/ispanec_nn" for b in flat)
+    assert not any("/support?ticket=" in (b.get("url") or "") for b in flat)
+
+
+def test_keyboard_links_into_panel(monkeypatch):
+    monkeypatch.setattr(support_alerts, "_panel_base", lambda: "https://panel.example.com")
+
+    keyboard = support_alerts._ticket_button(65, bot_user_id=667, username=None)
+    flat = [button for row in keyboard["inline_keyboard"] for button in row]
+
+    assert any(b.get("url") == "https://panel.example.com/support?ticket=65" for b in flat)
+    assert any(b.get("url") == "https://panel.example.com/bedolaga/customers/667" for b in flat)
+    # Личку без username не предлагаем: Telegram отклонит такую ссылку.
+    assert not any("t.me" in (b.get("url") or "") for b in flat)
