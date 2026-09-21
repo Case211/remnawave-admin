@@ -39,3 +39,11 @@ Plugins have two channels, **stable** and **dev**. Everyone is on stable by defa
 ## Removing
 
 The **Remove** button on the card. The panel uninstalls the package and drops its pages from the interface; plugin data stays in the database in case you come back.
+
+## Your own plugin
+
+A plugin does not have to be ours: the panel installs any wheel that declares itself by the rules — through **Upload wheel** or simply as a file in the `plugins` directory. How such a package is put together, and what it gets from inside the panel, is covered in [writing a plugin](/en/reference/plugin-development) and the [Plugin API reference](/en/reference/plugin-api).
+
+::: danger Someone else's plugin is someone else's code in your panel
+The wheel is installed into the same process as the backend and gets full access to the database and the Panel API. Install only what you trust — exactly as with upgrading the panel itself.
+:::

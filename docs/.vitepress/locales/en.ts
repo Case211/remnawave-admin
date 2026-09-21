@@ -83,6 +83,13 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
           ],
         },
         {
+          text: 'Plugins',
+          items: [
+            { text: 'Writing a plugin', link: '/en/reference/plugin-development' },
+            { text: 'Plugin API', link: '/en/reference/plugin-api' },
+          ],
+        },
+        {
           text: 'Outgoing webhooks',
           items: [
             { text: 'Subscriptions and delivery', link: '/en/reference/webhooks' },
