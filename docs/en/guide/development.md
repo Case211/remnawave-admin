@@ -55,7 +55,7 @@ alembic revision -m "what we are doing"
 alembic upgrade head
 ```
 
-Plugins bring their own migration branches; they are applied along with the main ones.
+Plugins bring their own migration branches; they are applied along with the main ones — see [writing a plugin](/en/reference/plugin-development).
 
 ## Repository layout
 

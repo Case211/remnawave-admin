@@ -83,6 +83,13 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
           ],
         },
         {
+          text: 'Плагины',
+          items: [
+            { text: 'Разработка плагинов', link: '/reference/plugin-development' },
+            { text: 'Plugin API', link: '/reference/plugin-api' },
+          ],
+        },
+        {
           text: 'Исходящие webhook',
           items: [
             { text: 'Подписки и доставка', link: '/reference/webhooks' },
