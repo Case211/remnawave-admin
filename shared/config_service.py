@@ -209,6 +209,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "notifications_chat_id",
         "value_type": "int",
         "category": "notifications",
+        "subcategory": "delivery",
         "display_name": "ID чата уведомлений",
         "description": "Telegram ID чата/группы для уведомлений",
         "env_var_name": "NOTIFICATIONS_CHAT_ID",
@@ -218,6 +219,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "notifications_rich_enabled",
         "value_type": "bool",
         "category": "notifications",
+        "subcategory": "delivery",
         "display_name": "Rich-оформление уведомлений",
         "description": "Отправлять Telegram-уведомления «документами» Bot API 10.1: настоящие заголовки, списки, сворачиваемые секции. При отказе Telegram автоматически откатывается на обычный HTML",
         "default_value": "true",
@@ -430,6 +432,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_base_currency",
         "value_type": "string",
         "category": "finance",
+        "subcategory": "currency",
         "display_name": "Базовая валюта отчётов",
         "description": "Валюта, в которую конвертируются агрегаты (RUB, USD, EUR...)",
         "default_value": "RUB",
@@ -439,6 +442,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_rates_auto_update",
         "value_type": "bool",
         "category": "finance",
+        "subcategory": "currency",
         "display_name": "Автообновление курсов валют",
         "description": "Раз в сутки обновлять курсы (ЦБ РФ, fallback open.er-api.com). Курсы с ручной правкой не трогаются",
         "default_value": "true",
@@ -448,6 +452,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_reminders_enabled",
         "value_type": "bool",
         "category": "finance",
+        "subcategory": "reminders",
         "display_name": "Напоминания о списаниях",
         "description": "Слать уведомления о предстоящих и просроченных платежах в Telegram/панель",
         "default_value": "true",
@@ -457,6 +462,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_reminder_days",
         "value_type": "string",
         "category": "finance",
+        "subcategory": "reminders",
         "display_name": "За сколько дней напоминать",
         "description": "Список дней до списания через запятую (например: 7,3,1). Просрочка напоминается всегда",
         "default_value": "7,3,1",
@@ -466,6 +472,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_autosync_enabled",
         "value_type": "bool",
         "category": "finance",
+        "subcategory": "autosync",
         "display_name": "Автосинк API хостеров",
         "description": "Периодически снимать баланс и услуги с подключённых API хостеров",
         "default_value": "true",
@@ -475,6 +482,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_autosync_interval_hours",
         "value_type": "int",
         "category": "finance",
+        "subcategory": "autosync",
         "display_name": "Интервал автосинка (часы)",
         "description": "Как часто опрашивать API хостеров (баланс, услуги, даты списаний)",
         "default_value": "6",
@@ -484,6 +492,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_autosync_update_due_dates",
         "value_type": "bool",
         "category": "finance",
+        "subcategory": "autosync",
         "display_name": "Подтягивать даты списаний",
         "description": "Обновлять next_due_at записей по данным хостера (матч по имени услуги в рамках провайдера)",
         "default_value": "true",
@@ -493,6 +502,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "finance_bedolaga_deposits_enabled",
         "value_type": "bool",
         "category": "finance",
+        "subcategory": "income",
         "display_name": "Записывать пополнения Bedolaga",
         "description": "Ежедневно заносить пополнения баланса из Bedolaga в доходы (P&L-график, доход за месяц). ⚠️ Не совмещать с ручным импортом выручки подписок — двойной учёт",
         "default_value": "true",
@@ -651,6 +661,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_enabled",
         "value_type": "bool",
         "category": "reports",
+        "subcategory": "general",
         "display_name": "Отчёты включены",
         "description": "Глобальное включение/выключение автоматических отчётов",
         "default_value": "true",
@@ -660,6 +671,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_daily_enabled",
         "value_type": "bool",
         "category": "reports",
+        "subcategory": "daily",
         "display_name": "Ежедневные отчёты",
         "description": "Включить ежедневные отчёты по нарушениям",
         "default_value": "true",
@@ -669,6 +681,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_daily_time",
         "value_type": "string",
         "category": "reports",
+        "subcategory": "daily",
         "display_name": "Время дневного отчёта",
         "description": "Время отправки ежедневного отчёта (ЧЧ:ММ по часовому поясу панели)",
         "default_value": "09:00",
@@ -678,6 +691,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_auto_enabled",
         "value_type": "bool",
         "category": "backup",
+        "subcategory": "schedule",
         "display_name": "Авто-бэкап по расписанию",
         "description": "Автоматически создавать бэкап БД по расписанию",
         "default_value": "false",
@@ -687,6 +701,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_auto_time",
         "value_type": "string",
         "category": "backup",
+        "subcategory": "schedule",
         "display_name": "Время бэкапа",
         "description": "Время ежедневного авто-бэкапа (ЧЧ:ММ по часовому поясу панели)",
         "default_value": "03:00",
@@ -696,6 +711,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_auto_telegram",
         "value_type": "bool",
         "category": "backup",
+        "subcategory": "schedule",
         "display_name": "Отправлять в Telegram",
         "description": "Отправлять созданный бэкап в Telegram (chat_id из настроек уведомлений)",
         "default_value": "false",
@@ -705,6 +721,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_auto_keep_count",
         "value_type": "int",
         "category": "backup",
+        "subcategory": "rotation",
         "display_name": "Хранить бэкапов (шт)",
         "description": "Сколько последних авто-бэкапов хранить",
         "default_value": "10",
@@ -714,6 +731,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_auto_keep_days",
         "value_type": "int",
         "category": "backup",
+        "subcategory": "rotation",
         "display_name": "Хранить бэкапов (дней)",
         "description": "Максимальный возраст авто-бэкапов в днях",
         "default_value": "30",
@@ -723,6 +741,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_auto_interval_hours",
         "value_type": "int",
         "category": "backup",
+        "subcategory": "schedule",
         "display_name": "Интервал бэкапа (часов)",
         "description": "0 — раз в день в указанное время; N>0 — начиная с этого времени каждые N часов",
         "default_value": "0",
@@ -732,6 +751,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_auto_config",
         "value_type": "bool",
         "category": "backup",
+        "subcategory": "schedule",
         "display_name": "Бэкапить конфиг",
         "description": "Дополнительно к БД бэкапить настройки (config-бэкап)",
         "default_value": "false",
@@ -741,6 +761,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "backup_deadman_hours",
         "value_type": "int",
         "category": "backup",
+        "subcategory": "monitoring",
         "display_name": "Алерт: нет бэкапа N часов",
         "description": "Прислать алерт, если успешного бэкапа не было дольше N часов (0 = выкл)",
         "default_value": "0",
@@ -976,6 +997,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_weekly_enabled",
         "value_type": "bool",
         "category": "reports",
+        "subcategory": "weekly",
         "display_name": "Еженедельные отчёты",
         "description": "Включить еженедельные отчёты по нарушениям",
         "default_value": "true",
@@ -985,6 +1007,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_weekly_day",
         "value_type": "int",
         "category": "reports",
+        "subcategory": "weekly",
         "display_name": "День недельного отчёта",
         "description": "День недели для еженедельного отчёта (0=Пн, 6=Вс)",
         "default_value": "0",
@@ -994,6 +1017,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_weekly_time",
         "value_type": "string",
         "category": "reports",
+        "subcategory": "weekly",
         "display_name": "Время недельного отчёта",
         "description": "Время отправки еженедельного отчёта (ЧЧ:ММ по часовому поясу панели)",
         "default_value": "10:00",
@@ -1003,6 +1027,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_monthly_enabled",
         "value_type": "bool",
         "category": "reports",
+        "subcategory": "monthly",
         "display_name": "Ежемесячные отчёты",
         "description": "Включить ежемесячные отчёты по нарушениям",
         "default_value": "true",
@@ -1012,6 +1037,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_monthly_day",
         "value_type": "int",
         "category": "reports",
+        "subcategory": "monthly",
         "display_name": "День месячного отчёта",
         "description": "День месяца для ежемесячного отчёта (1-28)",
         "default_value": "1",
@@ -1021,6 +1047,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_monthly_time",
         "value_type": "string",
         "category": "reports",
+        "subcategory": "monthly",
         "display_name": "Время месячного отчёта",
         "description": "Время отправки ежемесячного отчёта (ЧЧ:ММ по часовому поясу панели)",
         "default_value": "10:00",
@@ -1030,6 +1057,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_min_score",
         "value_type": "float",
         "category": "reports",
+        "subcategory": "general",
         "display_name": "Минимальный скор",
         "description": "Минимальный скор нарушения для включения в отчёт",
         "default_value": "30.0",
@@ -1039,6 +1067,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_top_violators_count",
         "value_type": "int",
         "category": "reports",
+        "subcategory": "general",
         "display_name": "Топ нарушителей",
         "description": "Количество пользователей в топе нарушителей",
         "default_value": "10",
@@ -1048,6 +1077,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_send_empty",
         "value_type": "bool",
         "category": "reports",
+        "subcategory": "general",
         "display_name": "Отправлять пустые",
         "description": "Отправлять отчёт если нет нарушений за период",
         "default_value": "false",
@@ -1057,6 +1087,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "reports_topic_id",
         "value_type": "int",
         "category": "reports",
+        "subcategory": "general",
         "display_name": "Топик отчётов",
         "description": "ID топика для отправки отчётов (0 = основной чат)",
         "env_var_name": "NOTIFICATIONS_TOPIC_REPORTS",
@@ -1068,6 +1099,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_enabled",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "general",
         "display_name": "Детектирование нарушений",
         "description": "Глобальное включение/выключение детектирования нарушений",
         "default_value": "true",
@@ -1077,6 +1109,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_min_score",
         "value_type": "float",
         "category": "violations",
+        "subcategory": "general",
         "display_name": "Минимальный скор уведомления",
         "description": "Минимальный скор нарушения для отправки уведомления (по умолчанию 50)",
         "default_value": "50.0",
@@ -1086,6 +1119,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_analyzer_temporal",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "analyzers",
         "display_name": "Временной анализатор",
         "description": "Анализ одновременных подключений и паттернов переключения",
         "default_value": "true",
@@ -1095,6 +1129,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_analyzer_geo",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "analyzers",
         "display_name": "Гео-анализатор",
         "description": "Определение невозможных перемещений и подозрительной географии",
         "default_value": "true",
@@ -1104,6 +1139,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_analyzer_asn",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "analyzers",
         "display_name": "ASN-анализатор",
         "description": "Классификация провайдеров (VPN, датацентр, мобильный оператор)",
         "default_value": "true",
@@ -1113,6 +1149,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_analyzer_profile",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "analyzers",
         "display_name": "Профильный анализатор",
         "description": "Анализ отклонений от обычного поведения пользователя",
         "default_value": "true",
@@ -1122,6 +1159,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_analyzer_device",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "analyzers",
         "display_name": "Анализатор устройств",
         "description": "Определение уникальных fingerprint устройств (ОС, клиент)",
         "default_value": "true",
@@ -1131,6 +1169,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_analyzer_hwid",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "analyzers",
         "display_name": "HWID кросс-аккаунт анализатор",
         "description": "Обнаружение одного HWID на нескольких аккаунтах (триальный абьюз)",
         "default_value": "true",
@@ -1140,6 +1179,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "violations_analyzer_user_agent",
         "value_type": "bool",
         "category": "violations",
+        "subcategory": "analyzers",
         "display_name": "User-Agent анализатор",
         "description": "Детекция двойных туннелей (vless:// в UA), ботов (curl, Go-http-client) и неизвестных клиентов",
         "default_value": "true",
@@ -1634,6 +1674,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "mailserver_enabled",
         "value_type": "bool",
         "category": "mailserver",
+        "subcategory": "general",
         "display_name": "Почтовый сервер включён",
         "description": "Включить встроенный почтовый сервер (отправка/приём писем)",
         "default_value": "false",
@@ -1833,6 +1874,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "key": "mailserver_notify_new_mail",
         "value_type": "bool",
         "category": "mailserver",
+        "subcategory": "general",
         "display_name": "Уведомлять о новых письмах",
         "description": "Присылать уведомление при получении письма (кроме служебных: "
                        "отказов доставки, отписок и DMARC-отчётов)",
@@ -2404,6 +2446,60 @@ class DynamicConfigService:
             key = config_def['key']
             if key not in self._cache:
                 await self._create_config(config_def)
+            else:
+                await self._sync_config_metadata(self._cache[key], config_def)
+
+    async def _sync_config_metadata(self, item: ConfigItem, config_def: Dict[str, Any]) -> None:
+        """Подтянуть раздел, название, описание, порядок и варианты из кода.
+
+        Строка в БД создаётся один раз, и настройку, которую потом перенесли
+        в другой раздел или переименовали, админка без этого показывала бы
+        по-старому. Значение и значение по умолчанию не трогаем — это
+        поведение, а не подпись.
+        """
+        wanted = {
+            "category": config_def.get("category", "general"),
+            "subcategory": config_def.get("subcategory"),
+            "display_name": config_def.get("display_name"),
+            "description": config_def.get("description"),
+            "sort_order": config_def.get("sort_order", 0),
+            "options": config_def.get("options"),
+        }
+        current = {
+            "category": item.category.value if isinstance(item.category, ConfigCategory) else item.category,
+            "subcategory": item.subcategory,
+            "display_name": item.display_name,
+            "description": item.description,
+            "sort_order": item.sort_order,
+            "options": item.options,
+        }
+        if current == wanted:
+            return
+        try:
+            async with db_service.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE bot_config
+                    SET category = $2, subcategory = $3, display_name = $4,
+                        description = $5, sort_order = $6, options_json = $7
+                    WHERE key = $1
+                    """,
+                    item.key,
+                    wanted["category"],
+                    wanted["subcategory"],
+                    wanted["display_name"],
+                    wanted["description"],
+                    wanted["sort_order"],
+                    json.dumps(wanted["options"]) if wanted["options"] else None,
+                )
+            item.category = ConfigCategory(wanted["category"])
+            item.subcategory = wanted["subcategory"]
+            item.display_name = wanted["display_name"]
+            item.description = wanted["description"]
+            item.sort_order = wanted["sort_order"]
+            item.options = wanted["options"]
+        except Exception as e:
+            logger.error("Failed to sync config metadata %s: %s", item.key, e, exc_info=True)
 
     async def _create_config(self, config_def: Dict[str, Any]) -> None:
         """Создаёт новую настройку в БД."""

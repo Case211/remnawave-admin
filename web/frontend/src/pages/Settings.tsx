@@ -1478,8 +1478,26 @@ export default function Settings() {
           <>
             {/* Разделов в категории бывает под десяток: оглавление даёт прыгнуть
                 в нужный, не прокручивая полсотни настроек глазами. */}
-            {Object.keys(subcategories).length > 1 && (
+            {Object.keys(subcategories).length + (mainItems.length > 0 ? 1 : 0) > 1 && (
               <div className="flex flex-wrap items-center gap-1.5 pb-3 pt-1">
+                {/* «Основные» идут первыми и на странице, и в оглавлении */}
+                {mainItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      document
+                        .getElementById(`settings-${category}-main`)
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80',
+                      subcategoryTone(`${category}-main`),
+                    )}
+                  >
+                    {t('settings.subcategories.main')}
+                    <span className="tabular-nums opacity-70">{mainItems.length}</span>
+                  </button>
+                )}
                 {Object.entries(subcategories).map(([sub, subItems]) => (
                   <button
                     key={sub}
@@ -1501,7 +1519,7 @@ export default function Settings() {
               </div>
             )}
             {mainItems.length > 0 && (
-              <div>
+              <div id={`settings-${category}-main`} className="scroll-mt-4">
                 {/* У безымянной группы заголовка не было вовсе: два десятка настроек
                     начинались сразу после названия категории и сливались в простыню. */}
                 <div className="mb-2.5 flex items-center gap-2 px-1">
