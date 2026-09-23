@@ -23,6 +23,7 @@ class ErrorCode(str, Enum):
     ADMIN_NOT_FOUND = "ADMIN_NOT_FOUND"
     NOT_AN_ADMIN = "NOT_AN_ADMIN"
     INVALID_PASSWORD = "INVALID_PASSWORD"
+    WEAK_PASSWORD = "WEAK_PASSWORD"
     PASSWORD_UPDATE_FAILED = "PASSWORD_UPDATE_FAILED"
     INVALID_USERNAME = "INVALID_USERNAME"
     FORBIDDEN = "FORBIDDEN"
@@ -177,6 +178,7 @@ E = ErrorCode
 # Default human-readable messages per code (English fallback)
 _DEFAULT_MESSAGES: dict[str, str] = {
     E.ADMIN_NOT_FOUND: "Admin not found",
+    E.WEAK_PASSWORD: "Password does not meet the requirements: 8+ characters, lowercase and uppercase Latin letters, a digit and a special character, no Cyrillic.",
     E.USERNAME_EXISTS: "Username already exists",
     E.ROLE_NOT_FOUND: "Role not found",
     E.CANNOT_MODIFY_SELF: "Cannot modify your own account",

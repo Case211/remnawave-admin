@@ -5740,6 +5740,7 @@
     "ADMIN_NOT_FOUND": "Administrator not found",
     "NOT_AN_ADMIN": "You are not an administrator",
     "INVALID_PASSWORD": "Invalid password",
+    "WEAK_PASSWORD": "Password does not meet the requirements: 8+ characters, lowercase and uppercase Latin letters, a digit and a special character, no Cyrillic",
     "PASSWORD_UPDATE_FAILED": "Failed to update password",
     "INVALID_USERNAME": "Invalid username",
     "FORBIDDEN": "Access denied",

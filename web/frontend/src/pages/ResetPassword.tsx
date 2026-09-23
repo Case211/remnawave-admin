@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { PasswordStrengthBar, getPasswordStrength } from '@/components/PasswordStrengthBar'
 import { authApi } from '../api/auth'
 import {
   Mail,
   Lock,
   AlertCircle,
   Check,
-  X,
   Loader2,
   Eye,
   EyeOff,
@@ -18,38 +18,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
-
-const CYRILLIC_RE = /[\u0400-\u04FF]/
-
-interface PasswordStrength {
-  score: number
-  checks: {
-    length: boolean
-    lower: boolean
-    upper: boolean
-    digit: boolean
-    special: boolean
-    noCyrillic: boolean
-  }
-}
-
-function getPasswordStrength(password: string): PasswordStrength {
-  const checks = {
-    length: password.length >= 8,
-    lower: /[a-z]/.test(password),
-    upper: /[A-Z]/.test(password),
-    digit: /\d/.test(password),
-    special: /[!@#$%^&*_+\-=\[\]{}|;:',.<>?/\\~`"()]/.test(password),
-    noCyrillic: !CYRILLIC_RE.test(password),
-  }
-  const { noCyrillic, ...coreChecks } = checks
-  const passedCount = Object.values(coreChecks).filter(Boolean).length
-  let score = passedCount * 16
-  if (password.length >= 12) score += 10
-  if (password.length >= 16) score += 10
-  return { score: Math.min(100, score), checks }
-}
 
 /**
  * Step 1: Request reset email
@@ -188,7 +156,7 @@ function ResetPasswordForm({ token }: { token: string }) {
 
   const strength = useMemo(() => getPasswordStrength(password), [password])
   const passwordsMatch = password === confirmPassword && confirmPassword.length > 0
-  const allChecks = Object.values(strength.checks).every(Boolean)
+  const allChecks = strength.ok
   const canSubmit = allChecks && passwordsMatch && !loading
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -233,7 +201,6 @@ function ResetPasswordForm({ token }: { token: string }) {
     )
   }
 
-  const barColor = strength.score < 30 ? '#ef4444' : strength.score < 60 ? '#f59e0b' : strength.score < 80 ? '#22c55e' : '#10b981'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)] p-4">
@@ -279,47 +246,7 @@ function ResetPasswordForm({ token }: { token: string }) {
                 </button>
               </div>
 
-              {/* Strength bar */}
-              {password && (
-                <div className="h-1.5 rounded-full bg-[var(--glass-bg)] overflow-hidden mt-1">
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{ width: `${strength.score}%`, backgroundColor: barColor }}
-                  />
-                </div>
-              )}
-
-              {/* Cyrillic warning */}
-              {password && !strength.checks.noCyrillic && (
-                <div className="text-[11px] flex items-center gap-1 text-amber-400 mt-1">
-                  <X className="w-3 h-3 shrink-0" />
-                  {t('login.passwordChecks.noCyrillic')}
-                </div>
-              )}
-
-              {/* Requirement checks */}
-              {password && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 mt-1">
-                  {[
-                    { ok: strength.checks.length, text: t('login.passwordChecks.length') },
-                    { ok: strength.checks.lower, text: t('login.passwordChecks.lower') },
-                    { ok: strength.checks.upper, text: t('login.passwordChecks.upper') },
-                    { ok: strength.checks.digit, text: t('login.passwordChecks.digit') },
-                    { ok: strength.checks.special, text: t('login.passwordChecks.special') },
-                  ].map((c) => (
-                    <div
-                      key={c.text}
-                      className={cn(
-                        'text-[11px] flex items-center gap-1 transition-colors duration-200',
-                        c.ok ? 'text-green-400' : 'text-dark-300'
-                      )}
-                    >
-                      {c.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                      {c.text}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <PasswordStrengthBar password={password} className="mt-1" />
             </div>
 
             <div className="space-y-1.5">

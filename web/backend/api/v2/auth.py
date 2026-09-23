@@ -154,7 +154,7 @@ async def register_admin(request: Request, response: Response, data: RegisterReq
 
     is_strong, strength_error = validate_password_strength(data.password)
     if not is_strong:
-        raise api_error(400, E.INVALID_PASSWORD, strength_error)
+        raise api_error(400, E.WEAK_PASSWORD, strength_error)
 
     # Validate username
     if len(data.username.strip()) < 3:
@@ -855,7 +855,7 @@ async def change_password(
     # Validate new password strength
     is_strong, strength_error = validate_password_strength(data.new_password)
     if not is_strong:
-        raise api_error(400, E.INVALID_PASSWORD, strength_error)
+        raise api_error(400, E.WEAK_PASSWORD, strength_error)
 
     # Look up admin in admin_accounts
     account = None
@@ -1008,7 +1008,7 @@ async def reset_password(request: Request, data: ResetPasswordRequest):
     from web.backend.core.admin_credentials import validate_password_strength, hash_password
     is_strong, strength_error = validate_password_strength(data.new_password)
     if not is_strong:
-        raise api_error(400, E.INVALID_PASSWORD, strength_error)
+        raise api_error(400, E.WEAK_PASSWORD, strength_error)
 
     # Find admin account
     from web.backend.core.rbac import get_admin_account_by_id, update_admin_account

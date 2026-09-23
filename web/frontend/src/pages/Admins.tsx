@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { PasswordStrengthBar, getPasswordStrength } from '@/components/PasswordStrengthBar'
 import { toast } from 'sonner'
 import {
   Plus,
@@ -341,6 +342,8 @@ function AdminFormDialog({
     }
     return { ...emptyForm }
   })
+  // Пароль необязателен (вход через Telegram/passkey), но если задан — должен пройти проверки бэкенда
+  const passwordWeak = form.password.length > 0 && !getPasswordStrength(form.password).ok
 
   const handleSubmit = () => {
     // Ограничение методов включено, но ни один не выбран — это локаут.
@@ -440,6 +443,8 @@ function AdminFormDialog({
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               placeholder="admin_username"
               className="mt-1.5"
+              // Это чужой аккаунт: браузер не должен подставлять сюда свой логин и пароль
+              autoComplete="off"
             />
           </div>
 
@@ -451,6 +456,7 @@ function AdminFormDialog({
               onChange={(e) => setForm({ ...form, telegram_id: e.target.value })}
               placeholder="123456789"
               className="mt-1.5"
+              autoComplete="off"
             />
             <p className="text-xs text-dark-300 mt-1">{t('admins.telegramIdHint')}</p>
           </div>
@@ -542,7 +548,9 @@ function AdminFormDialog({
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               placeholder={editingAdmin ? t('admins.passwordLeaveEmpty') : t('admins.passwordMinLength')}
               className="mt-1.5"
+              autoComplete="new-password"
             />
+            <PasswordStrengthBar password={form.password} className="mt-2" />
           </div>
 
           <div className="pt-2 border-t border-[var(--glass-border)]">
@@ -601,7 +609,7 @@ function AdminFormDialog({
 
         <DialogFooter>
           <Button variant="secondary" onClick={onClose} disabled={isPending}>{t('common.cancel')}</Button>
-          <Button onClick={handleSubmit} disabled={isPending || !form.username || !form.role_id}>
+          <Button onClick={handleSubmit} disabled={isPending || !form.username || !form.role_id || passwordWeak}>
             {isPending ? t('common.saving') : editingAdmin ? t('common.save') : t('common.create')}
           </Button>
         </DialogFooter>
