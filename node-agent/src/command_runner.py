@@ -83,6 +83,24 @@ def verify_signature(
     return hmac.compare_digest(expected, signature)
 
 
+# ── Throttling: хозяйство агента на ноде ─────────────────────────
+#
+# По этим меткам агент узнаёт своё и снимает только его. Корень интерфейса
+# и чужие фильтры он не трогает никогда: там может жить чужой тюнинг (fq с
+# параметрами, cake, шейпер другого сервиса), а снос корня ломал его при
+# каждом переподключении агента (issue #281).
+
+# Своё ifb-устройство: в нём живёт HTB с личными классами наказанных адресов.
+THROTTLE_IFB = "rwthrottle0"
+# Приоритет наших фильтров на выходе основного интерфейса. Обязан быть меньше
+# 49152: с этого номера ядро раздаёт приоритеты фильтрам, поставленным без
+# явного, и там обычно висят eBPF-программы других сервисов. Такая программа
+# отпускает пакет вердиктом «пропустить», проверка на ней заканчивается, и
+# фильтр с номером больше не увидел бы ни одного пакета.
+# 29303 — это «rw» в ASCII: запомнить легко, случайно совпасть трудно.
+THROTTLE_PREF = 29303
+
+
 # ── Command Runner ───────────────────────────────────────────────
 
 class CommandRunner:
@@ -274,14 +292,13 @@ class CommandRunner:
             })
 
     async def _sync_throttled_ips(self, msg: dict) -> None:
-        """Ограничить скорость к указанным адресам на этой ноде (tc HTB).
+        """Ограничить скорость к указанным адресам на этой ноде (tc, HTB в ifb).
 
         Payload: {"rules": [{"ip": "1.2.3.4", "rate_kbit": 1024}, ...]}.
 
-        Список заменяет прежний целиком, поэтому пустой снимает все
-        ограничения. Режется исходящий трафик ноды к адресу — то есть
-        скачивание у клиента; отдача идёт входящей стороной, её tc без
-        отдельного ifb-интерфейса не шейпит.
+        Список заменяет прежний целиком, поэтому пустой снимает все наши
+        ограничения — и только их: чужую раскладку tc агент не трогает.
+        Режется исходящий трафик ноды к адресу, то есть скачивание у клиента.
 
         Ограничение вешается на адрес, а не на порт или пользователя: так
         не нужно ни трогать конфиг Xray, ни переносить человека между
@@ -331,56 +348,105 @@ class CommandRunner:
 
     @staticmethod
     def _build_throttle_script(rules: list) -> str:
-        """Собрать POSIX-скрипт, целиком заменяющий текущую раскладку tc.
+        """Собрать POSIX-скрипт, приводящий ограничения на ноде к списку.
 
-        Корнем стоит prio с priomap из одних нулей: весь неразмеченный
-        трафик уходит в первую полосу, где никакого ограничителя нет. HTB
-        висит только на отдельной полосе, куда фильтры заводят наказанные
-        адреса.
+        Корень интерфейса не трогается никогда. Трафик наказанных адресов
+        уводит фильтр на выходе интерфейса (clsact) в своё устройство ifb, там
+        HTB с личным классом на адрес, а после него пакет возвращается на
+        интерфейс и проходит через тот корень, что там стоит. Остальной трафик
+        ограничителя не касается вовсе, поэтому ширину канала знать не нужно.
 
-        Так сделано ради безопасности. Если завернуть в HTB весь трафик,
-        дисциплине придётся сообщить ширину канала — и ошибка в этом числе
-        придушит всех пользователей ноды разом. Здесь знать ширину не нужно
-        вовсе: обычный трафик ограничителя просто не касается.
+        Своё агент узнаёт по меткам: устройство THROTTLE_IFB и приоритет
+        THROTTLE_PREF с перенаправлением именно в это устройство. Снимается
+        только оно. clsact создаётся, лишь если его нет, и убирается, только
+        когда после наших фильтров на нём пусто: там могут висеть чужие.
 
-        Режется исходящий трафик ноды к адресу, то есть скачивание у
-        клиента; отдача идёт входящей стороной, её tc без отдельного
-        ifb-интерфейса не шейпит.
+        Раскладку агентов до перехода на ifb (prio в корне и наш HTB 40: на
+        полосе 1:4) скрипт узнаёт по этой связке и снимает один раз.
+
+        Режется исходящий трафик ноды к адресу, то есть скачивание у клиента;
+        отдачу это не трогает.
         """
+        ifb, pref = THROTTLE_IFB, THROTTLE_PREF
         lines = [
             "set -e",
             'IFACE=$(ip route show default 2>/dev/null | awk \'/default/ {print $5; exit}\')',
             '[ -n "$IFACE" ] || { echo "no default route interface"; exit 1; }',
-            # Прежняя раскладка снимается всегда: список приходит целиком,
-            # и разбирать разницу дороже, чем собрать заново.
-            'tc qdisc del dev "$IFACE" root 2>/dev/null || true',
+            # Старая раскладка узнаётся по нашему HTB 40: на полосе 1:4 —
+            # чужой корень под такое описание не подойдёт.
+            "if tc qdisc show dev \"$IFACE\" | grep -q '^qdisc htb 40: parent 1:4 '; then",
+            '  tc qdisc del dev "$IFACE" root',
+            '  echo "legacy root layout removed on $IFACE"',
+            "fi",
+            # Свои фильтры снимаются целиком по приоритету, но только если они
+            # ведут в наше устройство. Удалять без номера приоритета нельзя
+            # никогда: такая команда снесла бы все фильтры интерфейса.
+            'HAD=""',
+            'FOREIGN=""',
+            f'OURS=$(tc filter show dev "$IFACE" egress pref {pref} 2>/dev/null || true)',
+            'if [ -n "$OURS" ]; then',
+            '  case "$OURS" in',
+            f'    *"{ifb}"*) tc filter del dev "$IFACE" egress pref {pref} protocol ip; HAD=1 ;;',
+            '    *) FOREIGN=1 ;;',
+            '  esac',
+            'fi',
         ]
 
         if not rules:
-            lines.append('echo "throttling cleared on $IFACE"')
+            lines += [
+                # Устройство — после фильтров: перенаправление в пропавшее
+                # устройство ядро превращает в отбрасывание пакетов.
+                f"ip link del {ifb} 2>/dev/null || true",
+                # clsact мог быть нашим. Если после нас на нём пусто — убираем,
+                # чтобы интерфейс остался таким, каким был до ограничений.
+                'if [ -n "$HAD" ] && [ -z "$(tc filter show dev "$IFACE" egress 2>/dev/null)" ] '
+                '&& [ -z "$(tc filter show dev "$IFACE" ingress 2>/dev/null)" ]; then',
+                '  tc qdisc del dev "$IFACE" clsact 2>/dev/null || true',
+                "fi",
+                'echo "throttling cleared on $IFACE"',
+            ]
             return "\n".join(lines)
 
         lines += [
-            # priomap из нулей: без явного фильтра пакет всегда идёт в 1:1.
-            'tc qdisc add dev "$IFACE" root handle 1: prio bands 4 '
-            'priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0',
-            # Ограничитель — только на четвёртой полосе, отдельно от всех.
-            'tc qdisc add dev "$IFACE" parent 1:4 handle 40: htb',
+            'if [ -n "$FOREIGN" ]; then',
+            f'  echo "egress pref {pref} on $IFACE is taken by another tool"; exit 1',
+            "fi",
+            # numifbs=0 — иначе модуль при загрузке сам заведёт ifb0 и ifb1,
+            # а эти имена могут понадобиться администратору.
+            "modprobe ifb numifbs=0 2>/dev/null || true",
+            f"ip link show {ifb} >/dev/null 2>&1 || ip link add {ifb} type ifb",
+            f"ip link set {ifb} up",
+            # Устройство целиком наше, и трафик в него сейчас не идёт — фильтры
+            # сняты выше. Пересобрать дешевле, чем сверять.
+            f"tc qdisc del dev {ifb} root 2>/dev/null || true",
+            f"tc qdisc add dev {ifb} root handle 1: htb",
         ]
 
         for index, (ip, rate_kbit) in enumerate(rules, start=10):
             lines += [
-                f'tc class add dev "$IFACE" parent 40: classid 40:{index} '
-                f'htb rate {rate_kbit}kbit ceil {rate_kbit}kbit burst 32k',
-                # Первый фильтр уводит адрес на полосу ограничителя,
-                # второй — в его личный класс с нужной скоростью.
-                f'tc filter add dev "$IFACE" protocol ip parent 1:0 prio 1 u32 '
-                f'match ip dst {ip}/32 flowid 1:4',
-                f'tc filter add dev "$IFACE" protocol ip parent 40: prio 1 u32 '
-                f'match ip dst {ip}/32 flowid 40:{index}',
+                f"tc class add dev {ifb} parent 1: classid 1:{index} "
+                f"htb rate {rate_kbit}kbit ceil {rate_kbit}kbit burst 32k",
+                f"tc filter add dev {ifb} parent 1: protocol ip prio 1 u32 "
+                f"match ip dst {ip}/32 flowid 1:{index}",
             ]
 
-        lines.append(f'echo "throttled {len(rules)} addresses on $IFACE"')
+        lines += [
+            # Чужой clsact годится как есть: пересоздание снесло бы его фильтры.
+            "if ! tc qdisc show dev \"$IFACE\" | grep -q '^qdisc clsact '; then",
+            # Старый ingress-qdisc занимает то же место, что и clsact.
+            "  if tc qdisc show dev \"$IFACE\" | grep -q '^qdisc ingress '; then",
+            '    echo "$IFACE has an ingress qdisc, clsact cannot be added"; exit 1',
+            "  fi",
+            '  tc qdisc add dev "$IFACE" clsact',
+            "fi",
+        ]
+        for ip, _ in rules:
+            lines.append(
+                f'tc filter add dev "$IFACE" egress protocol ip pref {pref} u32 '
+                f"match ip dst {ip}/32 action mirred egress redirect dev {ifb}"
+            )
+
+        lines.append(f'echo "throttled {len(rules)} addresses on $IFACE via {ifb}"')
         return "\n".join(lines)
 
     @staticmethod

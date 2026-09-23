@@ -77,6 +77,8 @@ There are four ways to apply it: the **"🐌 Throttle"** button under a violatio
 
 The node's link width does not need to be configured: ordinary traffic bypasses the shaper entirely, only the violators' addresses go through it.
 
+Since version 1.9.0 the agent leaves the interface's root qdisc alone. It steers the violators' traffic with a filter into its own `rwthrottle0` device and shapes it there, so your own `tc` tuning on the node (fq with custom parameters, cake, another service's shaper) stays as it was. The `ifb` kernel module is required; stock Ubuntu and Debian kernels ship it.
+
 With a reserve squad configured, the violator is moved there as well, and their previous squads are remembered and restored when the limit is lifted.
 
 ::: warning Addresses change
