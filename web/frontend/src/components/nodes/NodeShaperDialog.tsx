@@ -195,7 +195,7 @@ interface NodeShaperDialogProps {
 /** Шейпер клиентов ноды: потолок скорости на каждый адрес и режим штрафа. */
 export function NodeShaperDialog({ node, open, onOpenChange }: NodeShaperDialogProps) {
   const { t } = useTranslation()
-  const { formatTimeAgo } = useFormatters()
+  const { formatTimeAgo, formatBytes } = useFormatters()
   const queryClient = useQueryClient()
   const [form, setForm] = useState<ShaperForm | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -376,6 +376,27 @@ export function NodeShaperDialog({ node, open, onOpenChange }: NodeShaperDialogP
                 </div>
               )}
             </div>
+
+            {!!data?.penalties?.length && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-dark-200 uppercase tracking-wider">
+                  {t('nodes.shaper.penalties.title')}
+                </p>
+                <ul className="max-h-40 overflow-y-auto space-y-1 text-xs">
+                  {data.penalties.map((p) => (
+                    <li key={`${p.ip}-${p.started_at}`} className="flex items-center gap-2 text-dark-100">
+                      <span className="text-white truncate">
+                        {p.users.length
+                          ? p.users.map((u) => u.username || u.uuid.slice(0, 8)).join(', ')
+                          : t('nodes.shaper.penalties.unknownUser', { ip: p.ip })}
+                      </span>
+                      <span className="text-dark-200 shrink-0">{formatBytes(p.bytes)}</span>
+                      <span className="text-dark-300 ml-auto shrink-0">{formatTimeAgo(p.started_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="space-y-1 text-xs text-dark-200">
               <p>{t('nodes.shaper.noteCgnat')}</p>

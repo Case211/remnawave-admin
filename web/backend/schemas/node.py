@@ -44,6 +44,8 @@ class NodeListItem(NodeBase):
     agent_v2_connected: bool = False
     agent_v2_last_ping: Optional[datetime] = None
     agent_version: Optional[str] = None
+    # Шейпер ноды для бейджа: active | rough | error | waiting; None — выключен
+    shaper_state: Optional[str] = None
     # 2.8.0: заметка, SOCKS5-прокси, отдельный множитель потребления ноды
     note: Optional[str] = None
     proxy_url: Optional[str] = None

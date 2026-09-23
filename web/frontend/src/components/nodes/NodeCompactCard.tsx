@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MoreVertical, RotateCcw, Pencil, Play, Square, Key, Globe, Trash2, Bot, BotOff, Gauge, Users, BarChart3 } from '@/components/brand/icons'
+import { ShaperBadge } from './ShaperBadge'
 import { cn } from '@/lib/utils'
 import type { NodeRow } from './NodesTable'
 
@@ -106,6 +107,7 @@ export function NodeCompactCard({
             {agent === 'missing' ? <BotOff className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
             {t(`nodes.agent.${agent}`)}
           </span>
+          <ShaperBadge state={node.shaper_state} />
           <span className="inline-flex items-center gap-1 text-dark-100 ml-auto">
             <Users className="w-3.5 h-3.5 text-cyan-400" />
             {node.users_online}

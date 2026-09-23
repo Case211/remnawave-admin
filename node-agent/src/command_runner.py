@@ -110,6 +110,8 @@ class CommandRunner:
         self._shaper_general = _shaper.DISABLED
         self._shaper_personal: Dict[str, int] = {}
         self._shaper_loaded = False
+        # Штрафы, о которых панель уже знает: (адрес, начало) → конец штрафа
+        self._penalties_seen: Dict[tuple, float] = {}
 
     async def handle(self, msg: dict) -> None:
         """Route an incoming command message."""
@@ -347,6 +349,52 @@ class CommandRunner:
                 "output": output[-10000:],
                 "exit_code": exit_code,
             })
+
+    async def collect_penalties(self) -> list:
+        """Штрафы шейпера, о которых панель ещё не знает; пусто, если штраф не включён."""
+        from . import shaper
+
+        if not (self._shaper_loaded and self._shaper_general.penalty_mb):
+            return []
+        output, exit_code = await self._communicate(shaper.PENALTIES_DUMP, timeout=30)
+        if exit_code != 0:
+            return []
+        events = shaper.parse_penalties(output, time.monotonic_ns(), time.time())
+        return [e for e in events if (e["ip"], e["start_ns"]) not in self._penalties_seen]
+
+    async def watch_penalties(self, shutdown_event: asyncio.Event, interval: int = 60) -> None:
+        """Раз в минуту сообщать панели о новых штрафах шейпера.
+
+        Отправленным событие считается, только если ушло: при обрыве связи
+        оно уйдёт в следующий раз, а не потеряется.
+        """
+        while not shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(shutdown_event.wait(), timeout=interval)
+                return
+            except asyncio.TimeoutError:
+                pass
+            try:
+                fresh = await self.collect_penalties()
+                if not fresh:
+                    continue
+                sent = await self._send({
+                    "type": "shaper_penalties",
+                    "events": [
+                        {k: e[k] for k in ("ip", "started_at", "until", "bytes")} for e in fresh
+                    ],
+                })
+                if sent:
+                    for e in fresh:
+                        self._penalties_seen[(e["ip"], e["start_ns"])] = e["until"]
+                    # Давно закончившиеся забываем, чтобы память не росла
+                    cutoff = time.time() - 86400
+                    self._penalties_seen = {
+                        k: until for k, until in self._penalties_seen.items() if until > cutoff
+                    }
+                    logger.info("Shaper penalties reported: %d", len(fresh))
+            except Exception as e:
+                logger.warning("Shaper penalties check failed: %s", e)
 
     async def _shaper_apply(self) -> tuple:
         """Поставить программу заново или снять её, если лимитов не осталось."""

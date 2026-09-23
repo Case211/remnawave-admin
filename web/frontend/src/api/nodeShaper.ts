@@ -27,7 +27,16 @@ export interface ShaperStatus {
   error?: string | null
 }
 
+export interface ShaperPenaltyItem {
+  ip: string
+  started_at: string
+  until: string | null
+  bytes: number
+  users: { uuid: string; username: string | null }[]
+}
+
 export interface ShaperState {
+  penalties?: ShaperPenaltyItem[]
   settings: ShaperSettings
   status: ShaperStatus | null
   status_at: string | null

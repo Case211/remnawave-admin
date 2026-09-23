@@ -194,6 +194,14 @@ async def agent_websocket(
                         # Agent finished executing a command — log it
                         await _handle_command_result(node_uuid, msg)
 
+                elif msg_type == "shaper_penalties":
+                    # Кого шейпер ноды оштрафовал за объём — в историю и админу
+                    from web.backend.core import shaper_rollout
+                    try:
+                        await shaper_rollout.handle_penalties(node_uuid, msg.get("events"))
+                    except Exception as e:
+                        logger.warning("Failed to handle shaper penalties from %s: %s", node_uuid, e)
+
                 elif msg_type == "script_output":
                     # Streaming script output — forward to frontend SSE/WS
                     await _handle_script_output(node_uuid, msg)

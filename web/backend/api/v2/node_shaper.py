@@ -104,8 +104,15 @@ async def get_shaper(
         stored = {"settings": settings, "status": None, "status_at": None,
                   "updated_at": None, "updated_by": None}
 
+    try:
+        penalties = await shaper_rollout.recent_penalties(node_uuid)
+    except Exception as e:
+        logger.debug("shaper: история штрафов %s недоступна: %s", node_uuid, e)
+        penalties = []
+
     return {
         **stored,
+        "penalties": penalties,
         "configured": stored["updated_at"] is not None,
         "agent": agent,
         "suggested_ports": suggested,

@@ -105,6 +105,21 @@ struct {
 	__type(value, struct personal_limit);
 } rws_personal SEC(".maps");
 
+/* Кого оштрафовали: агент раз в минуту забирает отсюда события для панели.
+ * Раскладку повторяет src/shaper.py — менять вместе. */
+struct penalty_event {
+	__u64 start_ns;        /* bpf_ktime_get_ns, CLOCK_MONOTONIC */
+	__u64 until_ns;
+	__u64 bytes;           /* сколько клиент набрал за окно к моменту штрафа */
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 4096);
+	__type(key, struct client_key);
+	__type(value, struct penalty_event);
+} rws_penalties SEC(".maps");
+
 /* LRU: клиенты уходят и приходят, место освобождается само. */
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
@@ -212,9 +227,11 @@ static __always_inline __u64 min_rate(__u64 a, __u64 b)
  * трафику на портах общего шейпера: это его режим, а не часть мягкой блокировки.
  */
 static __always_inline __u64 pick_rate(const struct shaper_cfg *cfg, struct client_state *st,
-				       __u64 now, __u32 len, __u64 general, __u64 personal,
-				       int on_port)
+				       struct client_key *key, __u64 now, __u32 len,
+				       __u64 general, __u64 personal, int on_port)
 {
+	struct penalty_event ev = {};
+
 	__u64 rate = min_rate(general, personal);
 
 	if (!on_port || !cfg->pen_bytes)
@@ -228,6 +245,10 @@ static __always_inline __u64 pick_rate(const struct shaper_cfg *cfg, struct clie
 	__sync_fetch_and_add(&st->win_bytes, len);
 	if (st->win_bytes > cfg->pen_bytes) {
 		st->pen_until = now + cfg->pen_duration_ns;
+		ev.start_ns = now;
+		ev.until_ns = st->pen_until;
+		ev.bytes = st->win_bytes;
+		bpf_map_update_elem(&rws_penalties, key, &ev, BPF_ANY);
 		st->win_start = now;
 		st->win_bytes = 0;
 		stat_inc(ST_PENALTIES);
@@ -264,7 +285,7 @@ int rws_egress(struct __sk_buff *skb)
 	if (!st)
 		return TC_ACT_UNSPEC;
 
-	rate = pick_rate(cfg, st, now, skb->len, on_port ? cfg->down_rate : 0,
+	rate = pick_rate(cfg, st, &key, now, skb->len, on_port ? cfg->down_rate : 0,
 			 personal ? personal->down_rate : 0, on_port);
 	if (!rate)
 		return TC_ACT_UNSPEC;
@@ -317,7 +338,7 @@ int rws_ingress(struct __sk_buff *skb)
 	if (!st)
 		return TC_ACT_UNSPEC;
 
-	rate = pick_rate(cfg, st, now, skb->len, on_port ? cfg->up_rate : 0,
+	rate = pick_rate(cfg, st, &key, now, skb->len, on_port ? cfg->up_rate : 0,
 			 personal ? personal->up_rate : 0, on_port);
 	if (!rate)
 		return TC_ACT_UNSPEC;

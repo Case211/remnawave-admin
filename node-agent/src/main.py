@@ -261,6 +261,8 @@ async def run_agent() -> None:
     # Start WS client as a concurrent task
     if ws_client:
         ws_task = asyncio.create_task(ws_client.run(shutdown_event))
+        # Штрафы шейпера — отдельной задачей: раз в минуту, только если он включён
+        penalties_task = asyncio.create_task(cmd_runner.watch_penalties(shutdown_event))
 
     try:
         while not shutdown_event.is_set():
@@ -386,6 +388,8 @@ async def run_agent() -> None:
         # Stop WS client
         if ws_client:
             ws_client.stop()
+        if ws_client and not penalties_task.done():
+            penalties_task.cancel()
         if ws_task and not ws_task.done():
             ws_task.cancel()
             try:

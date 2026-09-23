@@ -332,6 +332,15 @@ async def list_nodes(
         except Exception as e:
             logger.debug("Agent state enrichment failed: %s", e)
 
+        # Шейпер ноды — для бейджа на карточке
+        try:
+            from web.backend.core import shaper_rollout
+            shaper_states = await shaper_rollout.node_states()
+            for n in nodes:
+                n["shaper_state"] = shaper_states.get(str(n.get("uuid", "")).lower())
+        except Exception as e:
+            logger.debug("Shaper state enrichment failed: %s", e)
+
         # Apply access-policy scope (whitelist by UUID/tag)
         scope = await get_scope(admin, "node", "view")
         if scope is not None:

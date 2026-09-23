@@ -1059,6 +1059,17 @@
   },
   "nodes": {
     "shaper": {
+      "badge": {
+        "label": "Shaper",
+        "active": "Shaper active: download and upload are capped",
+        "rough": "Shaper active, but download is capped roughly: the interface root holds someone else's discipline",
+        "error": "Shaper not applied — see the shaper dialog",
+        "waiting": "Shaper enabled, waiting for the agent"
+      },
+      "penalties": {
+        "title": "Recent penalties",
+        "unknownUser": "{{ip}}, user not found"
+      },
       "title": "Client shaper",
       "description": "A speed cap for every client address on this node. Keeps heavy downloaders in check without touching everyone else.",
       "enable": "Shaper enabled",

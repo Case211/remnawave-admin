@@ -101,6 +101,10 @@ A speed cap for every client address on the node — keeps heavy downloaders in 
 
 How it works: the agent (1.9.0+) attaches an eBPF program to the interface ingress and egress. Download packets are held until their scheduled departure time, upload is cut by dropping what exceeds the rate. The departure time is enforced by `fq`, so the agent installs it at the interface root when the kernel default sits there, and removes it when the shaper is turned off. If you set your own discipline, the agent leaves it alone: download is then cut more roughly, by dropping, and the dialog warns about it.
 
+**Is it working?** While the shaper is on, the node card — in the compact view and the table too — shows a “Shaper” badge: green — the caps are in place, amber — download is capped roughly (someone else's discipline sits at the interface root), red — not applied, the reason is in the shaper dialog, theme-colored — waiting for the agent.
+
+**Penalty notifications.** In penalty mode the agent reports who it penalized once a minute. The panel finds the user by address and connection time and sends a notification to Telegram and the bell, in the violations topic: who, on which node, how much they moved and until when they are slowed down. At most once per 6 hours per user; an address with no matching user produces no notification. Recent penalties are listed in the shaper dialog, the history is kept for 30 days.
+
 ::: warning Where it doesn't fit
 Several clients can sit behind one mobile carrier address — they share the cap. Behind a CDN every client arrives from CDN addresses, so don't enable the shaper there: everyone would share one cap.
 :::

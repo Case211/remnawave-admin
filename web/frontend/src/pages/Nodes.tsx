@@ -87,6 +87,7 @@ import { useViewMode } from '@/lib/useViewMode'
 import { NodesTable } from '@/components/nodes/NodesTable'
 import { NodeCompactCard } from '@/components/nodes/NodeCompactCard'
 import { NodeShaperDialog } from '@/components/nodes/NodeShaperDialog'
+import { ShaperBadge } from '@/components/nodes/ShaperBadge'
 
 // Types
 interface Node {
@@ -112,6 +113,7 @@ interface Node {
   agent_v2_connected?: boolean
   agent_v2_last_ping?: string | null
   agent_version?: string | null
+  shaper_state?: string | null
   // null/undefined = no access-policy restriction
   allowed_actions?: string[] | null
 }
@@ -1118,6 +1120,7 @@ function NodeCard({
           </div>
 
           <div className="flex items-center gap-2">
+            <ShaperBadge state={node.shaper_state} />
             <AgentBadge node={node} />
 
             <Badge variant={statusVariant as 'success' | 'secondary' | 'destructive'}>

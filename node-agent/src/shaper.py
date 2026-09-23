@@ -346,6 +346,50 @@ def build_disable_script() -> str:
     return "\n".join(lines)
 
 
+#: Дамп карты штрафов; своя bpffs видна только контейнеру агента
+PENALTIES_DUMP = f"bpftool -j map dump pinned {PIN_DIR}/maps/rws_penalties"
+
+
+def _raw_bytes(value) -> bytes:
+    """bpftool -j печатает байты списком строк «0x..»."""
+    return bytes(int(str(b), 16) for b in value)
+
+
+def _key_to_ip(key: bytes) -> str:
+    addr = ipaddress.IPv6Address(key)
+    return str(addr.ipv4_mapped or addr)
+
+
+def parse_penalties(output: str, now_mono_ns: int, now_wall: float) -> List[dict]:
+    """События штрафов из дампа карты rws_penalties.
+
+    Программа пишет время по CLOCK_MONOTONIC (bpf_ktime_get_ns); в стенное
+    его переводим через текущие показания обоих часов.
+    """
+    import json
+
+    try:
+        items = json.loads(output or "[]")
+    except ValueError:
+        return []
+    events = []
+    for item in items if isinstance(items, list) else []:
+        try:
+            key = _raw_bytes(item["key"])
+            start_ns, until_ns, total = struct.unpack("<3Q", _raw_bytes(item["value"])[:24])
+            ip = _key_to_ip(key)
+        except (KeyError, TypeError, ValueError, struct.error):
+            continue
+        events.append({
+            "ip": ip,
+            "start_ns": start_ns,
+            "started_at": now_wall - (now_mono_ns - start_ns) / 1e9,
+            "until": now_wall - (now_mono_ns - until_ns) / 1e9,
+            "bytes": total,
+        })
+    return events
+
+
 def parse_report(output: str) -> Dict[str, str]:
     """Строки KEY=VALUE из вывода скрипта; прочее — диагностика tc и bpftool."""
     report: Dict[str, str] = {}

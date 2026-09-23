@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MoreVertical, RotateCcw, Pencil, Play, Square, Key, Globe, Trash2, Bot, BotOff, Gauge } from '@/components/brand/icons'
+import { ShaperBadge } from './ShaperBadge'
 import { cn } from '@/lib/utils'
 
 export interface NodeRow {
@@ -30,6 +31,7 @@ export interface NodeRow {
   has_agent_token?: boolean
   agent_v2_connected?: boolean
   allowed_actions?: string[] | null
+  shaper_state?: string | null
 }
 
 function nodeStatus(n: NodeRow): 'online' | 'offline' | 'disabled' {
@@ -170,6 +172,7 @@ export function NodesTable({
                   {agent === 'missing' ? <BotOff className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                   {t(`nodes.agent.${agent}`)}
                 </span>
+                <ShaperBadge state={node.shaper_state} className="ml-2" />
               </TableCell>
               <TableCell className="text-right font-mono text-sm text-white">{node.users_online}</TableCell>
               <TableCell className="text-right font-mono text-xs text-dark-100 whitespace-nowrap">{formatBytes(node.traffic_today_bytes)}</TableCell>
