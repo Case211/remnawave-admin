@@ -200,3 +200,36 @@ class TestAuditMiddlewareDispatch:
         # POST /api/v2/auth/password is in _SKIP_DUPLICATES as (auth, login)
         resp = await client.post("/api/v2/auth/password", json={"username": "a", "password": "b"})
         mock_write.assert_not_called()
+
+
+# ── Дубли с обработчиками ─────────────────────────────────────
+
+
+class TestHandlerLoggedSkip:
+    """Обработчики /api/v2 пишут аудит сами — мидлварь не пишет копию."""
+
+    def test_v2_user_delete_skipped(self):
+        from web.backend.core.audit_middleware import _logged_by_handler
+        assert _logged_by_handler("/api/v2/users/abc", "users", "delete")
+
+    def test_v2_setting_update_skipped(self):
+        from web.backend.core.audit_middleware import _logged_by_handler
+        assert _logged_by_handler("/api/v2/settings/map_tiles_api_key", "settings", "update")
+
+    def test_sync_hwid_still_logged(self):
+        from web.backend.core.audit_middleware import _logged_by_handler
+        assert not _logged_by_handler("/api/v2/users/abc/sync-hwid-devices", "users", "sync_hwid")
+
+    def test_v3_still_logged(self):
+        from web.backend.core.audit_middleware import _logged_by_handler
+        assert not _logged_by_handler("/api/v3/users/abc", "users", "delete")
+
+    def test_api_keys_still_logged(self):
+        from web.backend.core.audit_middleware import _logged_by_handler
+        assert not _logged_by_handler("/api/v2/api-keys", "api_keys", "create")
+
+
+def test_like_escapes_wildcards():
+    from web.backend.core.audit import _like
+    assert _like("reset_traffic") == "reset\_traffic"
+    assert _like("100%") == "100\%"

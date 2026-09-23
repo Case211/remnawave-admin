@@ -87,8 +87,18 @@ const RESOURCE_COLORS: Record<string, string> = {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+// Обработчики пишут «user.create», API v3 — «users.create»: это один раздел
+function resourceKey(resource: string): string {
+  return resource.endsWith('s') && resource !== 'settings' ? resource.slice(0, -1) : resource === 'setting' ? 'settings' : resource
+}
+
+function resourceStyleKey(resource: string): string {
+  const key = resourceKey(resource)
+  return key === 'settings' ? key : `${key}s`
+}
+
 function getResourceLabel(t: TFunction, resource: string): string {
-  return t(`audit.resources.${resource}`, { defaultValue: resource })
+  return t(`audit.resources.${resourceKey(resource)}`, { defaultValue: resource })
 }
 
 function getActionLabelT(t: TFunction, action: string): string {
@@ -220,7 +230,8 @@ export default function AuditLog() {
     }
     if (search) p.search = search
     if (resourceFilter !== 'all') p.resource = resourceFilter
-    if (actionFilter !== 'all') p.action = actionFilter
+    // Точное действие: «create» без точки ловил и «create_external_server»
+    if (actionFilter !== 'all') p.action = `.${actionFilter}`
     if (periodFilter !== 'all') {
       const now = new Date()
       if (periodFilter === '24h') p.date_from = subDays(now, 1).toISOString()
@@ -258,7 +269,7 @@ export default function AuditLog() {
     const set = new Set<string>()
     actions.forEach((a) => {
       const dot = a.indexOf('.')
-      if (dot > 0) set.add(a.slice(0, dot))
+      if (dot > 0) set.add(resourceKey(a.slice(0, dot)))
     })
     return Array.from(set).sort()
   }, [actions])
@@ -555,8 +566,8 @@ function AuditRow({
   const { t } = useTranslation()
   const { formatTimeAgo, formatDate } = useFormatters()
   const parsed = parseAction(item.action)
-  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || FileText
-  const resourceColor = RESOURCE_COLORS[parsed.resource] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || RESOURCE_ICONS[resourceStyleKey(parsed.resource)] || FileText
+  const resourceColor = RESOURCE_COLORS[parsed.resource] || RESOURCE_COLORS[resourceStyleKey(parsed.resource)] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
   const actionColor = getActionColor(parsed.action)
   const details = tryParseJSON(item.details)
   const description = getDescription(t, parsed.resource, parsed.action, item.resource_id, details)
@@ -683,8 +694,8 @@ function MobileAuditCard({ item }: { item: AuditLogEntry }) {
   const { t } = useTranslation()
   const { formatTimeAgo } = useFormatters()
   const parsed = parseAction(item.action)
-  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || FileText
-  const resourceColor = RESOURCE_COLORS[parsed.resource] || 'bg-gray-500/20 text-gray-400'
+  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || RESOURCE_ICONS[resourceStyleKey(parsed.resource)] || FileText
+  const resourceColor = RESOURCE_COLORS[parsed.resource] || RESOURCE_COLORS[resourceStyleKey(parsed.resource)] || 'bg-gray-500/20 text-gray-400'
   const actionColor = getActionColor(parsed.action)
   const details = tryParseJSON(item.details)
   const description = getDescription(t, parsed.resource, parsed.action, item.resource_id, details)

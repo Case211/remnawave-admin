@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from web.backend.api.deps import require_permission, AdminUser
+from shared import timefmt
 from shared.db_schema import AUDIT_TABLE
 from shared.db_query import select_sql
 
@@ -111,13 +112,15 @@ async def get_audit_stats(
                 ),
             )
 
-            # Today's count
+            # «Сегодня» — с полуночи по часам панели: CURRENT_DATE базы — это UTC
+            day_start = timefmt.parse_filter(timefmt.now().date().isoformat())
             today = await conn.fetchval(
                 select_sql(
                     AUDIT_TABLE,
                     "COUNT(*)",
-                    "WHERE created_at >= CURRENT_DATE",
+                    "WHERE created_at >= $1",
                 ),
+                day_start,
             )
 
             # By resource
@@ -135,8 +138,9 @@ async def get_audit_stats(
                 select_sql(
                     AUDIT_TABLE,
                     "admin_username, COUNT(*) as count",
-                    "WHERE created_at >= CURRENT_DATE GROUP BY admin_username ORDER BY count DESC LIMIT 10",
+                    "WHERE created_at >= $1 GROUP BY admin_username ORDER BY count DESC LIMIT 10",
                 ),
+                day_start,
             )
             by_admin = [
                 {"username": r["admin_username"], "count": r["count"]}

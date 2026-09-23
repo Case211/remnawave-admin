@@ -317,7 +317,7 @@ async def broadcast_audit_event(
             "resource_id": resource_id,
         },
         "timestamp": datetime.utcnow().isoformat(),
-    }, permission=("admins", "view"))
+    }, permission=("audit", "view"))
 
 
 async def broadcast_dashboard_stats(stats: Dict[str, Any]):

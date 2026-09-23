@@ -35,6 +35,11 @@ async def write_audit_log(
         logger.warning("write_audit_log failed: %s", e)
 
 
+def _like(value: str) -> str:
+    """Экранировать % и _ для LIKE: поиск «reset_traffic» не должен ловить любой символ на месте «_»."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def get_audit_logs(
     limit: int = 50,
     offset: int = 0,
@@ -66,12 +71,18 @@ async def get_audit_logs(
             params.append(admin_id)
             idx += 1
         if action:
+            # «.create» — точное действие у любого раздела; иначе — вхождение
             where_parts.append(f"action ILIKE ${idx}")
-            params.append(f"%{action}%")
+            params.append(f"%{_like(action)}" if action.startswith(".") else f"%{_like(action)}%")
             idx += 1
         if resource:
-            where_parts.append(f"resource = ${idx}")
-            params.append(resource)
+            # Фильтр страницы строится по префиксу действия («user»), а в колонке
+            # resource лежит «users»: сравнение только с колонкой давало пустоту
+            variants = {resource, f"{resource}s", resource[:-1] if resource.endswith("s") else resource}
+            where_parts.append(
+                f"(resource = ANY(${idx}::text[]) OR split_part(action, '.', 1) = ANY(${idx}::text[]))"
+            )
+            params.append(sorted(variants))
             idx += 1
         if resource_id:
             where_parts.append(f"resource_id = ${idx}")
@@ -93,7 +104,7 @@ async def get_audit_logs(
                 f"(admin_username ILIKE ${idx} OR action ILIKE ${idx} OR "
                 f"resource_id ILIKE ${idx} OR details ILIKE ${idx})"
             )
-            params.append(f"%{search}%")
+            params.append(f"%{_like(search)}%")
             idx += 1
 
         where_clause = ""

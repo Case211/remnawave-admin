@@ -136,6 +136,22 @@ _SKIP_DUPLICATES = {
 }
 
 
+# Разделы, где обработчики /api/v2 пишут аудит сами («user.delete» и т.п.).
+# Мидлварь писала ту же операцию второй раз («users.delete»), а для настроек —
+# ещё и со значением секретной настройки, которое обработчик маскирует.
+# Исключения — действия, которые обработчик не пишет.
+_HANDLER_LOGGED_V2 = {"users", "nodes", "hosts", "violations", "settings"}
+_HANDLER_NOT_LOGGED = {("users", "sync_hwid")}
+
+
+def _logged_by_handler(path: str, resource: str, action: str) -> bool:
+    return (
+        path.startswith("/api/v2/")
+        and resource in _HANDLER_LOGGED_V2
+        and (resource, action) not in _HANDLER_NOT_LOGGED
+    )
+
+
 def _match_route(method: str, path: str) -> Optional[Tuple[str, str, Optional[str]]]:
     """Match a request to a (resource, action, resource_id) tuple."""
     for route_method, pattern, resource, action_tpl in _ROUTE_MAP:
@@ -201,7 +217,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         resource, action, resource_id = match
 
         # Skip actions already logged manually
-        if (resource, action) in _SKIP_DUPLICATES:
+        if (resource, action) in _SKIP_DUPLICATES or _logged_by_handler(path, resource, action):
             return await call_next(request)
 
         # Capture request body before forwarding (body is cached by Starlette)
