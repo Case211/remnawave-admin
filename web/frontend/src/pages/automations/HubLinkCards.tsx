@@ -75,7 +75,7 @@ export function NodeScriptsPanel() {
           description={t('automations.hub.scripts.catalogDesc', {
             defaultValue: 'Готовые и кастомные shell-скрипты. Запуск ручной или через расписание.',
           })}
-          to="/fleet?tab=scripts"
+          to="/servers?tab=scripts"
         />
         <HubLinkCard
           accent="violet"
@@ -84,7 +84,7 @@ export function NodeScriptsPanel() {
           description={t('automations.hub.scripts.historyDesc', {
             defaultValue: 'Логи выполненных скриптов, exit-коды, вывод и поиск по нодам.',
           })}
-          to="/fleet?tab=history"
+          to="/servers?tab=history"
         />
         <HubLinkCard
           accent="amber"
@@ -93,7 +93,7 @@ export function NodeScriptsPanel() {
           description={t('automations.hub.scripts.terminalDesc', {
             defaultValue: 'Прямой SSH-терминал к ноде через панель.',
           })}
-          to="/fleet?tab=monitoring"
+          to="/servers"
         />
       </div>
     </div>
@@ -117,7 +117,7 @@ export function SchedulesPanel() {
           description={t('automations.hub.schedules.fleetDesc', {
             defaultValue: 'CRON-расписание для скриптов на нодах. История, активация/отключение.',
           })}
-          to="/fleet?tab=scheduled"
+          to="/servers?tab=scheduled"
         />
         <HubLinkCard
           accent="cyan"

@@ -8,7 +8,7 @@ Without it there is no [anti-abuse](/en/guide/anti-abuse) — the panel simply h
 
 The panel builds the command for you, token included:
 
-1. **Nodes** → the node → **Agent token** → **Install agent**
+1. **Servers → Panel nodes** → the node menu → **Agent token** → **Install agent**
 2. Copy the resulting line and run it on the node:
 
 ```bash
@@ -33,7 +33,7 @@ The script creates `/opt/remnawave-node-agent/`, downloads `docker-compose.yml`,
 
 ## Manual install
 
-Generate the token in the panel (**Nodes → node → Agent token**) or in the bot. It is shown once.
+Generate the token in the panel (**Servers → Panel nodes → node menu → Agent token**) or in the bot. It is shown once.
 
 ```bash
 mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
@@ -114,13 +114,13 @@ The agent also works on a server that is not a Remnawave node: the bot, the pane
 It collects CPU, memory, disk and network, keeps the command channel (terminal, scripts), and simply
 runs in "metrics only" mode when there is no Xray log.
 
-1. **Fleet → Add server**, enter a name and an address.
+1. **Servers → Fleet → Add server**, enter a name and an address.
 2. Copy the install command from the response and run it on the server: it is the same command as for
    nodes, only the UUID is issued by the admin panel rather than by Remnawave.
 3. The server shows up in Fleet with a "Server" badge after the first agent report. Alert rules for
    CPU, RAM, disk and "not responding" apply to it as well.
 
-Such servers do not appear in the **Nodes** section or in the node counters on the dashboard, and the
+Such servers do not appear in the **Panel nodes** tab or in the node counters on the dashboard, and the
 panel sync leaves them alone. Connectivity follows the metrics: an agent silent for more than five
 minutes means the server is offline. Remove it with the button in its Fleet card; stop the agent
 container on the server yourself afterwards.

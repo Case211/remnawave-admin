@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   Users,
   Server,
-  Activity,
   Globe,
   ShieldAlert,
   Settings,
@@ -37,6 +36,8 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   permission: { resource: string; action: string } | null
+  /** Виден, если есть хотя бы одно из прав (вместо единственного permission). */
+  anyPermission?: { resource: string; action: string }[]
   /** Выделить пункт цветом: он не про рутину, на него хотят обратить внимание. */
   accent?: boolean
 }
@@ -86,8 +87,14 @@ export const navigation: NavigationEntry[] = [
   { name: 'nav.squads', href: '/squads', icon: UsersRound, permission: { resource: 'users', action: 'view' } },
   // Infrastructure — «управляю железом и конфигурацией»
   { type: 'section', name: 'nav.sections.infrastructure' },
-  { name: 'nav.nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
-  { name: 'nav.fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
+  // «Сервера» — ноды панели и флот машин на одной странице, вкладками
+  {
+    name: 'nav.servers',
+    href: '/servers',
+    icon: Server,
+    permission: null,
+    anyPermission: [{ resource: 'fleet', action: 'view' }, { resource: 'nodes', action: 'view' }],
+  },
   { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'nav.dns', href: '/dns', icon: Network, permission: { resource: 'dns', action: 'view' } },
   { name: 'nav.bscheck', href: '/bscheck', icon: ShieldCheck, permission: { resource: 'bscheck', action: 'view' } },
@@ -139,6 +146,7 @@ type PermissionCheck = (resource: string, action: string) => boolean
 
 /** Виден ли пункт текущему админу (пункты без permission видны всем). */
 export function isItemVisible(item: NavItem, hasPermission: PermissionCheck): boolean {
+  if (item.anyPermission) return item.anyPermission.some((p) => hasPermission(p.resource, p.action))
   if (!item.permission) return true
   return hasPermission(item.permission.resource, item.permission.action)
 }

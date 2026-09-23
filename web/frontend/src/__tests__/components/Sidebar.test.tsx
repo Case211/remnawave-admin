@@ -97,7 +97,9 @@ describe('Sidebar', () => {
     )
     const { container } = renderSidebar()
     const routes = menuRoutes(container)
-    expect(routes.slice(0, 3)).toEqual(['/nodes', '/fleet', '/hosts'])
+    // Старые «Ноды» и «Флот» из сохранённого порядка превращаются в «Сервера»
+    // на месте «Нод»
+    expect(routes.slice(0, 2)).toEqual(['/servers', '/hosts'])
     expect(routes.indexOf('/')).toBeGreaterThan(routes.indexOf('/hosts'))
     // Пункты, которых не было в сохранённом порядке, никуда не делись — и
     // остались в родной секции, а не съехали в конец меню

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useFormatters } from '@/lib/useFormatters'
+import { PanelNodeChip } from './PanelNodeChip'
 import CircularGauge from './CircularGauge'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -162,10 +163,12 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-white font-semibold truncate text-sm">{node.name}</span>
-            {node.is_external && (
+            {node.is_external ? (
               <Badge variant="outline" className="shrink-0 h-5 px-1.5 py-0 text-[10px] border-sky-500/40 bg-sky-500/10 text-sky-300">
                 {t('fleet.server.badge')}
               </Badge>
+            ) : (
+              <PanelNodeChip uuid={node.uuid} />
             )}
           </div>
           <div className="flex items-center gap-2">

@@ -91,7 +91,7 @@ Repeat notifications about the same user are held back by a cooldown, so a singl
 
 ## Node shaper
 
-A speed cap for every client address on the node — keeps heavy downloaders in check without hurting everyone else. Configured per node: **Nodes → node menu → Client shaper**. Off by default.
+A speed cap for every client address on the node — keeps heavy downloaders in check without hurting everyone else. Configured per node: **Servers → Panel nodes → node menu → Client shaper**. Off by default.
 
 | Field | Meaning |
 |-------|---------|

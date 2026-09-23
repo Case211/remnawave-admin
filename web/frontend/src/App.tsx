@@ -25,8 +25,7 @@ import OAuthCallback from './pages/OAuthCallback'
 // Lazy-loaded pages
 const Users = lazy(() => import('./pages/Users'))
 const UserDetail = lazy(() => import('./pages/UserDetail'))
-const Nodes = lazy(() => import('./pages/Nodes'))
-const Fleet = lazy(() => import('./pages/Fleet'))
+const Servers = lazy(() => import('./pages/Servers'))
 const Hosts = lazy(() => import('./pages/Hosts'))
 const Violations = lazy(() => import('./pages/Violations'))
 const Blocking = lazy(() => import('./pages/Blocking'))
@@ -57,6 +56,7 @@ const BedolagaReferrals = lazy(() => import('./pages/bedolaga/BedolagaReferrals'
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Plugin UI route registry — see web/frontend/src/plugins/registry.tsx
+import { ToServers } from './components/ToServers'
 import { PLUGIN_ROUTES } from './plugins/registry'
 import { useActivePlugins } from './lib/plugins'
 
@@ -86,8 +86,10 @@ function ProtectedShell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/users" element={<Users />} />
             <Route path="/users/:uuid" element={<UserDetail />} />
-            <Route path="/nodes" element={<Nodes />} />
-            <Route path="/fleet" element={<Fleet />} />
+            <Route path="/servers" element={<Servers />} />
+            {/* Старые адреса: закладки, уведомления, ссылки из других разделов */}
+            <Route path="/nodes" element={<ToServers tab="nodes" />} />
+            <Route path="/fleet" element={<ToServers />} />
             <Route path="/hosts" element={<Hosts />} />
             <Route path="/violations" element={<Violations />} />
             <Route path="/blocking" element={<Blocking />} />

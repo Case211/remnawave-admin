@@ -395,7 +395,7 @@ async def _notify_penalty(node_uuid, node_name, settings_row, row_id, ev, user_l
         channels=["telegram", "in_app"],
         topic_type="violations",
         telegram_body=body,
-        link="/nodes",
+        link=f"/servers?tab=nodes&node={node_uuid}",
     )
 
 

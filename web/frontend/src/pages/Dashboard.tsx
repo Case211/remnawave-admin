@@ -1458,7 +1458,7 @@ const NodeLoadCard = memo(function NodeLoadCard({
     <Card
       className="animate-fade-in-up cursor-pointer transition-all"
       style={{ animationDelay: '0.2s', '--card-accent-rgb': '139, 92, 246' } as React.CSSProperties}
-      onClick={() => navigate('/fleet')}
+      onClick={() => navigate('/servers')}
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -2172,7 +2172,7 @@ export default function Dashboard() {
             icon={Server}
             color="violet"
             subtitle={overview ? t('dashboard.nodesSubtitle', { offline: overview.offline_nodes, disabled: overview.disabled_nodes, online: overview.users_online || 0 }) : undefined}
-            onClick={() => navigate('/nodes')}
+            onClick={() => navigate('/servers?tab=nodes')}
             loading={overviewLoading && canViewAnalytics}
             index={2}
           />
@@ -2440,7 +2440,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { icon: Users, label: t('dashboard.users'), href: '/users', perm: 'users' },
-                  { icon: Server, label: t('dashboard.nodes'), href: '/nodes', perm: 'nodes' },
+                  { icon: Server, label: t('dashboard.nodes'), href: '/servers?tab=nodes', perm: 'nodes' },
                   { icon: ShieldAlert, label: t('dashboard.violationsLabel'), href: '/violations', perm: 'violations' },
                   { icon: Settings, label: t('dashboard.settings'), href: '/settings', perm: 'settings' },
                 ]

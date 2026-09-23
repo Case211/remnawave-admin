@@ -193,14 +193,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           </CommandItem>
           <CommandItem
             value="nodes ноды серверы"
-            onSelect={() => runCommand(() => navigate('/nodes'))}
+            onSelect={() => runCommand(() => navigate('/servers?tab=nodes'))}
           >
             <Server className="mr-2 h-4 w-4" />
             {t('nav.nodes')}
           </CommandItem>
           <CommandItem
             value="fleet флот"
-            onSelect={() => runCommand(() => navigate('/fleet'))}
+            onSelect={() => runCommand(() => navigate('/servers'))}
           >
             <Ship className="mr-2 h-4 w-4" />
             {t('nav.fleet')}

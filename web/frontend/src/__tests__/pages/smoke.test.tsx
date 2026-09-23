@@ -287,6 +287,21 @@ describe('Page smoke tests', () => {
     expect(container).toBeTruthy()
   })
 
+  it('Servers renders without errors', async () => {
+    const Servers = (await import('@/pages/Servers')).default
+    const { container } = renderPage(<Servers />)
+    expect(container).toBeTruthy()
+  })
+
+  it('Nodes и Fleet встраиваются во вкладки без своего заголовка', async () => {
+    const Nodes = (await import('@/pages/Nodes')).default
+    const Fleet = (await import('@/pages/Fleet')).default
+    const nodes = renderPage(<Nodes embedded />)
+    expect(nodes.container.querySelector('.page-header-title')).toBeNull()
+    const fleet = renderPage(<Fleet embedded tab="monitoring" />)
+    expect(fleet.container.querySelector('.page-header-title')).toBeNull()
+  })
+
   it('Hosts renders without errors', async () => {
     const Hosts = (await import('@/pages/Hosts')).default
     const { container } = renderPage(<Hosts />)

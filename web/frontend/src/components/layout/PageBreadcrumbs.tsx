@@ -16,6 +16,7 @@ export const ROUTE_LABEL_KEYS: Record<string, string> = {
   users: 'nav.users',
   nodes: 'nav.nodes',
   fleet: 'nav.fleet',
+  servers: 'nav.servers',
   hosts: 'nav.hosts',
   violations: 'nav.violations',
   automations: 'nav.automations',
