@@ -24,7 +24,9 @@
     "traffic_limit_bytes": 107374182400,
     "used_traffic_bytes": 52013875200,
     "expire_at": "2026-06-01T00:00:00Z",
-    "online": true
+    "online": true,
+    "short_uuid": "AbCdEf123",
+    "subscription_url": "https://sub.example.com/AbCdEf123"
   }
 ]
 ```
@@ -32,6 +34,8 @@
 ### `GET /users/{uuid}` — карточка
 
 Область: `users:read`. Вернёт объект пользователя или `404`.
+
+`short_uuid` и `subscription_url` — идентификатор и ссылка подписки из панели. Ссылка берётся из последнего синка с панелью; пока пользователь не синхронизирован, поле будет `null`. Ссылка даёт доступ к конфигам, не публикуйте её.
 
 ### `POST /users` — создать
 
@@ -57,7 +61,19 @@
 `external_squad_uuid` и `active_internal_squads` необязательны; UUID сквадов — из `GET /squads/external`
 и `GET /squads/internal` (см. ниже).
 
-Ответ — `201` и `{"success": true, "uuid": "..."}`.
+Ответ — `201`:
+
+```json
+{
+  "success": true,
+  "message": "User alice created",
+  "uuid": "a2e...",
+  "short_uuid": "AbCdEf123",
+  "subscription_url": "https://sub.example.com/AbCdEf123"
+}
+```
+
+Пользователь сразу пишется в базу админки, так что `GET /users/{uuid}` работает без ожидания синка. Если локальная база недоступна, `uuid` может прийти `null` — пользователь появится после следующего синка.
 
 ### Остальные действия
 

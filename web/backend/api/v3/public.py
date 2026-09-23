@@ -43,6 +43,8 @@ class UserPublic(_PublicBase):
     used_traffic_bytes: Optional[int] = None
     expire_at: Optional[str] = None
     online: Optional[bool] = None
+    short_uuid: Optional[str] = None
+    subscription_url: Optional[str] = None
 
 
 class UserCreate(BaseModel):
@@ -218,6 +220,13 @@ class SuccessResult(BaseModel):
     message: str = ""
 
 
+class UserCreated(SuccessResult):
+    """Ответ на создание: сразу с тем, что нужно, чтобы выдать клиенту подписку."""
+    uuid: Optional[str] = None
+    short_uuid: Optional[str] = None
+    subscription_url: Optional[str] = None
+
+
 # ── Helpers ──────────────────────────────────────────────────────
 
 def _service_unavailable():
@@ -246,6 +255,15 @@ async def _resolve_user_key(user_uuid: str) -> str | int:
 # ══════════════════════════════════════════════════════════════════
 # Users — Read
 # ══════════════════════════════════════════════════════════════════
+
+#: Ссылка подписки — как её отдала панель при синке (raw_data)
+_SUB_COLUMNS = "short_uuid, raw_data->>'subscriptionUrl' AS subscription_url"
+#: Онлайн — активность за последние 5 минут по onlineAt из последнего синка
+_ONLINE_COLUMN = (
+    "COALESCE(immutable_tstz(raw_data->'userTraffic'->>'onlineAt') "
+    "> NOW() - INTERVAL '5 minutes', FALSE) AS online"
+)
+
 
 @router.get("/users", response_model=List[UserPublic])
 async def list_users(
@@ -286,7 +304,7 @@ async def list_users(
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             f"SELECT uuid, username, status, traffic_limit_bytes, "
-            f"used_traffic_bytes, expire_at "
+            f"used_traffic_bytes, expire_at, {_SUB_COLUMNS}, {_ONLINE_COLUMN} "
             f"FROM users WHERE {where} ORDER BY username LIMIT ${idx - 1} OFFSET ${idx}",
             *args,
         )
@@ -313,7 +331,7 @@ async def get_user(
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT uuid, username, status, traffic_limit_bytes, "
-            "used_traffic_bytes, expire_at "
+            f"used_traffic_bytes, expire_at, {_SUB_COLUMNS}, {_ONLINE_COLUMN} "
             "FROM users WHERE uuid = $1",
             uuid,
         )
@@ -330,7 +348,7 @@ async def get_user(
 # Users — Write
 # ══════════════════════════════════════════════════════════════════
 
-@router.post("/users", response_model=SuccessResult, status_code=201)
+@router.post("/users", response_model=UserCreated, status_code=201)
 async def create_user(
     body: UserCreate,
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
@@ -338,7 +356,7 @@ async def create_user(
     """Create a new user via Remnawave Panel API."""
     try:
         api = _get_api_client()
-        await api.create_user(
+        result = await api.create_user(
             username=body.username,
             expire_at=body.expire_at,
             traffic_limit_bytes=body.traffic_limit_bytes,
@@ -352,10 +370,38 @@ async def create_user(
             external_squad_uuid=body.external_squad_uuid,
             active_internal_squads=body.active_internal_squads,
         )
-        return SuccessResult(success=True, message=f"User {body.username} created")
     except Exception as e:
         logger.error("v3 create_user failed: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
+
+    user = result.get("response", result) if isinstance(result, dict) else {}
+    user = user if isinstance(user, dict) else {}
+    return UserCreated(
+        success=True,
+        message=f"User {body.username} created",
+        uuid=await _store_created_user(user),
+        short_uuid=user.get("shortUuid"),
+        subscription_url=user.get("subscriptionUrl"),
+    )
+
+
+async def _store_created_user(user: dict) -> Optional[str]:
+    """Записать нового юзера в локальную БД, не дожидаясь синка, и вернуть его uuid.
+
+    Без этого GET /users/{uuid} сразу после создания отвечал бы 404. Панель
+    3.x отвечает числовым id без uuid — тогда uuid берём из строки после upsert.
+    """
+    user_uuid = user.get("uuid") or None
+    panel_id = user.get("id")
+    try:
+        from shared.database import db_service
+        if db_service.is_connected and (user_uuid or panel_id is not None):
+            await db_service.upsert_user(user)
+            if not user_uuid and panel_id is not None:
+                user_uuid = await db_service.get_user_uuid_by_panel_id(int(panel_id))
+    except Exception as e:
+        logger.error("v3 create_user: not stored locally, visible after next sync: %s", e)
+    return str(user_uuid) if user_uuid else None
 
 
 @router.post("/users/{uuid}/enable", response_model=SuccessResult)

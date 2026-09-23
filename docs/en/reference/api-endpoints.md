@@ -31,7 +31,9 @@ Response: `List[UserPublic]`.
     "traffic_limit_bytes": 107374182400,
     "used_traffic_bytes": 52013875200,
     "expire_at": "2026-06-01T00:00:00Z",
-    "online": true
+    "online": true,
+    "short_uuid": "AbCdEf123",
+    "subscription_url": "https://sub.example.com/AbCdEf123"
   }
 ]
 ```
@@ -40,6 +42,8 @@ Response: `List[UserPublic]`.
 
 Required scope: `users:read`.
 Returns `UserPublic` or `404`.
+
+`short_uuid` and `subscription_url` are the panel's subscription id and link. The link comes from the last sync with the panel and is `null` until the user has been synced. It grants access to the configs — don't publish it.
 
 ### `POST /users` - create a user
 
@@ -67,7 +71,19 @@ Body:
 `external_squad_uuid` and `active_internal_squads` are optional; take squad UUIDs from
 `GET /squads/external` and `GET /squads/internal` (below).
 
-Returns `201` with `{"success": true, "uuid": "..."}`.
+Returns `201`:
+
+```json
+{
+  "success": true,
+  "message": "User alice created",
+  "uuid": "a2e...",
+  "short_uuid": "AbCdEf123",
+  "subscription_url": "https://sub.example.com/AbCdEf123"
+}
+```
+
+The user is written to the admin database right away, so `GET /users/{uuid}` works without waiting for a sync. If the local database is unavailable, `uuid` may be `null` — the user shows up after the next sync.
 
 ### `POST /users/{uuid}/enable` - enable
 
