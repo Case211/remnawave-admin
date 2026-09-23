@@ -5934,7 +5934,10 @@
     "userCreateFailed": "Не удалось создать пользователя",
     "userUpdateFailed": "Не удалось обновить пользователя",
     "userDeleteFailed": "Не удалось удалить пользователя",
-    "tokenParseFailed": "Не удалось разобрать токен"
+    "tokenParseFailed": "Не удалось разобрать токен",
+    "API_KEY_NOT_FOUND": "API-ключ не найден",
+    "WEBHOOK_NOT_FOUND": "Вебхук не найден",
+    "SCOPE_NOT_ALLOWED": "Нельзя выдать ключу права, которых нет у вас самого"
   },
   "backup": {
     "title": "Резервные копии",

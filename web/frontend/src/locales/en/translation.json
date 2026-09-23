@@ -5936,7 +5936,10 @@
     "userCreateFailed": "Failed to create user",
     "userUpdateFailed": "Failed to update user",
     "userDeleteFailed": "Failed to delete user",
-    "tokenParseFailed": "Failed to parse token"
+    "tokenParseFailed": "Failed to parse token",
+    "API_KEY_NOT_FOUND": "API key not found",
+    "WEBHOOK_NOT_FOUND": "Webhook not found",
+    "SCOPE_NOT_ALLOWED": "You cannot grant an API key rights you do not have yourself"
   },
   "backup": {
     "title": "Backups",

@@ -1,6 +1,6 @@
 """API key management endpoints."""
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
@@ -11,6 +11,24 @@ from web.backend.core.errors import api_error, E
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Область ключа → право, которое должно быть у создателя. Ключ не может
+# дать больше, чем есть у админа: иначе право «создавать ключи» превращалось
+# в полный доступ ко всем юзерам и нодам.
+SCOPE_PERMISSION = {
+    "users:read": ("users", "view"),
+    "users:write": ("users", "edit"),
+    "users:delete": ("users", "delete"),
+    "nodes:read": ("nodes", "view"),
+    "nodes:write": ("nodes", "edit"),
+    "nodes:token": ("nodes", "edit"),
+    "hosts:read": ("hosts", "view"),
+    "bulk:write": ("users", "bulk_operations"),
+    "stats:read": ("analytics", "view"),
+    "violations:read": ("violations", "view"),
+}
+# Ключ работает по всем юзерам — такие области только админу без ограничения видимости
+_ALL_USERS_SCOPES = {"users:read", "users:write", "users:delete", "bulk:write", "violations:read"}
 
 AVAILABLE_SCOPES = [
     "users:read",
@@ -40,6 +58,34 @@ async def api_status(
 
 
 # ── Schemas ──────────────────────────────────────────────────────
+
+async def _check_scopes_allowed(admin: AdminUser, scopes: List[str]) -> None:
+    """Каждую область ключа админ должен иметь сам."""
+    from web.backend.core.rbac import get_visible_user_uuids
+    full_access = admin.account_id is None or admin.role == "superadmin"
+    for scope in scopes:
+        if scope not in AVAILABLE_SCOPES:
+            raise api_error(400, E.INVALID_ACTION, f"Unknown scope: {scope}")
+        resource, action = SCOPE_PERMISSION[scope]
+        if not full_access and not admin.has_permission(resource, action):
+            raise api_error(403, E.SCOPE_NOT_ALLOWED, f"Scope {scope} needs {resource}:{action}")
+    if _ALL_USERS_SCOPES.intersection(scopes) and await get_visible_user_uuids(admin) is not None:
+        raise api_error(403, E.SCOPE_NOT_ALLOWED, "User scopes need unrestricted user access")
+
+
+def _parse_expiry(value: Optional[str]) -> Optional[datetime]:
+    """Срок ключа: дата «до» — до конца дня по часам панели; в прошлом — отказ."""
+    if not value:
+        return None
+    from shared import timefmt
+    try:
+        expires = timefmt.parse_filter(value, end=True)
+    except ValueError:
+        raise api_error(400, E.INVALID_INPUT, "Invalid expires_at format")
+    if expires is None or expires <= datetime.now(timezone.utc):
+        raise api_error(400, E.INVALID_INPUT, "expires_at must be in the future")
+    return expires
+
 
 class ApiKeyCreate(BaseModel):
     name: str
@@ -119,17 +165,8 @@ async def create_api_key(
     if not db_service.is_connected:
         raise api_error(503, E.DB_UNAVAILABLE)
 
-    # Validate scopes
-    for scope in body.scopes:
-        if scope not in AVAILABLE_SCOPES:
-            raise api_error(400, E.INVALID_ACTION, f"Unknown scope: {scope}")
-
-    expires_at = None
-    if body.expires_at:
-        try:
-            expires_at = datetime.fromisoformat(body.expires_at)
-        except ValueError:
-            raise api_error(400, E.INVALID_ACTION, "Invalid expires_at format")
+    await _check_scopes_allowed(admin, body.scopes)
+    expires_at = _parse_expiry(body.expires_at)
 
     admin_id = admin.account_id
     admin_username = admin.username or str(admin.telegram_id)
@@ -141,6 +178,7 @@ async def create_api_key(
         admin_id=admin_id,
         admin_username=admin_username,
         expires_at=expires_at,
+        description=body.description,
     )
 
     record["scopes"] = list(record["scopes"]) if record["scopes"] else []
@@ -166,9 +204,7 @@ async def update_api_key(
         raise api_error(400, E.NO_FIELDS_TO_UPDATE)
 
     if "scopes" in updates:
-        for scope in updates["scopes"]:
-            if scope not in AVAILABLE_SCOPES:
-                raise api_error(400, E.INVALID_ACTION, f"Unknown scope: {scope}")
+        await _check_scopes_allowed(admin, updates["scopes"])
 
     set_clauses = []
     params = []
@@ -188,7 +224,7 @@ async def update_api_key(
         )
 
     if not row:
-        raise api_error(404, E.ADMIN_NOT_FOUND, "API key not found")
+        raise api_error(404, E.API_KEY_NOT_FOUND)
 
     d = dict(row)
     d["scopes"] = list(d["scopes"]) if d["scopes"] else []
@@ -213,7 +249,7 @@ async def delete_api_key(
             "DELETE FROM api_keys WHERE id = $1", key_id,
         )
     if result == "DELETE 0":
-        raise api_error(404, E.ADMIN_NOT_FOUND, "API key not found")
+        raise api_error(404, E.API_KEY_NOT_FOUND)
 
 
 @router.post("/{key_id}/rotate", response_model=ApiKeyCreated)
@@ -249,7 +285,7 @@ async def rotate_api_key(
             key_hash, key_prefix, key_id,
         )
     if not row:
-        raise api_error(404, E.ADMIN_NOT_FOUND, "API key not found")
+        raise api_error(404, E.API_KEY_NOT_FOUND)
     d = dict(row)
     d["scopes"] = list(d["scopes"]) if d["scopes"] else []
     for dt in ("expires_at", "last_used_at", "created_at"):

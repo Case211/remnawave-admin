@@ -166,6 +166,9 @@ async def update_webhook(
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise api_error(400, E.NO_FIELDS_TO_UPDATE)
+    # Пустой секрет — снять подпись (раньше убрать секрет было нельзя)
+    if updates.get("secret") == "":
+        updates["secret"] = None
     if "events" in updates:
         _validate_events(updates["events"])
     if "signature_version" in updates:
@@ -195,7 +198,7 @@ async def update_webhook(
             *params,
         )
     if not row:
-        raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
+        raise api_error(404, E.WEBHOOK_NOT_FOUND)
     return _row_to_response(row)
 
 
@@ -212,7 +215,7 @@ async def delete_webhook(
             delete_sql(WEBHOOK_SUBSCRIPTIONS_TABLE, "id = $1"), webhook_id,
         )
     if result == "DELETE 0":
-        raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
+        raise api_error(404, E.WEBHOOK_NOT_FOUND)
 
 
 # ── Test & Delivery History ──────────────────────────────────────
@@ -250,7 +253,7 @@ async def test_webhook(
             webhook_id,
         )
     if not row:
-        raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
+        raise api_error(404, E.WEBHOOK_NOT_FOUND)
 
     ok, err = check_url_safety(row["url"])
     if not ok:

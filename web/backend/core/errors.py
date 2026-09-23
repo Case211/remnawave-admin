@@ -144,6 +144,9 @@ class ErrorCode(str, Enum):
 
     # ── Reports / ASN ─────────────────────────────────────────
     REPORT_NOT_FOUND = "REPORT_NOT_FOUND"
+    API_KEY_NOT_FOUND = "API_KEY_NOT_FOUND"
+    WEBHOOK_NOT_FOUND = "WEBHOOK_NOT_FOUND"
+    SCOPE_NOT_ALLOWED = "SCOPE_NOT_ALLOWED"
     ASN_NOT_FOUND = "ASN_NOT_FOUND"
 
     # ── Backups ─────────────────────────────────────────────────
@@ -224,6 +227,9 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.ATTACHMENT_NOT_FOUND: "Attachment not found",
     E.SUPPRESSION_NOT_FOUND: "Suppressed address not found",
     E.REPORT_NOT_FOUND: "Report not found",
+    E.API_KEY_NOT_FOUND: "API key not found",
+    E.WEBHOOK_NOT_FOUND: "Webhook not found",
+    E.SCOPE_NOT_ALLOWED: "You cannot grant an API key rights you do not have yourself.",
     E.ASN_NOT_FOUND: "ASN not found",
     E.BLOCKED_IP_NOT_FOUND: "Blocked IP not found",
     E.BLOCKED_IP_DUPLICATE: "IP already blocked",

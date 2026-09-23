@@ -44,15 +44,21 @@ async def validate_api_key(raw_key: str) -> Optional[dict]:
             return None
 
         async with db_service.acquire() as conn:
+            # Ключ отключённого или удалённого админа не работает: иначе
+            # доступ уволенного переживал его отключение
             row = await conn.fetchrow(
-                "SELECT id, name, scopes, is_active, expires_at "
-                "FROM api_keys WHERE key_hash = $1",
+                "SELECT k.id, k.name, k.scopes, k.is_active, k.expires_at, k.created_by_admin_id, "
+                "a.id AS owner_id, a.is_active AS owner_active "
+                "FROM api_keys k LEFT JOIN admin_accounts a ON a.id = k.created_by_admin_id "
+                "WHERE k.key_hash = $1",
                 key_hash,
             )
             if not row:
                 return None
 
             if not row["is_active"]:
+                return None
+            if row["created_by_admin_id"] is not None and not (row["owner_id"] and row["owner_active"]):
                 return None
 
             if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
@@ -81,6 +87,7 @@ async def create_api_key_record(
     admin_id: Optional[int],
     admin_username: str,
     expires_at: Optional[datetime] = None,
+    description: Optional[str] = None,
 ) -> tuple[str, dict]:
     """Create a new API key and store it.
 
@@ -93,10 +100,10 @@ async def create_api_key_record(
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
             "INSERT INTO api_keys (name, key_hash, key_prefix, scopes, expires_at, "
-            "created_by_admin_id, created_by_username) "
-            "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+            "created_by_admin_id, created_by_username, description) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
             name, key_hash, key_prefix, scopes, expires_at,
-            admin_id, admin_username,
+            admin_id, admin_username, description,
         )
 
     record = dict(row)
