@@ -28,7 +28,6 @@ export const ROUTE_LABEL_KEYS: Record<string, string> = {
   reports: 'nav.reports',
   resources: 'nav.resources',
   blocking: 'nav.blocking',
-  squads: 'nav.squads',
   admins: 'nav.admins',
   audit: 'nav.audit',
   logs: 'nav.logs',

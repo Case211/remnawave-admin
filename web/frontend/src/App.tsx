@@ -46,7 +46,6 @@ const Support = lazy(() => import('./pages/Support'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Resources = lazy(() => import('./pages/Resources'))
-const Squads = lazy(() => import('./pages/Squads'))
 const BedolagaDashboard = lazy(() => import('./pages/bedolaga/BedolagaDashboard'))
 const BedolagaCustomers = lazy(() => import('./pages/bedolaga/BedolagaCustomers'))
 const BedolagaCustomerDetail = lazy(() => import('./pages/bedolaga/BedolagaCustomerDetail'))
@@ -57,6 +56,7 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Plugin UI route registry — see web/frontend/src/plugins/registry.tsx
 import { ToServers } from './components/ToServers'
+import { ToResourcesSquads } from './components/ToResourcesSquads'
 import { PLUGIN_ROUTES } from './plugins/registry'
 import { useActivePlugins } from './lib/plugins'
 
@@ -110,7 +110,7 @@ function ProtectedShell() {
             <Route path="/api-keys" element={<ApiKeys />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/resources" element={<Resources />} />
-            <Route path="/squads" element={<Squads />} />
+            <Route path="/squads" element={<ToResourcesSquads />} />
             <Route path="/bedolaga" element={<BedolagaDashboard />} />
             <Route path="/bedolaga/customers" element={<BedolagaCustomers />} />
             <Route path="/bedolaga/customers/:id" element={<BedolagaCustomerDetail />} />

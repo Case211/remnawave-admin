@@ -16,7 +16,6 @@ import {
   Key,
   Bot,
   ShieldCheck,
-  UsersRound,
   Ticket,
   Megaphone,
   MessageSquare,
@@ -84,7 +83,6 @@ export const navigation: NavigationEntry[] = [
   // People — «управляю людьми»
   { type: 'section', name: 'nav.sections.people' },
   { name: 'nav.users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
-  { name: 'nav.squads', href: '/squads', icon: UsersRound, permission: { resource: 'users', action: 'view' } },
   // Infrastructure — «управляю железом и конфигурацией»
   { type: 'section', name: 'nav.sections.infrastructure' },
   // «Сервера» — ноды панели и флот машин на одной странице, вкладками
@@ -99,7 +97,14 @@ export const navigation: NavigationEntry[] = [
   { name: 'nav.dns', href: '/dns', icon: Network, permission: { resource: 'dns', action: 'view' } },
   { name: 'nav.bscheck', href: '/bscheck', icon: ShieldCheck, permission: { resource: 'bscheck', action: 'view' } },
   { name: 'nav.finance', href: '/finance', icon: Wallet, permission: { resource: 'finance', action: 'view' } },
-  { name: 'nav.resources', href: '/resources', icon: Boxes, permission: { resource: 'resources', action: 'view' } },
+  // «Ресурсы» — конфигурация панели: шаблоны, сниппеты, профили и сквады
+  {
+    name: 'nav.resources',
+    href: '/resources',
+    icon: Boxes,
+    permission: null,
+    anyPermission: [{ resource: 'resources', action: 'view' }, { resource: 'users', action: 'view' }],
+  },
   // Security — «защищаюсь»
   { type: 'section', name: 'nav.sections.security' },
   { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },

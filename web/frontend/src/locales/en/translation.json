@@ -175,7 +175,6 @@
     "reports": "Reports",
     "backups": "Backups",
     "apiKeys": "API & Webhooks",
-    "squads": "Squads",
     "bedolagaGroup": "Bedolaga Bot",
     "bedolaga": {
       "dashboard": "Dashboard",
@@ -5017,11 +5016,12 @@
   },
   "resources": {
     "title": "Resources",
-    "subtitle": "Manage templates, snippets and config profiles",
+    "subtitle": "Panel configuration: templates, snippets, profiles and squads",
     "tabs": {
       "templates": "Templates",
       "snippets": "Snippets",
-      "profiles": "Config Profiles"
+      "profiles": "Config Profiles",
+      "squads": "Squads"
     },
     "templates": {
       "description": "VPN subscription config templates",
@@ -6050,8 +6050,6 @@
     "description": "Your password was set by an administrator. For security, please set your own password."
   },
   "squads": {
-    "title": "Squads",
-    "subtitle": "Manage internal and external squads for user grouping",
     "internal": "Internal",
     "external": "External",
     "createInternal": "Create Internal Squad",

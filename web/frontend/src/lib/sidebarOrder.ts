@@ -163,10 +163,12 @@ export function applySidebarOrder(
 }
 
 // «Ноды» и «Флот» стали одним пунктом «Сервера»: он встаёт на место «Нод»,
-// а «Флот» из сохранённого порядка просто уходит
+// а «Флот» из сохранённого порядка просто уходит. «Сквады» стали вкладкой
+// «Ресурсов» — тоже уходят.
 const LEGACY_ITEMS: Record<string, string | null> = {
   'item:/nodes': 'item:/servers',
   'item:/fleet': null,
+  'item:/squads': null,
 }
 
 function renameLegacy(keys: string[]): string[] {

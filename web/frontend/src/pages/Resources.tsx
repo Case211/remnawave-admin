@@ -10,6 +10,7 @@ import {
   Settings,
   RefreshCw,
   FileJson,
+  UsersRound,
 } from '@/components/brand/icons'
 import { resourcesApi, Template, Snippet, ConfigProfile } from '../api/resources'
 import { ProfileEditorDialog } from '@/components/code/ProfileEditorDialog'
@@ -29,6 +30,9 @@ import { QueryError } from '@/components/QueryError'
 import { useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
 import { useFormatters } from '@/lib/useFormatters'
+import { SquadsPanel } from '@/components/squads/SquadsPanel'
+
+type ResourcesTab = 'templates' | 'snippets' | 'profiles' | 'squads'
 
 // Template type options
 const TEMPLATE_TYPES = [
@@ -55,13 +59,19 @@ export default function Resources() {
   const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
 
-  // Permissions
+  // Permissions: конфигурация — право resources, сквады — users (как и раньше)
+  const canViewConfig = useHasPermission('resources', 'view')
+  const canViewSquads = useHasPermission('users', 'view')
   const canCreate = useHasPermission('resources', 'create')
   const canUpdate = useHasPermission('resources', 'edit')
   const canDelete = useHasPermission('resources', 'delete')
 
   // Tab state — управление API-токенами панели убрано (только в самой Remnawave)
-  const [activeTab, setActiveTab] = useTabParam('templates', ['templates', 'snippets', 'profiles'])
+  const tabs: ResourcesTab[] = [
+    ...(canViewConfig ? (['templates', 'snippets', 'profiles'] as const) : []),
+    ...(canViewSquads ? (['squads'] as const) : []),
+  ]
+  const [activeTab, setActiveTab] = useTabParam<ResourcesTab>(tabs[0] ?? 'templates', tabs)
 
   // ── Templates ───────────────────────────────────────────────────
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
@@ -73,6 +83,7 @@ export default function Resources() {
   const { data: templates = [], isLoading: templatesLoading, isError: isTemplatesError, refetch: refetchTemplates } = useQuery({
     queryKey: ['templates'],
     queryFn: resourcesApi.getTemplates,
+    enabled: canViewConfig,
   })
 
   const createTemplateMutation = useMutation({
@@ -112,6 +123,7 @@ export default function Resources() {
   const { data: snippets = [], isLoading: snippetsLoading, isError: isSnippetsError, refetch: refetchSnippets } = useQuery({
     queryKey: ['snippets'],
     queryFn: resourcesApi.getSnippets,
+    enabled: canViewConfig,
   })
 
   const createSnippetMutation = useMutation({
@@ -193,6 +205,7 @@ export default function Resources() {
   const { data: configProfiles = [], isLoading: profilesLoading, isError: isProfilesError, refetch: refetchProfiles } = useQuery({
     queryKey: ['config-profiles'],
     queryFn: resourcesApi.getConfigProfiles,
+    enabled: canViewConfig,
   })
 
   const createProfileMutation = useMutation({
@@ -235,7 +248,15 @@ export default function Resources() {
   const hasError = isTemplatesError || isSnippetsError || isProfilesError
   const handleRetry = () => { refetchTemplates(); refetchSnippets(); refetchProfiles() }
 
-  if (hasError) {
+  if (!tabs.length) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-muted-foreground">{t('common.noPermission')}</p>
+      </div>
+    )
+  }
+
+  if (hasError && activeTab !== 'squads') {
     return (
       <div className="space-y-6">
         <div className="page-header">
@@ -261,18 +282,28 @@ export default function Resources() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="templates">
-            <Code className="w-4 h-4 mr-2" />
-            {t('resources.tabs.templates')}
-          </TabsTrigger>
-          <TabsTrigger value="snippets">
-            <Code className="w-4 h-4 mr-2" />
-            {t('resources.tabs.snippets')}
-          </TabsTrigger>
-          <TabsTrigger value="profiles">
-            <Settings className="w-4 h-4 mr-2" />
-            {t('resources.tabs.profiles')}
-          </TabsTrigger>
+          {canViewConfig && (
+            <>
+              <TabsTrigger value="templates">
+                <Code className="w-4 h-4 mr-2" />
+                {t('resources.tabs.templates')}
+              </TabsTrigger>
+              <TabsTrigger value="snippets">
+                <Code className="w-4 h-4 mr-2" />
+                {t('resources.tabs.snippets')}
+              </TabsTrigger>
+              <TabsTrigger value="profiles">
+                <Settings className="w-4 h-4 mr-2" />
+                {t('resources.tabs.profiles')}
+              </TabsTrigger>
+            </>
+          )}
+          {canViewSquads && (
+            <TabsTrigger value="squads">
+              <UsersRound className="w-4 h-4 mr-2" />
+              {t('resources.tabs.squads')}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Tab 2: Templates ─────────────────────────────────── */}
@@ -503,6 +534,12 @@ export default function Resources() {
             </div>
           )}
         </TabsContent>
+
+        {canViewSquads && (
+          <TabsContent value="squads" className="space-y-4">
+            <SquadsPanel />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* ── Dialogs ────────────────────────────────────────────── */}
