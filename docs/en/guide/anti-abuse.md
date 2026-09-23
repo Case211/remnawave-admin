@@ -77,7 +77,7 @@ There are four ways to apply it: the **"🐌 Throttle"** button under a violatio
 
 The node's link width does not need to be configured: ordinary traffic bypasses the shaper entirely, only the violators' addresses go through it.
 
-Since version 1.9.0 the agent leaves the interface's root qdisc alone. It steers the violators' traffic with a filter into its own `rwthrottle0` device and shapes it there, so your own `tc` tuning on the node (fq with custom parameters, cake, another service's shaper) stays as it was. The `ifb` kernel module is required; stock Ubuntu and Debian kernels ship it.
+With agent 1.9.0 the node shaper does the cutting (see below): the limit applies in both directions, on any port and to IPv6 as well. If the node-wide cap is enabled too, the client gets the lower of the two. 0 or empty speed means no limit: in the throttle dialog it lifts the personal limit, in settings it turns the bot button and automatic actions off.
 
 With a reserve squad configured, the violator is moved there as well, and their previous squads are remembered and restored when the limit is lifted.
 
@@ -88,6 +88,22 @@ People change addresses several times a day, so rules are not set once and forgo
 The notification arrives in Telegram with buttons: block, drop connections, whitelist — either entirely or only for the analyzer that raised the alarm (see [buttons under notifications](/en/guide/bot#buttons-under-notifications)). Automatic actions are marked in the record as taken by the system — there is no administrator behind them and nothing to review.
 
 Repeat notifications about the same user are held back by a cooldown, so a single incident does not turn into a stream of messages.
+
+## Node shaper
+
+A speed cap for every client address on the node — keeps heavy downloaders in check without hurting everyone else. Configured per node: **Nodes → node menu → Client shaper**. Off by default.
+
+| Field | Meaning |
+|-------|---------|
+| Inbound ports | clients connect to these ports; prefilled from the node profile |
+| Download, upload | cap per address, Mbit/s; 0 — no cap |
+| Penalty mode | whoever moves more than the threshold within the window (both directions) gets the penalty speed for a while |
+
+How it works: the agent (1.9.0+) attaches an eBPF program to the interface ingress and egress. Download packets are held until their scheduled departure time, upload is cut by dropping what exceeds the rate. The departure time is enforced by `fq`, so the agent installs it at the interface root when the kernel default sits there, and removes it when the shaper is turned off. If you set your own discipline, the agent leaves it alone: download is then cut more roughly, by dropping, and the dialog warns about it.
+
+::: warning Where it doesn't fit
+Several clients can sit behind one mobile carrier address — they share the cap. Behind a CDN every client arrives from CDN addresses, so don't enable the shaper there: everyone would share one cap.
+:::
 
 ## Reviewing an incident
 

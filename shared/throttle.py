@@ -24,6 +24,15 @@ from shared.database import db_service
 from shared.logger import logger
 
 
+def default_rate_kbit() -> int:
+    """Скорость по умолчанию из настроек, кбит/с. 0 или пусто — без лимита:
+    кнопка в боте и автодействия тогда ничего не урезают."""
+    try:
+        return max(0, int(config_service.get("throttle_default_kbit", 1024) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _squad_uuid() -> Optional[str]:
     """UUID резервного сквада для нарушителей. Пусто — сквады не трогаем."""
     value = config_service.get("throttle_squad_uuid", "") or ""

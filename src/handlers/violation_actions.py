@@ -420,11 +420,13 @@ async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmi
     боте незачем. Отсюда и задержка до минуты, о которой честно говорим.
     """
     from shared.config_service import config_service
+    from shared.throttle import default_rate_kbit
 
-    try:
-        rate_kbit = int(config_service.get("throttle_default_kbit", 1024) or 1024)
-    except (TypeError, ValueError):
-        rate_kbit = 1024
+    rate_kbit = default_rate_kbit()
+    if not rate_kbit:
+        # В настройках 0 или пусто — это «без лимита», урезать нечем
+        await callback.answer(_("vact.thr_unlimited"), show_alert=True)
+        return
 
     # Срок наказания берём из настроек: ноль там значит «до ручного снятия».
     try:

@@ -1043,6 +1043,7 @@
     "thr_suffix": "\n\n🐌 <i>Throttled to {rate} kbit/s{period}{moved} ({name})</i>",
     "thr_error": "❌ Could not throttle: {e}",
     "thr_moved": " + moved to the reserve squad",
+    "thr_unlimited": "ℹ️ The default speed in settings is 0, which means no limit. Nothing to throttle: set a speed in settings",
     "thr_period": " for {hours}h",
     "unthr_button": "↩️ Restore speed",
     "unthr_done": "↩️ Throttle lifted{restored}. Nodes learn about it within a minute",

@@ -31,6 +31,7 @@ from web.backend.core.ip_whitelist import get_allowed_ips, is_ip_allowed
 from web.backend.core.rate_limit import limiter
 from web.backend.core.update_checker import get_latest_version
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
+from web.backend.api.v2 import node_shaper as node_shaper_api
 from web.backend.api.v2 import settings as settings_api
 from web.backend.api.v2 import diagnostics as diagnostics_api
 from web.backend.api.v2 import admins as admins_api, roles as roles_api
@@ -1163,6 +1164,7 @@ def create_app() -> FastAPI:
         app.include_router(auth.router, prefix="/api/v2/auth", tags=["auth"])
         app.include_router(users.router, prefix="/api/v2/users", tags=["users"])
         app.include_router(nodes.router, prefix="/api/v2/nodes", tags=["nodes"])
+        app.include_router(node_shaper_api.router, prefix="/api/v2/nodes", tags=["nodes"])
         app.include_router(analytics.router, prefix="/api/v2/analytics", tags=["analytics"])
         app.include_router(violations.router, prefix="/api/v2/violations", tags=["violations"])
         app.include_router(hosts.router, prefix="/api/v2/hosts", tags=["hosts"])

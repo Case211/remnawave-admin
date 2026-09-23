@@ -42,6 +42,7 @@ ALLOWED_COMMAND_TYPES = {
     "sync_blocked_ips",
     "sync_throttled_ips",
     "set_ndpi",
+    "set_shaper",
     "ping",
 }
 
@@ -83,24 +84,6 @@ def verify_signature(
     return hmac.compare_digest(expected, signature)
 
 
-# ── Throttling: хозяйство агента на ноде ─────────────────────────
-#
-# По этим меткам агент узнаёт своё и снимает только его. Корень интерфейса
-# и чужие фильтры он не трогает никогда: там может жить чужой тюнинг (fq с
-# параметрами, cake, шейпер другого сервиса), а снос корня ломал его при
-# каждом переподключении агента (issue #281).
-
-# Своё ifb-устройство: в нём живёт HTB с личными классами наказанных адресов.
-THROTTLE_IFB = "rwthrottle0"
-# Приоритет наших фильтров на выходе основного интерфейса. Обязан быть меньше
-# 49152: с этого номера ядро раздаёт приоритеты фильтрам, поставленным без
-# явного, и там обычно висят eBPF-программы других сервисов. Такая программа
-# отпускает пакет вердиктом «пропустить», проверка на ней заканчивается, и
-# фильтр с номером больше не увидел бы ни одного пакета.
-# 29303 — это «rw» в ASCII: запомнить легко, случайно совпасть трудно.
-THROTTLE_PREF = 29303
-
-
 # ── Command Runner ───────────────────────────────────────────────
 
 class CommandRunner:
@@ -118,6 +101,15 @@ class CommandRunner:
         # пришлось лезть в .env на каждой ноде. Сам агент решать за панель
         # ничего не должен, поэтому здесь только вызов контроллера.
         self._ndpi_control = ndpi_control
+
+        # Шейпер ноды: общий конфиг приходит командой set_shaper, персональные
+        # лимиты — sync_throttled_ips. Программа одна на оба, поэтому и
+        # помнить их нужно вместе. «Загружена» — в этом процессе агента:
+        # после его перезапуска пинов нет, и ставить приходится заново.
+        from . import shaper as _shaper
+        self._shaper_general = _shaper.DISABLED
+        self._shaper_personal: Dict[str, int] = {}
+        self._shaper_loaded = False
 
     async def handle(self, msg: dict) -> None:
         """Route an incoming command message."""
@@ -167,6 +159,8 @@ class CommandRunner:
             await self._sync_throttled_ips(msg)
         elif msg_type == "set_ndpi":
             await self._set_ndpi(msg)
+        elif msg_type == "set_shaper":
+            await self._set_shaper(msg)
 
     async def _run_shell(self, script: str, timeout: int) -> tuple:
         """Run a shell script (on the HOST via nsenter when host_mode).
@@ -181,7 +175,21 @@ class CommandRunner:
             )
         else:
             shell_cmd = script
+        return await self._communicate(shell_cmd, timeout)
 
+    async def _run_hostnet(self, script: str, timeout: int) -> tuple:
+        """Скрипт в сети хоста, но с файловой системой контейнера.
+
+        Шейперу нужны объектник eBPF, bpftool и tc из образа агента, а
+        вешать программу — на интерфейс хоста. Поэтому меняется только
+        сетевое пространство: PID 1 при ``pid: host`` — init хоста.
+        """
+        import shlex
+        shell_cmd = f"nsenter --target 1 --net -- /bin/sh -c {shlex.quote(script)}"
+        return await self._communicate(shell_cmd, timeout)
+
+    @staticmethod
+    async def _communicate(shell_cmd: str, timeout: int) -> tuple:
         proc = await asyncio.create_subprocess_shell(
             shell_cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -292,48 +300,42 @@ class CommandRunner:
             })
 
     async def _sync_throttled_ips(self, msg: dict) -> None:
-        """Ограничить скорость к указанным адресам на этой ноде (tc, HTB в ifb).
+        """Персональные лимиты скорости (мягкая блокировка) на этой ноде.
 
         Payload: {"rules": [{"ip": "1.2.3.4", "rate_kbit": 1024}, ...]}.
 
-        Список заменяет прежний целиком, поэтому пустой снимает все наши
-        ограничения — и только их: чужую раскладку tc агент не трогает.
-        Режется исходящий трафик ноды к адресу, то есть скачивание у клиента.
-
-        Ограничение вешается на адрес, а не на порт или пользователя: так
-        не нужно ни трогать конфиг Xray, ни переносить человека между
-        сквадами, и мера применяется мгновенно.
+        Список заменяет прежний целиком, поэтому пустой снимает все
+        персональные лимиты. Режет их шейпер ноды — в обе стороны, по адресу
+        клиента и на любом порту; общий потолок ноды при этом тоже действует,
+        и для клиента берётся меньший из двух.
         """
-        import ipaddress
+        from . import shaper
 
         command_id = msg.get("command_id")
-        raw_rules = msg.get("rules") or []
-
         # До шелла доходят только разобранный адрес и целое число — оба
         # приходят снаружи, и подставлять их в скрипт как есть нельзя.
-        rules, skipped = [], 0
-        for item in raw_rules:
-            try:
-                addr = ipaddress.ip_address(str(item.get("ip", "")).strip())
-                rate = int(item.get("rate_kbit"))
-            except (AttributeError, TypeError, ValueError):
-                skipped += 1
-                continue
-            if addr.version != 4 or rate <= 0:
-                # IPv6 в подключениях пока не встречается, а фильтр под него
-                # нужен отдельный — молча резать не тот трафик хуже, чем не резать.
-                skipped += 1
-                continue
-            rules.append((str(addr), rate))
-
+        personal, skipped = shaper.parse_personal(msg.get("rules") or [])
         if skipped:
             logger.warning("sync_throttled_ips: skipped %d invalid entries", skipped)
 
-        script = self._build_throttle_script(rules)
-        output, exit_code = await self._run_shell(script, timeout=60)
+        previous = self._shaper_personal
+        self._shaper_personal = personal
+        output, exit_code = "", 0
+        incremental = self._shaper_loaded and (self._shaper_general.enabled or personal)
+        if incremental:
+            to_set = {ip: kbit for ip, kbit in personal.items() if previous.get(ip) != kbit}
+            to_delete = [ip for ip in previous if ip not in personal]
+            if to_set or to_delete:
+                output, exit_code = await self._run_hostnet(
+                    shaper.build_personal_update_script(to_set, to_delete), timeout=60,
+                )
+            if exit_code == shaper.RELOAD_EXIT:
+                incremental = False
+        if not incremental:
+            output, exit_code = await self._shaper_apply()
 
         if exit_code == 0:
-            logger.info("Throttling applied: %d addresses", len(rules))
+            logger.info("Throttling applied: %d addresses", len(personal))
         else:
             logger.error("Throttling failed (exit=%d): %.500s", exit_code, output)
 
@@ -346,108 +348,19 @@ class CommandRunner:
                 "exit_code": exit_code,
             })
 
-    @staticmethod
-    def _build_throttle_script(rules: list) -> str:
-        """Собрать POSIX-скрипт, приводящий ограничения на ноде к списку.
+    async def _shaper_apply(self) -> tuple:
+        """Поставить программу заново или снять её, если лимитов не осталось."""
+        from . import shaper
 
-        Корень интерфейса не трогается никогда. Трафик наказанных адресов
-        уводит фильтр на выходе интерфейса (clsact) в своё устройство ifb, там
-        HTB с личным классом на адрес, а после него пакет возвращается на
-        интерфейс и проходит через тот корень, что там стоит. Остальной трафик
-        ограничителя не касается вовсе, поэтому ширину канала знать не нужно.
-
-        Своё агент узнаёт по меткам: устройство THROTTLE_IFB и приоритет
-        THROTTLE_PREF с перенаправлением именно в это устройство. Снимается
-        только оно. clsact создаётся, лишь если его нет, и убирается, только
-        когда после наших фильтров на нём пусто: там могут висеть чужие.
-
-        Раскладку агентов до перехода на ifb (prio в корне и наш HTB 40: на
-        полосе 1:4) скрипт узнаёт по этой связке и снимает один раз.
-
-        Режется исходящий трафик ноды к адресу, то есть скачивание у клиента;
-        отдачу это не трогает.
-        """
-        ifb, pref = THROTTLE_IFB, THROTTLE_PREF
-        lines = [
-            "set -e",
-            'IFACE=$(ip route show default 2>/dev/null | awk \'/default/ {print $5; exit}\')',
-            '[ -n "$IFACE" ] || { echo "no default route interface"; exit 1; }',
-            # Старая раскладка узнаётся по нашему HTB 40: на полосе 1:4 —
-            # чужой корень под такое описание не подойдёт.
-            "if tc qdisc show dev \"$IFACE\" | grep -q '^qdisc htb 40: parent 1:4 '; then",
-            '  tc qdisc del dev "$IFACE" root',
-            '  echo "legacy root layout removed on $IFACE"',
-            "fi",
-            # Свои фильтры снимаются целиком по приоритету, но только если они
-            # ведут в наше устройство. Удалять без номера приоритета нельзя
-            # никогда: такая команда снесла бы все фильтры интерфейса.
-            'HAD=""',
-            'FOREIGN=""',
-            f'OURS=$(tc filter show dev "$IFACE" egress pref {pref} 2>/dev/null || true)',
-            'if [ -n "$OURS" ]; then',
-            '  case "$OURS" in',
-            f'    *"{ifb}"*) tc filter del dev "$IFACE" egress pref {pref} protocol ip; HAD=1 ;;',
-            '    *) FOREIGN=1 ;;',
-            '  esac',
-            'fi',
-        ]
-
-        if not rules:
-            lines += [
-                # Устройство — после фильтров: перенаправление в пропавшее
-                # устройство ядро превращает в отбрасывание пакетов.
-                f"ip link del {ifb} 2>/dev/null || true",
-                # clsact мог быть нашим. Если после нас на нём пусто — убираем,
-                # чтобы интерфейс остался таким, каким был до ограничений.
-                'if [ -n "$HAD" ] && [ -z "$(tc filter show dev "$IFACE" egress 2>/dev/null)" ] '
-                '&& [ -z "$(tc filter show dev "$IFACE" ingress 2>/dev/null)" ]; then',
-                '  tc qdisc del dev "$IFACE" clsact 2>/dev/null || true',
-                "fi",
-                'echo "throttling cleared on $IFACE"',
-            ]
-            return "\n".join(lines)
-
-        lines += [
-            'if [ -n "$FOREIGN" ]; then',
-            f'  echo "egress pref {pref} on $IFACE is taken by another tool"; exit 1',
-            "fi",
-            # numifbs=0 — иначе модуль при загрузке сам заведёт ifb0 и ifb1,
-            # а эти имена могут понадобиться администратору.
-            "modprobe ifb numifbs=0 2>/dev/null || true",
-            f"ip link show {ifb} >/dev/null 2>&1 || ip link add {ifb} type ifb",
-            f"ip link set {ifb} up",
-            # Устройство целиком наше, и трафик в него сейчас не идёт — фильтры
-            # сняты выше. Пересобрать дешевле, чем сверять.
-            f"tc qdisc del dev {ifb} root 2>/dev/null || true",
-            f"tc qdisc add dev {ifb} root handle 1: htb",
-        ]
-
-        for index, (ip, rate_kbit) in enumerate(rules, start=10):
-            lines += [
-                f"tc class add dev {ifb} parent 1: classid 1:{index} "
-                f"htb rate {rate_kbit}kbit ceil {rate_kbit}kbit burst 32k",
-                f"tc filter add dev {ifb} parent 1: protocol ip prio 1 u32 "
-                f"match ip dst {ip}/32 flowid 1:{index}",
-            ]
-
-        lines += [
-            # Чужой clsact годится как есть: пересоздание снесло бы его фильтры.
-            "if ! tc qdisc show dev \"$IFACE\" | grep -q '^qdisc clsact '; then",
-            # Старый ingress-qdisc занимает то же место, что и clsact.
-            "  if tc qdisc show dev \"$IFACE\" | grep -q '^qdisc ingress '; then",
-            '    echo "$IFACE has an ingress qdisc, clsact cannot be added"; exit 1',
-            "  fi",
-            '  tc qdisc add dev "$IFACE" clsact',
-            "fi",
-        ]
-        for ip, _ in rules:
-            lines.append(
-                f'tc filter add dev "$IFACE" egress protocol ip pref {pref} u32 '
-                f"match ip dst {ip}/32 action mirred egress redirect dev {ifb}"
-            )
-
-        lines.append(f'echo "throttled {len(rules)} addresses on $IFACE via {ifb}"')
-        return "\n".join(lines)
+        if self._shaper_general.enabled or self._shaper_personal:
+            script = shaper.build_apply_script(self._shaper_general, self._shaper_personal)
+        else:
+            script = shaper.build_disable_script()
+        output, exit_code = await self._run_hostnet(script, timeout=60)
+        self._shaper_loaded = exit_code == 0 and bool(
+            self._shaper_general.enabled or self._shaper_personal
+        )
+        return output, exit_code
 
     @staticmethod
     def _build_blocklist_script(v4: list, v6: list) -> str:
@@ -627,6 +540,50 @@ class CommandRunner:
                 "output": str(e),
                 "exit_code": 1,
             })
+
+    async def _set_shaper(self, msg: dict) -> None:
+        """Включить, перенастроить или выключить шейпер клиентов ноды.
+
+        Отвечаем состоянием, а не «принято»: панель должна показать, что
+        шейпер реально работает, что стало с корнем интерфейса и почему
+        не встал, если не встал.
+        """
+        from . import shaper
+
+        command_id = msg.get("command_id")
+        try:
+            cfg = shaper.parse_config(msg)
+        except ValueError as e:
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "error",
+                "output": json.dumps({"enabled": bool(msg.get("enabled")), "active": False,
+                                      "error": str(e)}, ensure_ascii=False),
+                "exit_code": 1,
+            })
+            return
+
+        self._shaper_general = cfg
+        output, exit_code = await self._shaper_apply()
+        state = shaper.summarize(cfg, output, exit_code, personal=len(self._shaper_personal))
+
+        if exit_code == 0:
+            logger.info(
+                "Shaper %s on %s (root: %s, personal: %d)",
+                "applied" if cfg.enabled else "disabled", state["interface"], state["root"],
+                state["personal"],
+            )
+        else:
+            logger.error("Shaper failed (exit=%d): %.500s", exit_code, output)
+
+        await self._send({
+            "type": "command_result",
+            "command_id": command_id,
+            "status": "completed" if exit_code == 0 else "error",
+            "output": json.dumps(state, ensure_ascii=False),
+            "exit_code": exit_code,
+        })
 
     async def _service_status(self, msg: dict) -> None:
         """Get service status information."""

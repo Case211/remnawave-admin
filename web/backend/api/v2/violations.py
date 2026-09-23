@@ -968,7 +968,9 @@ async def list_throttles(
             until=row.get("until"),
         ))
 
-    return ThrottleListResponse(items=items, total=len(items))
+    from shared.throttle import default_rate_kbit
+
+    return ThrottleListResponse(items=items, total=len(items), default_rate_kbit=default_rate_kbit())
 
 
 @router.post("/throttle")
@@ -978,10 +980,33 @@ async def add_throttle(
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
     db: DatabaseService = Depends(get_db),
 ):
-    """Ограничить пользователю скорость вместо полного отключения."""
-    from shared.config_service import config_service
+    """Ограничить пользователю скорость вместо полного отключения.
 
-    rate_kbit = data.rate_kbit or int(config_service.get("throttle_default_kbit", 1024) or 1024)
+    0 — без лимита: персональное ограничение снимается, если было. Скорость не
+    указана — берётся из настроек, и 0 там значит то же самое.
+    """
+    from shared.config_service import config_service
+    from shared.throttle import default_rate_kbit, lift_throttle
+
+    rate_kbit = data.rate_kbit if data.rate_kbit is not None else default_rate_kbit()
+    if not rate_kbit:
+        removed, restored = await lift_throttle(data.user_uuid)
+        if removed:
+            try:
+                from web.backend.core.throttle_sync import push_throttles
+                await push_throttles()
+            except Exception as e:
+                logger.warning("Throttle removed in DB but push failed: %s", e)
+            await write_audit_log(
+                admin_id=admin.account_id,
+                admin_username=admin.username,
+                action="violation.throttle.remove",
+                resource="violations",
+                resource_id=data.user_uuid,
+                details=json.dumps({"squads_restored": restored, "via": "rate 0"}, ensure_ascii=False),
+                ip_address=get_client_ip(request),
+            )
+        return {"success": True, "rate_kbit": 0, "lifted": removed, "squads_restored": restored}
 
     # Срок не указан — берём общий лимит из настроек. Ноль там значит
     # «держать до ручного снятия», как было до появления настройки.

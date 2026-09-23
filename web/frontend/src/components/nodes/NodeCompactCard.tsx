@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreVertical, RotateCcw, Pencil, Play, Square, Key, Globe, Trash2, Bot, BotOff, Users, BarChart3 } from '@/components/brand/icons'
+import { MoreVertical, RotateCcw, Pencil, Play, Square, Key, Globe, Trash2, Bot, BotOff, Gauge, Users, BarChart3 } from '@/components/brand/icons'
 import { cn } from '@/lib/utils'
 import type { NodeRow } from './NodesTable'
 
@@ -45,6 +45,7 @@ export interface NodeCompactCardProps {
   onDisable: (n: NodeRow) => void
   onDelete: (n: NodeRow) => void
   onTokenManage: (n: NodeRow) => void
+  onShaper: (n: NodeRow) => void
   onFetchIps: (n: NodeRow) => void
 }
 
@@ -58,6 +59,7 @@ export function NodeCompactCard({
   onDisable,
   onDelete,
   onTokenManage,
+  onShaper,
   onFetchIps,
 }: NodeCompactCardProps) {
   const { t } = useTranslation()
@@ -91,6 +93,7 @@ export function NodeCompactCard({
                   ? <DropdownMenuItem onClick={() => onEnable(node)}><Play className="w-3.5 h-3.5 mr-2 text-green-400" />{t('nodes.actions.enable')}</DropdownMenuItem>
                   : <DropdownMenuItem onClick={() => onDisable(node)}><Square className="w-3.5 h-3.5 mr-2 text-red-400" />{t('nodes.actions.disable')}</DropdownMenuItem>)}
                 {scopeEdit && <DropdownMenuItem onClick={() => onTokenManage(node)}><Key className="w-3.5 h-3.5 mr-2" />{t('nodes.agent.token', { defaultValue: 'Токен агента' })}</DropdownMenuItem>}
+                {scopeEdit && <DropdownMenuItem onClick={() => onShaper(node)}><Gauge className="w-3.5 h-3.5 mr-2" />{t('nodes.actions.shaper')}</DropdownMenuItem>}
                 <DropdownMenuItem onClick={() => onFetchIps(node)}><Globe className="w-3.5 h-3.5 mr-2" />{t('nodes.actions.fetchIps', { defaultValue: 'IP юзеров' })}</DropdownMenuItem>
                 {scopeDelete && <><DropdownMenuSeparator /><DropdownMenuItem onClick={() => onDelete(node)} className="text-red-400 focus:text-red-300"><Trash2 className="w-3.5 h-3.5 mr-2" />{t('nodes.actions.delete', { defaultValue: 'Удалить' })}</DropdownMenuItem></>}
               </DropdownMenuContent>

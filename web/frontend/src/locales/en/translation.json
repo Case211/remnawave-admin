@@ -1058,6 +1058,58 @@
     "gb": "GB"
   },
   "nodes": {
+    "shaper": {
+      "title": "Client shaper",
+      "description": "A speed cap for every client address on this node. Keeps heavy downloaders in check without touching everyone else.",
+      "enable": "Shaper enabled",
+      "ports": "Inbound ports",
+      "portsHint": "Comma separated. Prefilled from the node profile: clients connect to these ports.",
+      "down": "Download, Mbit/s",
+      "up": "Upload, Mbit/s",
+      "capsHint": "Cap per client address. 0 means no cap.",
+      "penalty": "Penalty mode",
+      "penaltyHint": "Whoever moves more than the threshold within the window gets the penalty speed for a while. Both directions count together.",
+      "penaltyMb": "Threshold, MB",
+      "penaltyWindow": "Window, seconds",
+      "penaltyRate": "Penalty speed, Mbit/s",
+      "penaltyMinutes": "Duration, minutes",
+      "noteCgnat": "Several clients can sit behind one mobile carrier address: they share the cap.",
+      "noteCdn": "Don't enable it on a node behind a CDN: every client arrives from CDN addresses and would share one cap.",
+      "errors": {
+        "portsInvalid": "Ports are numbers from 1 to 65535, comma separated",
+        "portsRequired": "Enter at least one port: without it the node's own connections would be capped too",
+        "ratesInvalid": "Speed must be a non-negative number",
+        "nothingToLimit": "Set a cap or enable the penalty mode",
+        "penaltyInvalid": "Fill in the penalty: threshold from 1 MB, window from 10 seconds, speed from 0.064 Mbit/s, duration from one minute"
+      },
+      "status": {
+        "offline": "The agent is offline. Settings will apply when it connects.",
+        "unsupported": "Agent {{min}} or newer is required, current: {{version}}. If the agent was just updated, the version refreshes with its first report.",
+        "unknownVersion": "unknown",
+        "waiting": "Waiting for the agent…",
+        "off": "The shaper is off.",
+        "active": "Active: download and upload are capped.",
+        "activeRough": "Active, but download is capped roughly, by dropping: the interface root holds someone else's {{kind}}.",
+        "error": "Not applied: {{error}}",
+        "rootInstalled": "fq installed at the interface root, was {{kind}}.",
+        "rootKept": "The root already had {{kind}}, left untouched.",
+        "rootRestored": "The interface root is back to the system default.",
+        "updated": "Changed {{time}} by {{who}}"
+      },
+      "confirm": {
+        "intro": "Enabling changes this on the node:",
+        "itemRoot": "The interface root becomes fq if it holds the system default: download speed can't be held without fq. If you set your own discipline, the agent leaves it alone.",
+        "itemFilters": "Two eBPF programs attach to the interface ingress and egress. They only look at traffic on ports {{ports}}.",
+        "itemCaps": "Every client address gets its own speed cap, and in penalty mode also the penalty speed after the threshold.",
+        "itemRevert": "Turning it off restores everything: the programs are removed, and fq goes away if the agent installed it.",
+        "confirm": "Enable",
+        "back": "Back"
+      },
+      "toast": {
+        "saved": "Shaper settings sent to the agent",
+        "savedOffline": "Saved. The agent will apply them when it connects."
+      }
+    },
     "title": "Nodes",
     "subtitle": "Server management",
     "tabs": {
@@ -1150,6 +1202,7 @@
       "updateHint": "Version v{{version}} is available — update the agent on the node (git pull in the agent folder or the “Update agent” fleet script); the version refreshes with the next batch."
     },
     "actions": {
+      "shaper": "Client shaper",
       "restart": "Restart",
       "edit": "Edit",
       "agentToken": "Agent token",
@@ -2029,12 +2082,12 @@
       "noData": "No violations for this period — nothing to show."
     },
     "throttles": {
-      "description": "Throttling sits between a warning and a block. The person stays online: sites and messengers work, video and torrents don't. The limit is attached to the user's address by rules on the node and lifts instantly.",
+      "description": "Throttling sits between a warning and a block. The person stays online: sites and messengers work, video and torrents don't. The limit is attached to the user's address by the node shaper, covers both directions and lifts instantly. The node-wide cap applies too — the lower one wins.",
       "add": "Throttle",
       "addTitle": "Throttle a user",
-      "addDesc": "Empty speed — the value from settings. Empty duration — indefinite, until lifted by hand.",
+      "addDesc": "Prefilled with the speed from settings. 0 or empty means no limit: the personal limit is lifted. Empty duration — indefinite, until lifted by hand.",
       "rate": "Speed, kbit/s",
-      "ratePlaceholder": "from settings",
+      "ratePlaceholder": "0 — no limit",
       "hours": "Lift after, hours",
       "hoursPlaceholder": "indefinite",
       "kbit": "kbit/s",
@@ -2049,7 +2102,9 @@
         "added": "User throttled",
         "addedWithSquad": "User throttled and moved to the reserve squad",
         "lifted": "Limit lifted",
-        "liftedWithSquad": "Limit lifted, user returned to previous squads"
+        "liftedWithSquad": "Limit lifted, user returned to previous squads",
+        "noLimit": "No limit: the personal limit is lifted",
+        "nothingToLift": "No limit: there was no personal limit anyway"
       }
     },
     "recap": {
@@ -4264,11 +4319,11 @@
       },
       "throttle_enabled": {
         "label": "Speed throttling",
-        "description": "Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.6.0+ on the nodes"
+        "description": "Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.7.0+ on the nodes; with agent 1.9.0 the node shaper does it, in both directions"
       },
       "throttle_default_kbit": {
         "label": "Default speed (kbit/s)",
-        "description": "How hard to throttle when no speed is given. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access"
+        "description": "How hard to throttle when no speed is given. 0 or empty means no limit: the bot button and automatic actions throttle nothing. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access"
       },
       "throttle_default_hours": {
         "label": "Default throttle duration (h)",

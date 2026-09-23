@@ -1357,15 +1357,18 @@ async def _handle_violation(
         # урезать скорость. Мера обратимая и не выкидывает человека из сети,
         # поэтому в отличие от автоблокировки её не страшно применять на
         # среднем скоре; выключено по умолчанию, решает администратор.
+        from shared.throttle import default_rate_kbit
+
         if (
             violation_score.recommended_action == ViolationAction.SOFT_BLOCK
             and config_service.get("violation_auto_soft_throttle", False)
+            # 0 или пусто в настройках — без лимита, урезать нечем
+            and default_rate_kbit()
         ):
             try:
-                from shared.config_service import config_service as _cfg
                 from shared.throttle import apply_throttle
 
-                rate_kbit = int(_cfg.get("throttle_default_kbit", 1024) or 1024)
+                rate_kbit = default_rate_kbit()
                 ok, err, moved = await apply_throttle(
                     user_uuid=user_uuid,
                     rate_kbit=rate_kbit,

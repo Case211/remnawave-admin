@@ -196,8 +196,8 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| **Speed throttling** | `throttle_enabled` | `true` | Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.6.0+ on the nodes |
-| **Default speed (kbit/s)** | `throttle_default_kbit` | `1024` | How hard to throttle when no speed is given. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access |
+| **Speed throttling** | `throttle_enabled` | `true` | Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.7.0+ on the nodes; with agent 1.9.0 the node shaper does it, in both directions |
+| **Default speed (kbit/s)** | `throttle_default_kbit` | `1024` | How hard to throttle when no speed is given. 0 or empty means no limit: the bot button and automatic actions throttle nothing. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access |
 | **Default throttle duration (h)** | `throttle_default_hours` | `0` | How many hours before the throttle lifts itself when no expiry is given. 0 keeps it until lifted by hand |
 | **Reserve squad for violators** | `throttle_squad_uuid` | empty | UUID of the internal squad to move a punished user into on top of the throttle. Previous squads are remembered and restored when the throttle is lifted. Empty — leave squads alone and only cut the speed |
 | **Throttle speed automatically** | `violation_auto_soft_throttle` | `false` | Cut the speed as soon as the detector recommends a manual review (score 65-80). The measure is reversible and keeps the person online, but it is off by default: the call on punishment stays with the administrator |

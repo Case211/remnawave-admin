@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreVertical, RotateCcw, Pencil, Play, Square, Key, Globe, Trash2, Bot, BotOff } from '@/components/brand/icons'
+import { MoreVertical, RotateCcw, Pencil, Play, Square, Key, Globe, Trash2, Bot, BotOff, Gauge } from '@/components/brand/icons'
 import { cn } from '@/lib/utils'
 
 export interface NodeRow {
@@ -66,6 +66,7 @@ export interface NodesTableProps {
   onDisable: (n: NodeRow) => void
   onDelete: (n: NodeRow) => void
   onTokenManage: (n: NodeRow) => void
+  onShaper: (n: NodeRow) => void
   onFetchIps: (n: NodeRow) => void
 }
 
@@ -79,6 +80,7 @@ export function NodesTable({
   onDisable,
   onDelete,
   onTokenManage,
+  onShaper,
   onFetchIps,
 }: NodesTableProps) {
   const { t } = useTranslation()
@@ -200,6 +202,9 @@ export function NodesTable({
                       )}
                       {scopeEdit && (
                         <DropdownMenuItem onClick={() => onTokenManage(node)}><Key className="w-3.5 h-3.5 mr-2" />{t('nodes.agent.token', { defaultValue: 'Токен агента' })}</DropdownMenuItem>
+                      )}
+                      {scopeEdit && (
+                        <DropdownMenuItem onClick={() => onShaper(node)}><Gauge className="w-3.5 h-3.5 mr-2" />{t('nodes.actions.shaper')}</DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={() => onFetchIps(node)}><Globe className="w-3.5 h-3.5 mr-2" />{t('nodes.actions.fetchIps', { defaultValue: 'IP юзеров' })}</DropdownMenuItem>
                       {scopeDelete && (

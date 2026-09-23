@@ -349,13 +349,15 @@ class TrafficRateMonitor:
         снимать его по таймеру значит выпускать человека обратно ровно
         туда же. Снимается вручную или когда администратор разберётся.
         """
-        from shared.config_service import config_service
         from shared.throttle import apply_throttle
 
-        try:
-            rate_kbit = int(config_service.get("throttle_default_kbit", 1024) or 1024)
-        except (TypeError, ValueError):
-            rate_kbit = 1024
+        from shared.throttle import default_rate_kbit
+
+        rate_kbit = default_rate_kbit()
+        if not rate_kbit:
+            # 0 или пусто в настройках — без лимита, урезать нечем
+            logger.info("Throttle skipped for %s: default speed is 0 (no limit)", v["user_uuid"])
+            return
 
         try:
             success, error, moved = await apply_throttle(

@@ -35,6 +35,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   RotateCcw,
+  Gauge,
 } from '@/components/brand/icons'
 import {
   DndContext,
@@ -85,6 +86,7 @@ import { ViewToggle } from '@/components/ViewToggle'
 import { useViewMode } from '@/lib/useViewMode'
 import { NodesTable } from '@/components/nodes/NodesTable'
 import { NodeCompactCard } from '@/components/nodes/NodeCompactCard'
+import { NodeShaperDialog } from '@/components/nodes/NodeShaperDialog'
 
 // Types
 interface Node {
@@ -1018,6 +1020,7 @@ function NodeCard({
   onDelete,
   onTokenManage,
   onFetchIps,
+  onShaper,
   canEdit,
   canDelete,
   dragHandle,
@@ -1031,6 +1034,7 @@ function NodeCard({
   onDelete: () => void
   onTokenManage: () => void
   onFetchIps: () => void
+  onShaper: () => void
   canEdit: boolean
   canDelete: boolean
   dragHandle?: React.ReactNode
@@ -1145,6 +1149,12 @@ function NodeCard({
                     <DropdownMenuItem onClick={onTokenManage}>
                       <Key className="w-4 h-4 mr-2" />
                       {t('nodes.actions.agentToken')}
+                    </DropdownMenuItem>
+                  )}
+                  {effectiveCanEdit && (
+                    <DropdownMenuItem onClick={onShaper}>
+                      <Gauge className="w-4 h-4 mr-2" />
+                      {t('nodes.actions.shaper')}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={onFetchIps}>
@@ -1390,6 +1400,7 @@ function SortableNodeCard({
   onDelete: () => void
   onTokenManage: () => void
   onFetchIps: () => void
+  onShaper: () => void
   canEdit: boolean
   canDelete: boolean
 }) {
@@ -1450,6 +1461,7 @@ export default function Nodes() {
   const [createError, setCreateError] = useState('')
   const [tokenNode, setTokenNode] = useState<Node | null>(null)
   const [ipsNode, setIpsNode] = useState<Node | null>(null)
+  const [shaperNode, setShaperNode] = useState<Node | null>(null)
   const [confirmAction, setConfirmAction] = useState<{ type: string; uuid: string } | null>(null)
   const { schedule: scheduleAction } = useDeferredAction()
   const [sortState, setSortStateRaw] = useState<SortState>(() => loadSortState())
@@ -1731,6 +1743,7 @@ export default function Nodes() {
           onDelete={(n) => setConfirmAction({ type: 'delete', uuid: n.uuid })}
           onTokenManage={(n) => setTokenNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
           onFetchIps={(n) => setIpsNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
+          onShaper={(n) => setShaperNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
         />
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -1770,6 +1783,7 @@ export default function Nodes() {
                         onDelete={(n) => setConfirmAction({ type: 'delete', uuid: n.uuid })}
                         onTokenManage={(n) => setTokenNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
                         onFetchIps={(n) => setIpsNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
+                        onShaper={(n) => setShaperNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
                       />
                     ) : (
                       <SortableNodeCard
@@ -1782,6 +1796,7 @@ export default function Nodes() {
                         onDelete={() => setConfirmAction({ type: 'delete', uuid: node.uuid })}
                         onTokenManage={() => setTokenNode(node)}
                         onFetchIps={() => setIpsNode(node)}
+                        onShaper={() => setShaperNode(node)}
                         canEdit={canEdit}
                         canDelete={canDelete}
                       />
@@ -1865,6 +1880,15 @@ export default function Nodes() {
           node={ipsNode}
           open={!!ipsNode}
           onClose={() => setIpsNode(null)}
+        />
+      )}
+
+      {/* Шейпер клиентов ноды */}
+      {shaperNode && (
+        <NodeShaperDialog
+          node={shaperNode}
+          open={!!shaperNode}
+          onOpenChange={(open) => { if (!open) setShaperNode(null) }}
         />
       )}
       </div>
