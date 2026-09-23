@@ -24,6 +24,7 @@ async def test_node_name_reaches_notification_and_reasons():
     db.is_user_violation_whitelisted = AsyncMock(return_value=(False, None))
     db.count_recent_torrent_events = AsyncMock(return_value=50)
     db.count_recent_torrent_peers = AsyncMock(return_value=10)
+    db.recent_torrent_destinations = AsyncMock(return_value=["tracker.example.org:6881", "5.6.7.8:6881"])
     db.get_recent_torrent_violation = AsyncMock(return_value=None)
     db.get_user_by_uuid = AsyncMock(return_value={"username": "alice", "email": "alice@example.com"})
     db.save_violation = AsyncMock(return_value=(7, True))
@@ -45,5 +46,10 @@ async def test_node_name_reaches_notification_and_reasons():
             [_event()], {"alice@example.com": USER_UUID}, node_name="Germany W",
         )
 
-    assert notify.await_args.kwargs["node_name"] == "Germany W"
+    kwargs = notify.await_args.kwargs
+    assert kwargs["node_name"] == "Germany W"
+    # В уведомление — счёт за окно, по которому сработали пороги, а не батч
+    assert kwargs["window"]["events"] == 50 and kwargs["window"]["peers"] == 10
+    assert kwargs["destinations"] == ["tracker.example.org:6881", "5.6.7.8:6881"]
+    assert kwargs["action"] == "notify"
     assert "Node: Germany W" in db.save_violation.await_args.kwargs["reasons"]

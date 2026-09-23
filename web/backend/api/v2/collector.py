@@ -875,10 +875,10 @@ async def _process_torrent_violations(
                 # событий за минуты. Считаем накопленное по базе, а не по
                 # батчу: рой приезжает кусками, и в отдельном куске событий
                 # может быть немного.
+                recent = await db_service.count_recent_torrent_events(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                )
                 if min_events > 1:
-                    recent = await db_service.count_recent_torrent_events(
-                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
-                    )
                     if recent < min_events:
                         logger.info(
                             "Torrent: %d event(s) for %s in %d min — below threshold %d",
@@ -890,10 +890,10 @@ async def _process_torrent_violations(
                 # доказывает. У обмена десятки пиров сразу; у ложного
                 # срабатывания адрес один и тот же (ловился антивирус,
                 # которому эвристика приписала шифрованный BitTorrent).
+                peers = await db_service.count_recent_torrent_peers(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                )
                 if min_peers > 1:
-                    peers = await db_service.count_recent_torrent_peers(
-                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
-                    )
                     if peers < min_peers:
                         logger.info(
                             "Torrent: %d peer(s) for %s in %d min — below threshold %d",
@@ -960,16 +960,50 @@ async def _process_torrent_violations(
                     "source": "torrent",
                 })
 
-                # Notification
+                # Автоблок — до уведомления, чтобы в нём был итог, а не обещание
+                action = "notify"
+                if auto_action == "block_user":
+                    try:
+                        from shared.api_client import api_client
+                        await api_client.disable_user(await _resolve_user_key(user_uuid))
+                        action = "blocked"
+                        logger.info("Auto-blocked user %s for torrent usage", user_uuid)
+                        fire_event("user.blocked", {
+                            "uuid": user_uuid,
+                            "username": username,
+                            "reason": "torrent",
+                            "details": f"Torrent traffic detected ({recent} events, {peers} peers)",
+                            "blocked_by": "auto",
+                        })
+                    except Exception as e:
+                        action = "block_failed"
+                        logger.warning("Failed to auto-block user %s: %s", user_uuid, e)
+
+                # Уведомление — по окну, на котором сработали пороги: в самом
+                # батче событий и адресов обычно горстка, и алерт выглядел
+                # так, будто пороги не применились
                 try:
                     from web.backend.core.violation_notifier import send_torrent_notification
+                    window_destinations = await torrent_p2p_whitelist.filter_destinations(
+                        await db_service.recent_torrent_destinations(
+                            user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                        )
+                    ) or destinations
                     await send_torrent_notification(
                         user_uuid=user_uuid,
                         user_info=user_info,
                         torrent_events=user_events,
-                        destinations=destinations,
+                        destinations=window_destinations,
                         ips=ips,
                         node_name=node_name,
+                        window={
+                            "minutes": _TORRENT_EVENT_WINDOW_MINUTES,
+                            "events": recent,
+                            "peers": peers,
+                            "min_events": min_events,
+                            "min_peers": min_peers,
+                        },
+                        action=action,
                     )
                 except Exception as e:
                     logger.warning("Failed to send torrent notification: %s", e)
@@ -1004,22 +1038,6 @@ async def _process_torrent_violations(
                     })
                 except Exception as e:
                     logger.debug("WebSocket broadcast failed for torrent violation: %s", e)
-
-                # Auto-block if configured
-                if auto_action == "block_user":
-                    try:
-                        from shared.api_client import api_client
-                        await api_client.disable_user(await _resolve_user_key(user_uuid))
-                        logger.info("Auto-blocked user %s for torrent usage", user_uuid)
-                        fire_event("user.blocked", {
-                            "uuid": user_uuid,
-                            "username": username,
-                            "reason": "torrent",
-                            "details": f"Torrent traffic detected ({len(user_events)} events)",
-                            "blocked_by": "auto",
-                        })
-                    except Exception as e:
-                        logger.warning("Failed to auto-block user %s: %s", user_uuid, e)
 
             except Exception as e:
                 logger.warning("Error processing torrent violation for user %s: %s", user_uuid, e)

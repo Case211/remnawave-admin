@@ -540,11 +540,16 @@ async def send_torrent_notification(
     destinations: Optional[List[str]] = None,
     ips: Optional[List[str]] = None,
     node_name: Optional[str] = None,
+    window: Optional[Dict] = None,
+    action: str = "notify",
 ) -> None:
     """Send torrent-specific Telegram notification.
 
     ``node_name`` — нода, с которой пришёл батч: торрент видит агент на
     конкретной ноде, и админу важно знать, на какой.
+    ``window`` — счёт за окно, по которому сработали пороги: events, peers,
+    minutes, min_events, min_peers. ``action`` — что сделано: notify |
+    blocked | block_failed.
     """
     now = datetime.utcnow()
 
@@ -589,14 +594,23 @@ async def send_torrent_notification(
             lines.append(f"\U0001f4f1 TG ID: <code>{telegram_id}</code>")
 
         lines.append("")
-        lines.append(f"\U0001f4ca \u0421\u043e\u0431\u044b\u0442\u0438\u0439: <b>{event_count}</b>")
+        peers_total = len(destinations or [])
+        if window:
+            peers_total = max(peers_total, int(window.get("peers") or 0))
+            lines.append(
+                f"📊 За {window.get('minutes', 30)} мин: <b>{window.get('events', event_count)}</b> событий, "
+                f"<b>{window.get('peers', peers_total)}</b> разных адресов "
+                f"(пороги {window.get('min_events', 1)} / {window.get('min_peers', 1)})"
+            )
+        else:
+            lines.append(f"📊 Событий: <b>{event_count}</b>")
 
         if destinations:
-            lines.append("\U0001f310 \u041d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f:")
+            lines.append("🌐 Адреса:")
             for dest in destinations[:10]:
                 lines.append(f"   <code>{_esc(dest)}</code>")
-            if len(destinations) > 10:
-                lines.append(f"   ... \u0438 \u0435\u0449\u0451 {len(destinations) - 10}")
+            if peers_total > min(len(destinations), 10):
+                lines.append(f"   ... и ещё {peers_total - min(len(destinations), 10)}")
 
         if ips:
             lines.append(f"\U0001f4cd IP: {', '.join(f'<code>{ip}</code>' for ip in ips[:5])}")
@@ -605,7 +619,12 @@ async def send_torrent_notification(
             lines.append(f"🖥 Нода: <code>{_esc(node_name)}</code>")
 
         lines.append("")
-        lines.append("\U0001f6d1 \u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435: <b>\u0416\u0451\u0441\u0442\u043a\u0430\u044f \u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430</b>")
+        # Действие — то, что реально сделано по настройке «Авто-действие при
+        # торренте», а не рекомендация: раньше тут всегда стояла жёсткая блокировка
+        lines.append({
+            "blocked": "🛑 Действие: <b>пользователь отключён автоматически</b>",
+            "block_failed": "⚠️ Действие: <b>автоблокировка не удалась</b> — отключите вручную",
+        }.get(action, "👁 Действие: <b>только уведомление</b> — решение за администратором"))
         lines.append(f"\U0001f550 \u0412\u0440\u0435\u043c\u044f: <code>{event_time}</code>")
         lines.extend(await _recap_lines(user_uuid))
 

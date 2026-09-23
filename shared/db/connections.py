@@ -822,6 +822,24 @@ class ConnectionsMixin:
             logger.warning("count_recent_torrent_peers failed: %s", e)
             return 0
 
+    async def recent_torrent_destinations(self, user_uuid: str, minutes: int = 30, limit: int = 10) -> list:
+        """Адреса, с которыми шёл обмен за окно, — самые частые первыми."""
+        if not self.is_connected:
+            return []
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT destination FROM torrent_events "
+                    "WHERE user_uuid = $1::uuid "
+                    "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "GROUP BY destination ORDER BY count(*) DESC, destination LIMIT $3",
+                    user_uuid, minutes, limit,
+                )
+            return [r["destination"] for r in rows]
+        except Exception as e:
+            logger.warning("recent_torrent_destinations failed: %s", e)
+            return []
+
     async def shared_torrent_destinations(
         self, destinations: list, hours: int = 24,
     ) -> set:
