@@ -1020,6 +1020,10 @@ async def _process_torrent_violations(
                         "ips": ips,
                         "event_count": len(user_events),
                         "node_uuid": user_events[0].node_uuid,
+                        "node_name": node_name or "",
+                        # Счёт за окно, по которому сработали пороги, — для условий
+                        "window_events": recent,
+                        "peers": peers,
                         "score": 100.0,
                     })
                 except Exception as e:
@@ -1481,12 +1485,24 @@ async def _handle_violation(
 
         try:
             from web.backend.api.v2.websocket import broadcast_violation
+            countries = sorted(geo.countries) if geo and geo.countries else []
+            asn_types = sorted(asn.asn_types) if asn and asn.asn_types else []
             await broadcast_violation({
                 "user_uuid": user_uuid,
                 "username": username,
                 "score": violation_score.total,
                 "recommended_action": violation_score.recommended_action.value,
                 "reasons": violation_score.reasons[:5],
+                # Для условий автоматизаций: «только hard_block», «не мобильные» и т.п.
+                "countries": countries,
+                "country": countries[0] if len(countries) == 1 else ("" if not countries else "multiple"),
+                "asn_types": asn_types,
+                "is_mobile": bool(asn.is_mobile_carrier) if asn else False,
+                "is_datacenter": bool(asn.is_datacenter) if asn else False,
+                "is_vpn": bool(asn.is_vpn) if asn else False,
+                "unique_ips": len(ip_addresses) if ip_addresses else 0,
+                "simultaneous": temporal.simultaneous_connections_count if temporal else 0,
+                "devices": len(device.os_list) if device and device.os_list else 0,
             })
         except Exception:
             pass

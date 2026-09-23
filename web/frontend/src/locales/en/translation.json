@@ -3035,7 +3035,19 @@
       "user_node_traffic_gb": "Node traffic — total (GB)",
       "user_node_traffic_gbDesc": "Cumulative user traffic on a specific node",
       "user_node_traffic_today_gb": "Node traffic — today (GB)",
-      "user_node_traffic_today_gbDesc": "User traffic on a specific node for the current day"
+      "user_node_traffic_today_gbDesc": "User traffic on a specific node for the current day",
+      "user_traffic_today_gb": "User traffic today (GB)",
+      "user_traffic_today_gbDesc": "Sum across all nodes since midnight on the panel clock",
+      "node_cpu_percent": "Node CPU (%)",
+      "node_cpu_percentDesc": "CPU load from Fleet metrics",
+      "node_memory_percent": "Node RAM (%)",
+      "node_memory_percentDesc": "Memory used from Fleet metrics",
+      "node_disk_percent": "Node disk (%)",
+      "node_disk_percentDesc": "Disk space used from Fleet metrics",
+      "violations_last_hour": "Violations in the last hour",
+      "violations_last_hourDesc": "System-wide violation spike",
+      "users_new_today": "New users today",
+      "users_new_todayDesc": "Sign-ups since midnight on the panel clock"
     },
     "operators": {
       "eq": "equal (=)",
@@ -3045,7 +3057,9 @@
       "lt": "less (<)",
       "lte": "less or equal (≤)",
       "contains": "contains",
-      "not_contains": "does not contain"
+      "not_contains": "does not contain",
+      "in": "in list",
+      "not_in": "not in list"
     },
     "conditionFields": {
       "score": "Violation score",
@@ -3059,7 +3073,31 @@
       "over_gb": "Over threshold, GB",
       "users_total": "Total users",
       "nodes_online": "Nodes online",
-      "violations_today": "Violations today"
+      "violations_today": "Violations today",
+      "recommended_action": "Recommended action",
+      "country": "Country",
+      "countries": "Countries",
+      "asn_types": "Provider types",
+      "is_mobile": "Mobile network",
+      "is_datacenter": "Datacenter",
+      "is_vpn": "VPN",
+      "unique_ips": "Distinct addresses",
+      "simultaneous": "Simultaneous connections",
+      "devices": "Devices",
+      "window_events": "Events in 30 min",
+      "peers": "Swarm addresses",
+      "node_name": "Node",
+      "users_before": "Users on the node before",
+      "country_code": "Node country",
+      "days_left": "Days left in subscription",
+      "tag": "User tag",
+      "squads": "User squads",
+      "value": "Metric value",
+      "cpu": "CPU, %",
+      "memory": "RAM, %",
+      "disk": "Disk, %",
+      "violations_last_hour": "Violations in an hour",
+      "users_new_today": "New users"
     },
     "actionTypes": {
       "disable_user": "Disable user",
@@ -3431,7 +3469,30 @@
       "topicType": "Type",
       "topicUsers": "Users",
       "topicViolations": "Violations",
-      "cronZone": "Time follows the panel clock ({{zone}})"
+      "cronZone": "Time follows the panel clock ({{zone}})",
+      "listValueHint": "Several values separated by commas",
+      "extra": {
+        "title": "Extra",
+        "blockHours": "Block for, hours",
+        "blockHoursHint": "0 — forever. Otherwise the user is re-enabled automatically.",
+        "alsoSend": "Besides Telegram, send",
+        "channel": {
+          "in_app": "to the bell",
+          "email": "by email"
+        },
+        "severity": "Severity",
+        "severityLevel": {
+          "info": "Normal",
+          "warning": "Warning",
+          "critical": "Critical"
+        },
+        "buttons": "Action buttons under the message (block, open user)",
+        "maxPerHour": "At most restarts per hour",
+        "maxPerHourHint": "0 — no limit. Keeps a node that won't come up from being restarted in a loop.",
+        "onlySquads": "Only users from squads",
+        "onlySquadsHint": "Nothing selected — all squads.",
+        "onlyTag": "Only with tag"
+      }
     },
     "testResult": {
       "title": "Test result",

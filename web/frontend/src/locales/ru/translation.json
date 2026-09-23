@@ -3031,7 +3031,19 @@
       "user_node_traffic_gb": "Трафик на ноде — всего (ГБ)",
       "user_node_traffic_gbDesc": "Кумулятивный трафик пользователя на конкретной ноде",
       "user_node_traffic_today_gb": "Трафик на ноде — за сегодня (ГБ)",
-      "user_node_traffic_today_gbDesc": "Трафик пользователя на конкретной ноде за текущие сутки"
+      "user_node_traffic_today_gbDesc": "Трафик пользователя на конкретной ноде за текущие сутки",
+      "user_traffic_today_gb": "Трафик юзера за сегодня (ГБ)",
+      "user_traffic_today_gbDesc": "Сумма по всем нодам с полуночи по часам панели",
+      "node_cpu_percent": "CPU ноды (%)",
+      "node_cpu_percentDesc": "Загрузка процессора по метрикам Fleet",
+      "node_memory_percent": "RAM ноды (%)",
+      "node_memory_percentDesc": "Занятая память по метрикам Fleet",
+      "node_disk_percent": "Диск ноды (%)",
+      "node_disk_percentDesc": "Занятое место на диске по метрикам Fleet",
+      "violations_last_hour": "Нарушений за час",
+      "violations_last_hourDesc": "Всплеск нарушений по всей системе",
+      "users_new_today": "Новых юзеров за сегодня",
+      "users_new_todayDesc": "Регистрации с полуночи по часам панели"
     },
     "operators": {
       "eq": "равно (=)",
@@ -3041,7 +3053,9 @@
       "lt": "меньше (<)",
       "lte": "меньше или равно (≤)",
       "contains": "содержит",
-      "not_contains": "не содержит"
+      "not_contains": "не содержит",
+      "in": "в списке",
+      "not_in": "не в списке"
     },
     "conditionFields": {
       "score": "Скор нарушения",
@@ -3055,7 +3069,31 @@
       "over_gb": "Сверх порога, ГБ",
       "users_total": "Юзеров всего",
       "nodes_online": "Нод онлайн",
-      "violations_today": "Нарушений сегодня"
+      "violations_today": "Нарушений сегодня",
+      "recommended_action": "Рекомендуемое действие",
+      "country": "Страна",
+      "countries": "Страны",
+      "asn_types": "Типы провайдеров",
+      "is_mobile": "Мобильная сеть",
+      "is_datacenter": "Датацентр",
+      "is_vpn": "VPN",
+      "unique_ips": "Разных адресов",
+      "simultaneous": "Одновременных подключений",
+      "devices": "Устройств",
+      "window_events": "Событий за 30 мин",
+      "peers": "Разных адресов роя",
+      "node_name": "Нода",
+      "users_before": "Юзеров было на ноде",
+      "country_code": "Страна ноды",
+      "days_left": "Дней до конца подписки",
+      "tag": "Тег юзера",
+      "squads": "Сквады юзера",
+      "value": "Значение метрики",
+      "cpu": "CPU, %",
+      "memory": "RAM, %",
+      "disk": "Диск, %",
+      "violations_last_hour": "Нарушений за час",
+      "users_new_today": "Новых юзеров"
     },
     "actionTypes": {
       "disable_user": "Отключить пользователя",
@@ -3427,7 +3465,30 @@
       "topicType": "Тип",
       "topicUsers": "Пользователи",
       "topicViolations": "Нарушения",
-      "cronZone": "Время — по часам панели ({{zone}})"
+      "cronZone": "Время — по часам панели ({{zone}})",
+      "listValueHint": "Несколько значений через запятую",
+      "extra": {
+        "title": "Дополнительно",
+        "blockHours": "Заблокировать на, часов",
+        "blockHoursHint": "0 — навсегда. Иначе юзер включится обратно автоматически.",
+        "alsoSend": "Кроме Telegram, отправить",
+        "channel": {
+          "in_app": "в колокольчик",
+          "email": "на почту"
+        },
+        "severity": "Важность",
+        "severityLevel": {
+          "info": "Обычная",
+          "warning": "Предупреждение",
+          "critical": "Критичная"
+        },
+        "buttons": "Кнопки действий под сообщением (заблокировать, открыть юзера)",
+        "maxPerHour": "Не больше перезапусков в час",
+        "maxPerHourHint": "0 — без лимита. Не даёт перезапускать ноду по кругу, если она не поднимается.",
+        "onlySquads": "Только юзеры из сквадов",
+        "onlySquadsHint": "Ничего не выбрано — все сквады.",
+        "onlyTag": "Только с тегом"
+      }
     },
     "testResult": {
       "title": "Результат тестирования",

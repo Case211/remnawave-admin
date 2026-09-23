@@ -49,7 +49,20 @@ import {
   messageVarsFor,
 } from './helpers'
 import { timeZoneLabel, useDisplayTimeZone } from '@/lib/timezone'
+import { squadsApi } from '@/api/squads'
+import { Checkbox } from '@/components/ui/checkbox'
 import { CronBuilder } from './CronBuilder'
+
+// Пороги, которые можно считать по одной ноде
+const NODE_METRICS = new Set([
+  'user_node_traffic_gb', 'user_node_traffic_today_gb', 'users_online', 'traffic_today',
+  'node_cpu_percent', 'node_memory_percent', 'node_disk_percent',
+])
+// Триггеры, у которых цель — юзер: к уведомлению можно приложить кнопки действий
+const USER_TRIGGERS = new Set([
+  'violation.detected', 'torrent.detected', 'user.traffic_exceeded',
+  'user_traffic_percent', 'user_node_traffic_gb', 'user_node_traffic_today_gb', 'user_traffic_today_gb',
+])
 import { IntervalPicker } from './IntervalPicker'
 
 interface Condition {
@@ -133,6 +146,15 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [webhookUrl, setWebhookUrl] = useState('')
   const [blockReason, setBlockReason] = useState('')
   const [cleanupDays, setCleanupDays] = useState('30')
+  // Параметры действий: блок на время, куда и как уведомлять, лимит
+  // перезапусков, кого не трогает очистка
+  const [blockHours, setBlockHours] = useState('')
+  const [notifyExtra, setNotifyExtra] = useState<string[]>(['in_app'])
+  const [notifySeverity, setNotifySeverity] = useState('info')
+  const [notifyButtons, setNotifyButtons] = useState(false)
+  const [restartMaxPerHour, setRestartMaxPerHour] = useState('')
+  const [cleanupSquads, setCleanupSquads] = useState<string[]>([])
+  const [cleanupTag, setCleanupTag] = useState('')
 
   // Target selectors
   const [targetNodeUuid, setTargetNodeUuid] = useState('')  // '' = all nodes
@@ -150,8 +172,15 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         is_disabled: boolean
       }>
     },
-    enabled: open && (actionType === 'restart_node' || thresholdMetric === 'user_node_traffic_gb' || thresholdMetric === 'user_node_traffic_today_gb'),
+    enabled: open && (actionType === 'restart_node' || (triggerType === 'threshold' && NODE_METRICS.has(thresholdMetric))),
     staleTime: 30_000,
+  })
+
+  const { data: squadsList } = useQuery({
+    queryKey: ['automation-squads'],
+    queryFn: squadsApi.listInternal,
+    enabled: open && actionType === 'cleanup_expired',
+    staleTime: 60_000,
   })
 
   // Reset form when dialog opens/closes
@@ -208,6 +237,13 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         } else if (editRule.action_type === 'cleanup_expired') {
           setCleanupDays(ac.older_than_days?.toString() || '30')
         }
+        setBlockHours(ac.duration_hours?.toString() || '')
+        setNotifyExtra(Array.isArray(ac.channels) ? ac.channels : ['in_app'])
+        setNotifySeverity(ac.severity || 'info')
+        setNotifyButtons(!!ac.buttons)
+        setRestartMaxPerHour(ac.max_per_hour?.toString() || '')
+        setCleanupSquads(Array.isArray(ac.squad_uuids) ? ac.squad_uuids : [])
+        setCleanupTag(ac.tag || '')
         // Target selectors
         setTargetNodeUuid(ac.node_uuid?.toString() || '')
 
@@ -235,6 +271,13 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setWebhookUrl('')
         setBlockReason('')
         setCleanupDays('30')
+        setBlockHours('')
+        setNotifyExtra(['in_app'])
+        setNotifySeverity('info')
+        setNotifyButtons(false)
+        setRestartMaxPerHour('')
+        setCleanupSquads([])
+        setCleanupTag('')
         setTargetNodeUuid('')
         setStep(1)
       }
@@ -267,7 +310,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         operator: thresholdOperator,
         value: parseFloat(thresholdValue) || 0,
       }
-      if ((thresholdMetric === 'user_node_traffic_gb' || thresholdMetric === 'user_node_traffic_today_gb') && thresholdNodeUuid && thresholdNodeUuid !== '__all__') {
+      if (NODE_METRICS.has(thresholdMetric) && thresholdNodeUuid && thresholdNodeUuid !== '__all__') {
         cfg.node_uuid = thresholdNodeUuid
       }
       return cfg
@@ -277,20 +320,37 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
 
   // Build action_config
   const buildActionConfig = (): Record<string, unknown> => {
+    const hours = parseFloat(blockHours)
     if (actionType === 'notify') {
       const cfg: Record<string, unknown> = { channel: notifyChannel, message: notifyMessage }
       if (notifyChannel === 'webhook') cfg.webhook_url = webhookUrl
       if (notifyTopicType) cfg.topic_type = notifyTopicType
+      if (notifyChannel === 'telegram') {
+        cfg.channels = notifyExtra
+        cfg.severity = notifySeverity
+        if (notifyButtons) cfg.buttons = true
+      }
       return cfg
     }
     if (actionType === 'block_user') {
-      return { reason: blockReason || 'Blocked by automation' }
+      const cfg: Record<string, unknown> = { reason: blockReason || 'Blocked by automation' }
+      if (hours > 0) cfg.duration_hours = hours
+      return cfg
+    }
+    if (actionType === 'disable_user') {
+      return hours > 0 ? { duration_hours: hours } : {}
     }
     if (actionType === 'cleanup_expired') {
-      return { older_than_days: parseInt(cleanupDays) || 30 }
+      const cfg: Record<string, unknown> = { older_than_days: parseInt(cleanupDays) || 30 }
+      if (cleanupSquads.length) cfg.squad_uuids = cleanupSquads
+      if (cleanupTag.trim()) cfg.tag = cleanupTag.trim()
+      return cfg
     }
-    if (['restart_node', 'enable_node', 'disable_node'].includes(actionType) && targetNodeUuid) {
-      return { node_uuid: targetNodeUuid }
+    if (['restart_node', 'enable_node', 'disable_node'].includes(actionType)) {
+      const cfg: Record<string, unknown> = {}
+      if (targetNodeUuid) cfg.node_uuid = targetNodeUuid
+      if (actionType === 'restart_node' && parseInt(restartMaxPerHour) > 0) cfg.max_per_hour = parseInt(restartMaxPerHour)
+      return cfg
     }
     return {}
   }
@@ -657,7 +717,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 </div>
 
                 {/* Node selector for node-traffic metrics */}
-                {(thresholdMetric === 'user_node_traffic_gb' || thresholdMetric === 'user_node_traffic_today_gb') && (
+                {NODE_METRICS.has(thresholdMetric) && (
                   <div className="p-3 rounded-lg bg-[var(--glass-bg)] border-2 border-accent-teal/30 space-y-2">
                     <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.selectNode')}</Label>
                     <Select value={thresholdNodeUuid} onValueChange={setThresholdNodeUuid}>
@@ -817,13 +877,14 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="w-24">
+                  <div className={cond.operator === 'in' || cond.operator === 'not_in' ? 'w-40' : 'w-24'}>
                     <Label className="text-[11px] text-dark-400">{t('automations.constructor.valueLabel')}</Label>
                     <Input
                       value={cond.value}
                       onChange={(e) => updateCondition(idx, 'value', e.target.value)}
                       className="mt-1 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
-                      placeholder="80"
+                      placeholder={cond.operator === 'in' || cond.operator === 'not_in' ? 'RU, BY' : '80'}
+                      title={cond.operator === 'in' || cond.operator === 'not_in' ? t('automations.constructor.listValueHint') : undefined}
                     />
                   </div>
                 </div>
@@ -1168,6 +1229,112 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       : t(`automations.constructor.${actionType}AllWarn`, { defaultValue: t('automations.constructor.restartAllWarn') })}
                   </span>
                 </div>
+              </div>
+            )}
+
+            {/* Дополнительные параметры действия */}
+            {(['block_user', 'disable_user', 'restart_node', 'cleanup_expired'].includes(actionType)
+              || (actionType === 'notify' && notifyChannel === 'telegram')) && (
+              <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-3">
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.extra.title')}</Label>
+
+                {(actionType === 'block_user' || actionType === 'disable_user') && (
+                  <div>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.extra.blockHours')}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      value={blockHours}
+                      onChange={(e) => setBlockHours(e.target.value)}
+                      className="mt-1 w-32 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                      placeholder="0"
+                    />
+                    <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.extra.blockHoursHint')}</p>
+                  </div>
+                )}
+
+                {actionType === 'notify' && notifyChannel === 'telegram' && (
+                  <>
+                    <div>
+                      <Label className="text-[11px] text-dark-400">{t('automations.constructor.extra.alsoSend')}</Label>
+                      <div className="flex flex-wrap gap-4 mt-1.5">
+                        {(['in_app', 'email'] as const).map((ch) => (
+                          <label key={ch} className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                            <Checkbox
+                              checked={notifyExtra.includes(ch)}
+                              onCheckedChange={(v) => setNotifyExtra((prev) => (v ? [...prev, ch] : prev.filter((c) => c !== ch)))}
+                            />
+                            {t(`automations.constructor.extra.channel.${ch}`)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-dark-400">{t('automations.constructor.extra.severity')}</Label>
+                      <Select value={notifySeverity} onValueChange={setNotifySeverity}>
+                        <SelectTrigger className="mt-1 w-48 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {['info', 'warning', 'critical'].map((s) => (
+                            <SelectItem key={s} value={s}>{t(`automations.constructor.extra.severityLevel.${s}`)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {USER_TRIGGERS.has(triggerType === 'event' ? eventType : thresholdMetric) && (
+                      <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                        <Checkbox checked={notifyButtons} onCheckedChange={(v) => setNotifyButtons(!!v)} />
+                        {t('automations.constructor.extra.buttons')}
+                      </label>
+                    )}
+                  </>
+                )}
+
+                {actionType === 'restart_node' && (
+                  <div>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.extra.maxPerHour')}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={restartMaxPerHour}
+                      onChange={(e) => setRestartMaxPerHour(e.target.value)}
+                      className="mt-1 w-32 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                      placeholder="0"
+                    />
+                    <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.extra.maxPerHourHint')}</p>
+                  </div>
+                )}
+
+                {actionType === 'cleanup_expired' && (
+                  <>
+                    <div>
+                      <Label className="text-[11px] text-dark-400">{t('automations.constructor.extra.onlySquads')}</Label>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
+                        {(squadsList || []).map((sq) => (
+                          <label key={sq.uuid} className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                            <Checkbox
+                              checked={cleanupSquads.includes(sq.uuid)}
+                              onCheckedChange={(v) => setCleanupSquads((prev) => (v ? [...prev, sq.uuid] : prev.filter((u) => u !== sq.uuid)))}
+                            />
+                            {sq.name}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.extra.onlySquadsHint')}</p>
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-dark-400">{t('automations.constructor.extra.onlyTag')}</Label>
+                      <Input
+                        value={cleanupTag}
+                        onChange={(e) => setCleanupTag(e.target.value)}
+                        className="mt-1 w-48 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                        placeholder="TRIAL"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

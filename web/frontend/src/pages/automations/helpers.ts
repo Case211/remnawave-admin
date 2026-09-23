@@ -354,6 +354,12 @@ export function getThresholdMetrics() {
     { value: 'user_traffic_percent', label: t('automations.metrics.user_traffic_percent'), description: t('automations.metrics.user_traffic_percentDesc') },
     { value: 'user_node_traffic_gb', label: t('automations.metrics.user_node_traffic_gb'), description: t('automations.metrics.user_node_traffic_gbDesc') },
     { value: 'user_node_traffic_today_gb', label: t('automations.metrics.user_node_traffic_today_gb'), description: t('automations.metrics.user_node_traffic_today_gbDesc') },
+    { value: 'user_traffic_today_gb', label: t('automations.metrics.user_traffic_today_gb'), description: t('automations.metrics.user_traffic_today_gbDesc') },
+    { value: 'node_cpu_percent', label: t('automations.metrics.node_cpu_percent'), description: t('automations.metrics.node_cpu_percentDesc') },
+    { value: 'node_memory_percent', label: t('automations.metrics.node_memory_percent'), description: t('automations.metrics.node_memory_percentDesc') },
+    { value: 'node_disk_percent', label: t('automations.metrics.node_disk_percent'), description: t('automations.metrics.node_disk_percentDesc') },
+    { value: 'violations_last_hour', label: t('automations.metrics.violations_last_hour'), description: t('automations.metrics.violations_last_hourDesc') },
+    { value: 'users_new_today', label: t('automations.metrics.users_new_today'), description: t('automations.metrics.users_new_todayDesc') },
   ] as const
 }
 export const THRESHOLD_METRICS = new Proxy([] as unknown as ReturnType<typeof getThresholdMetrics>, {
@@ -370,6 +376,8 @@ export function getConditionOperators() {
     { value: '<=', label: t('automations.operators.lte') },
     { value: 'contains', label: t('automations.operators.contains') },
     { value: 'not_contains', label: t('automations.operators.not_contains') },
+    { value: 'in', label: t('automations.operators.in') },
+    { value: 'not_in', label: t('automations.operators.not_in') },
   ] as const
 }
 export const CONDITION_OPERATORS = new Proxy([] as unknown as ReturnType<typeof getConditionOperators>, {
@@ -379,26 +387,41 @@ export const CONDITION_OPERATORS = new Proxy([] as unknown as ReturnType<typeof 
 // Поля, которые движок реально кладёт в данные срабатывания, — по триггеру.
 // Условие на поле, которого нет в данных, всегда ложно, и правило молчит.
 const TRIGGER_FIELDS: Record<string, string[]> = {
-  'violation.detected': ['score'],
-  'torrent.detected': ['event_count', 'score'],
-  'node.went_offline': ['offline_minutes'],
-  'user.traffic_exceeded': ['percent', 'traffic_gb'],
-  users_online: ['users_online'],
-  traffic_today: ['traffic_today_gb'],
-  user_traffic_percent: ['percent', 'over_percent'],
+  'violation.detected': [
+    'score', 'recommended_action', 'country', 'countries', 'asn_types',
+    'is_mobile', 'is_datacenter', 'is_vpn', 'unique_ips', 'simultaneous', 'devices',
+  ],
+  'torrent.detected': ['event_count', 'window_events', 'peers', 'node_name'],
+  'node.went_offline': ['offline_minutes', 'users_before', 'country_code', 'node_name'],
+  'user.traffic_exceeded': ['percent', 'traffic_gb', 'days_left', 'tag', 'squads'],
+  users_online: ['users_online', 'node_name'],
+  traffic_today: ['traffic_today_gb', 'node_name'],
+  user_traffic_percent: ['percent', 'over_percent', 'days_left', 'tag', 'squads'],
   user_node_traffic_gb: ['traffic_gb', 'over_gb'],
   user_node_traffic_today_gb: ['traffic_gb', 'over_gb'],
+  user_traffic_today_gb: ['traffic_gb', 'over_gb'],
+  node_cpu_percent: ['value', 'memory', 'disk', 'node_name'],
+  node_memory_percent: ['value', 'cpu', 'disk', 'node_name'],
+  node_disk_percent: ['value', 'cpu', 'memory', 'node_name'],
+  violations_last_hour: ['violations_last_hour'],
+  users_new_today: ['users_new_today'],
   schedule: ['users_online', 'users_total', 'nodes_online', 'violations_today'],
 }
 
 // Переменные для текста уведомления — по триггеру
 const TRIGGER_VARS: Record<string, string[]> = {
-  'violation.detected': ['{user}', '{user_code}', '{score}'],
-  'torrent.detected': ['{user}', '{user_code}', '{event_count}'],
-  'node.went_offline': ['{node}', '{node_code}', '{offline_minutes}'],
-  'user.traffic_exceeded': ['{user}', '{user_code}', '{percent}', '{traffic_gb}'],
-  users_online: ['{users_online}'],
-  traffic_today: ['{traffic_today_gb}'],
+  'violation.detected': ['{user}', '{user_code}', '{score}', '{recommended_action}', '{country}', '{unique_ips}'],
+  'torrent.detected': ['{user}', '{user_code}', '{window_events}', '{peers}', '{node}'],
+  'node.went_offline': ['{node}', '{node_code}', '{offline_minutes}', '{users_before}', '{country_code}'],
+  'user.traffic_exceeded': ['{user}', '{user_code}', '{percent}', '{traffic_gb}', '{days_left}'],
+  users_online: ['{users_online}', '{node}'],
+  traffic_today: ['{traffic_today_gb}', '{node}'],
+  user_traffic_today_gb: ['{user}', '{user_code}', '{traffic_gb}', '{over_gb}', '{threshold}'],
+  node_cpu_percent: ['{node}', '{node_code}', '{value}', '{threshold}'],
+  node_memory_percent: ['{node}', '{node_code}', '{value}', '{threshold}'],
+  node_disk_percent: ['{node}', '{node_code}', '{value}', '{threshold}'],
+  violations_last_hour: ['{violations_last_hour}', '{threshold}'],
+  users_new_today: ['{users_new_today}', '{threshold}'],
   user_traffic_percent: ['{user}', '{user_code}', '{percent}', '{over_percent}', '{threshold}'],
   user_node_traffic_gb: ['{user}', '{user_code}', '{node}', '{node_code}', '{traffic}', '{over}', '{threshold}'],
   user_node_traffic_today_gb: ['{user}', '{user_code}', '{node}', '{node_code}', '{traffic}', '{over}', '{threshold}'],

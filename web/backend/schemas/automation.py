@@ -23,13 +23,13 @@ _ALLOWED_TRIGGER_KEYS: dict[str, set[str]] = {
     "threshold": {"metric", "operator", "value", "node_uuid"},
 }
 _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
-    "disable_user": {"reason"},
-    "block_user": {"reason"},
-    "notify": {"channel", "webhook_url", "message", "topic_type"},
-    "restart_node": {"node_uuid"},
+    "disable_user": {"reason", "duration_hours"},
+    "block_user": {"reason", "duration_hours"},
+    "notify": {"channel", "webhook_url", "message", "topic_type", "channels", "severity", "buttons"},
+    "restart_node": {"node_uuid", "max_per_hour"},
     "enable_node": {"node_uuid"},
     "disable_node": {"node_uuid"},
-    "cleanup_expired": {"older_than_days"},
+    "cleanup_expired": {"older_than_days", "squad_uuids", "tag"},
     "reset_traffic": {"target_status"},
     "force_sync": {"node_uuid"},
 }
@@ -38,7 +38,9 @@ _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
 EVENT_TYPES = {"violation.detected", "node.went_offline", "user.traffic_exceeded", "torrent.detected"}
 THRESHOLD_METRICS = {
     "users_online", "traffic_today", "user_traffic_percent",
-    "user_node_traffic_gb", "user_node_traffic_today_gb",
+    "user_node_traffic_gb", "user_node_traffic_today_gb", "user_traffic_today_gb",
+    "node_cpu_percent", "node_memory_percent", "node_disk_percent",
+    "violations_last_hour", "users_new_today",
 }
 # Действия, которые меняют юзеров и ноды: шаблоны с ними создаются выключенными
 DESTRUCTIVE_ACTIONS = {"disable_user", "block_user", "cleanup_expired", "restart_node", "disable_node", "reset_traffic"}

@@ -31,7 +31,35 @@ _OPERATORS = {
     "<=": op_module.le,
     "contains": lambda a, b: str(b) in str(a),
     "not_contains": lambda a, b: str(b) not in str(a),
+    "in": lambda a, b: _in_list(a, b),
+    "not_in": lambda a, b: not _in_list(a, b),
 }
+
+
+def _as_list(value) -> List[str]:
+    """Список из условия: ["RU","BY"] или строка «RU, BY»; без регистра."""
+    items = value if isinstance(value, (list, tuple, set)) else str(value).split(",")
+    return [str(v).strip().lower() for v in items if str(v).strip()]
+
+
+def _in_list(actual, expected) -> bool:
+    """Значение в списке; если в данных список (страны нарушения) — хоть одно."""
+    wanted = set(_as_list(expected))
+    have = _as_list(actual) if isinstance(actual, (list, tuple, set)) else [str(actual).strip().lower()]
+    return bool(wanted.intersection(have))
+
+
+def _days_left(expire_at) -> Optional[float]:
+    if not expire_at:
+        return None
+    if isinstance(expire_at, str):
+        try:
+            expire_at = datetime.fromisoformat(expire_at.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if expire_at.tzinfo is None:
+        expire_at = expire_at.replace(tzinfo=timezone.utc)
+    return round((expire_at - datetime.now(timezone.utc)).total_seconds() / 86400, 1)
 
 
 def _parse_cron_field(field: str, min_val: int, max_val: int) -> set:
@@ -120,6 +148,8 @@ class AutomationEngine:
         self._event_detect_task: Optional[asyncio.Task] = None
         # State tracking for event detection
         self._node_offline_since: Dict[str, datetime] = {}
+        # Сколько юзеров было на ноде, пока она была на связи
+        self._node_users_online: Dict[str, int] = {}
         self._user_traffic_exceeded: set = set()
         # Первый проход после старта только запоминает, кто уже за лимитом:
         # иначе рестарт заново рассылает событие по всем превысившим
@@ -257,11 +287,41 @@ class AutomationEngine:
                 if not self._running:
                     break
                 await self._check_scheduled_rules()
+                await self._run_pending_actions()
                 await self._cleanup_history_daily()
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Schedule loop error: %s", e)
+
+    async def _run_pending_actions(self) -> None:
+        """Наступившие отложенные действия: включить юзера после блокировки на время."""
+        from web.backend.core.automation import claim_due_actions, finish_pending_action, write_automation_log
+        try:
+            due = await claim_due_actions()
+        except Exception as e:
+            logger.warning("Pending automation actions unavailable: %s", e)
+            return
+        for item in due:
+            result, details = "error", {}
+            try:
+                if item["action"] != "enable_user":
+                    raise ValueError(f"unknown pending action {item['action']}")
+                from shared.data_access import resolve_panel_user_id
+                from web.backend.core.api_helper import _get_client
+                panel_id = await resolve_panel_user_id(item["target"])
+                resp = await _get_client().post(f"/api/users/{panel_id}/actions/enable", json={})
+                resp.raise_for_status()
+                result, details = "success", {"action": "enable_user", "user_uuid": item["target"], "after": "timed_block"}
+            except Exception as e:
+                details = {"error": str(e)}
+                logger.warning("Pending action %s failed: %s", item["id"], e)
+            await finish_pending_action(item["id"], result)
+            if item.get("rule_id"):
+                await write_automation_log(
+                    rule_id=item["rule_id"], target_type="user", target_id=item["target"],
+                    action_taken="enable_user", result=result, details=details,
+                )
 
     async def _cleanup_history_daily(self) -> None:
         """Раз в сутки — журнал и замки старше _HISTORY_KEEP_DAYS прочь."""
@@ -482,7 +542,7 @@ class AutomationEngine:
                     target_type, target_id, ctx = t
                     key = (rule["id"], target_id)
                     prev = self._threshold_notified.get(key)
-                    cur_value = ctx.get("percent") or ctx.get("traffic_gb") or 0
+                    cur_value = ctx.get("percent") or ctx.get("traffic_gb") or ctx.get("value") or 0
                     if prev is None:
                         new_targets.append(t)
                         self._threshold_notified[key] = (cur_value, now)
@@ -544,23 +604,78 @@ class AutomationEngine:
             return []
         targets: list = []
 
+        from web.backend.core.automation import count_since, node_load, user_traffic_today
+
+        # Порог по одной ноде: онлайн, трафик и нагрузка
+        only_node = trigger_config.get("node_uuid") or None
+
+        def _picked(n: dict) -> bool:
+            return not only_node or str(n.get("uuid", "")).lower() == str(only_node).lower()
+
         # Evaluate metric against data
         if metric == "users_online":
             if cache.get("nodes") is None:
                 cache["nodes"] = await fetch_nodes_from_api()
-            total_online = sum(n.get("users_online", 0) for n in cache["nodes"])
+            picked = [n for n in cache["nodes"] if _picked(n)]
+            total_online = sum(int(n.get("users_online") or 0) for n in picked)
             if op_fn(total_online, threshold_value):
-                targets.append(("system", None, {"users_online": total_online}))
+                ctx = {"users_online": total_online}
+                if only_node and picked:
+                    ctx["node_name"] = picked[0].get("name", "")
+                targets.append(("node" if only_node else "system", only_node, ctx))
+
+        elif metric in ("node_cpu_percent", "node_memory_percent", "node_disk_percent"):
+            column = {"node_cpu_percent": "cpu_usage", "node_memory_percent": "memory_usage",
+                      "node_disk_percent": "disk_usage"}[metric]
+            if cache.get("node_load") is None:
+                cache["node_load"] = await node_load()
+            for n in cache["node_load"]:
+                value = n.get(column)
+                if value is None or not _picked(n):
+                    continue
+                if op_fn(float(value), threshold_value):
+                    targets.append(("node", n["uuid"], {
+                        "node_name": n.get("name", ""), "value": round(float(value), 1),
+                        "cpu": n.get("cpu_usage"), "memory": n.get("memory_usage"), "disk": n.get("disk_usage"),
+                        "threshold": threshold_value,
+                    }))
+
+        elif metric == "violations_last_hour":
+            count = await count_since("violations", datetime.now(timezone.utc) - timedelta(hours=1))
+            if op_fn(count, threshold_value):
+                targets.append(("system", None, {"violations_last_hour": count, "threshold": threshold_value}))
+
+        elif metric == "users_new_today":
+            day_start = timefmt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            count = await count_since("users", day_start)
+            if op_fn(count, threshold_value):
+                targets.append(("system", None, {"users_new_today": count, "threshold": threshold_value}))
+
+        elif metric == "user_traffic_today_gb":
+            min_bytes = int(threshold_value * (1024 ** 3)) if trigger_config.get("operator", ">=") in (">", ">=") else 0
+            for row in await user_traffic_today(min_bytes):
+                traffic_gb = row["traffic_bytes"] / (1024 ** 3)
+                if op_fn(traffic_gb, threshold_value):
+                    targets.append(("user", row["uuid"], {
+                        "username": row.get("username") or "",
+                        "traffic_gb": round(traffic_gb, 2),
+                        "threshold": threshold_value,
+                        "over_gb": round(traffic_gb - threshold_value, 2),
+                    }))
 
         elif metric == "traffic_today":
             if not cache.get("nodes_enriched"):
                 cache["nodes"] = cache.get("nodes") or await fetch_nodes_from_api()
                 await enrich_nodes_traffic_today(cache["nodes"])
                 cache["nodes_enriched"] = True
-            total_traffic = sum(n.get("traffic_today_bytes", 0) for n in cache["nodes"])
+            picked = [n for n in cache["nodes"] if _picked(n)]
+            total_traffic = sum(int(n.get("traffic_today_bytes") or 0) for n in picked)
             total_gb = total_traffic / (1024 ** 3)
             if op_fn(total_gb, threshold_value):
-                targets.append(("system", None, {"traffic_today_gb": round(total_gb, 2)}))
+                ctx = {"traffic_today_gb": round(total_gb, 2)}
+                if only_node and picked:
+                    ctx["node_name"] = picked[0].get("name", "")
+                targets.append(("node" if only_node else "system", only_node, ctx))
 
         elif metric == "user_traffic_percent":
             # Из своей базы: полный список юзеров из панели каждые 5 минут
@@ -582,6 +697,9 @@ class AutomationEngine:
                             "percent": round(percent, 1),
                             "threshold": threshold_value,
                             "over_percent": round(percent - threshold_value, 1),
+                            "days_left": _days_left(user.get("expire_at")),
+                            "tag": user.get("tag") or "",
+                            "squads": user.get("squads") or "",
                         },
                     ))
 
@@ -705,6 +823,7 @@ class AutomationEngine:
                     continue
 
                 if node.get("is_connected", True):
+                    self._node_users_online[uuid] = int(node.get("users_online") or 0)
                     was_offline_since = self._node_offline_since.pop(uuid, None)
                     if was_offline_since is not None:
                         # Переход offline → online: шлём вебхук подписчикам
@@ -733,6 +852,8 @@ class AutomationEngine:
                     "is_connected": False,
                     "offline_minutes": round(offline_minutes, 1),
                     "offline_since": since.isoformat(),
+                    "country_code": node.get("country_code") or "",
+                    "users_before": self._node_users_online.get(uuid, 0),
                 })
 
             for u in [u for u in self._node_offline_since if u not in current_nodes]:
@@ -759,6 +880,9 @@ class AutomationEngine:
                         "used_traffic_bytes": used,
                         "percent": round(used / limit * 100, 1),
                         "traffic_gb": round(used / (1024 ** 3), 2),
+                        "days_left": _days_left(user.get("expire_at")),
+                        "tag": user.get("tag") or "",
+                        "squads": user.get("squads") or "",
                     })
                 self._user_traffic_exceeded = current_exceeded
                 self._traffic_seeded = True
@@ -790,9 +914,14 @@ class AutomationEngine:
                 logger.warning("Unknown condition operator: %s", cond_op)
                 return False
 
+            # Флаги (is_vpn и т.п.) в условии пишут строкой: «true» / «false»
+            if isinstance(actual_value, bool) and isinstance(cond_value, str):
+                actual_value = "true" if actual_value else "false"
+                cond_value = cond_value.strip().lower()
             try:
                 # Try numeric comparison first
-                if isinstance(cond_value, (int, float)):
+                if isinstance(cond_value, (int, float)) and not isinstance(cond_value, bool) \
+                        and cond_op not in ("in", "not_in"):
                     actual_value = float(actual_value)
                 if not op_fn(actual_value, cond_value):
                     return False
@@ -840,6 +969,9 @@ class AutomationEngine:
                 return "error", {"error": f"Unknown action type: {action_type}"}
 
             details = await handler(action_config, target_type, target_id, context)
+            # Действие решило не выполняться (лимит перезапусков и т.п.)
+            if isinstance(details, dict) and details.get("skipped"):
+                return "skipped", details
             return "success", details
 
         except Exception as e:
@@ -873,7 +1005,9 @@ class AutomationEngine:
             "details": "disable_user action",
             "blocked_by": "automation",
         })
-        return {"action": "disable_user", "user_uuid": target_id, "status": resp.status_code}
+        details = {"action": "disable_user", "user_uuid": target_id, "status": resp.status_code}
+        details.update(await self._schedule_unblock(config, target_id, context))
+        return details
 
     async def _action_block_user(
         self, config: dict, target_type: str, target_id: str, context: dict,
@@ -900,7 +1034,22 @@ class AutomationEngine:
             "details": reason,
             "blocked_by": "automation",
         })
-        return {"action": "block_user", "user_uuid": target_id, "reason": reason}
+        details = {"action": "block_user", "user_uuid": target_id, "reason": reason}
+        details.update(await self._schedule_unblock(config, target_id, context))
+        return details
+
+    async def _schedule_unblock(self, config: dict, target_id: str, context: dict) -> dict:
+        """Блокировка на время: через duration_hours включить юзера обратно."""
+        try:
+            hours = float(config.get("duration_hours") or 0)
+        except (TypeError, ValueError):
+            hours = 0
+        if hours <= 0:
+            return {}
+        from web.backend.core.automation import schedule_pending_action
+        run_at = datetime.now(timezone.utc) + timedelta(hours=hours)
+        await schedule_pending_action(context.get("rule_id"), "enable_user", target_id, run_at)
+        return {"unblock_at": run_at.isoformat()}
 
     async def _action_notify(
         self, config: dict, target_type: str, target_id: str, context: dict,
@@ -959,18 +1108,26 @@ class AutomationEngine:
                 category = context.get("category", target_type or "service")
                 topic_type = category if category != "system" else "service"
 
+            # Куда слать: Telegram всегда, плюс колокольчик и почта по выбору
+            extra = [c for c in (config.get("channels") or ["in_app"]) if c in ("in_app", "email")]
+            severity = config.get("severity") if config.get("severity") in ("info", "warning", "critical") else "info"
+            reply_markup = None
+            if config.get("buttons") and target_type == "user" and target_id:
+                from web.backend.core.violation_notifier import _violation_keyboard
+                reply_markup = _violation_keyboard(target_id, with_whitelist=False)
             await create_notification(
-                title="Automation",
+                title=context.get("rule_name") or "Automation",
                 body=message,
                 type="automation",
-                severity="info",
+                severity=severity,
                 source="automation",
                 source_id=str(context.get("rule_id", "")),
                 group_key=f"automation:{context.get('rule_id', '')}:{target_id}",
-                channels=["telegram", "in_app"],
+                channels=["telegram", *extra],
                 topic_type=topic_type,
                 telegram_body=message,
                 link="/automations",
+                reply_markup=reply_markup,
             )
             return {"action": "notify", "channel": "telegram", "sent": True}
 
@@ -1009,6 +1166,15 @@ class AutomationEngine:
         specific_node = config.get("node_uuid")
         if specific_node:
             target_id = specific_node
+
+        # Нода не поднимается — не перезапускать её по кругу
+        max_per_hour = int(config.get("max_per_hour") or 0)
+        if target_id and max_per_hour and context.get("rule_id"):
+            from web.backend.core.automation import count_recent_successes
+            done = await count_recent_successes(context["rule_id"], target_id, "restart_node", 60)
+            if done >= max_per_hour:
+                return {"action": "restart_node", "node_uuid": target_id,
+                        "skipped": "rate_limited", "restarts_last_hour": done}
 
         if target_id:
             client = _get_client()
@@ -1146,7 +1312,8 @@ class AutomationEngine:
         client = _get_client()
 
         disabled, failed = 0, 0
-        for uuid in await expired_users_to_disable(cutoff):
+        squads = [s for s in (config.get("squad_uuids") or []) if s]
+        for uuid in await expired_users_to_disable(cutoff, squads or None, config.get("tag") or None):
             try:
                 panel_id = await resolve_panel_user_id(uuid)
                 resp = await client.post(f"/api/users/{panel_id}/actions/disable", json={})
@@ -1251,7 +1418,8 @@ class AutomationEngine:
                     "type": target_type,
                     "id": target_id or "",
                     "name": ctx.get("username") or ctx.get("node_name") or "",
-                    "value": next((ctx[k] for k in ("percent", "traffic_gb", "users_online", "traffic_today_gb") if k in ctx), None),
+                    "value": next((ctx[k] for k in ("percent", "traffic_gb", "value", "users_online", "traffic_today_gb",
+                                                    "violations_last_hour", "users_new_today") if k in ctx), None),
                 })
             would_trigger = bool(matching_targets)
 

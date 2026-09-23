@@ -383,7 +383,11 @@ async def users_over_traffic(min_percent: float) -> List[dict]:
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT uuid::text AS uuid, username, used_traffic_bytes, traffic_limit_bytes
+            SELECT uuid::text AS uuid, username, used_traffic_bytes, traffic_limit_bytes, expire_at,
+                   COALESCE(raw_data::jsonb->>'tag', '') AS tag,
+                   COALESCE((SELECT string_agg(s->>'name', ',')
+                             FROM jsonb_array_elements(COALESCE(raw_data::jsonb->'activeInternalSquads', '[]'::jsonb)) s), '')
+                       AS squads
             FROM users
             WHERE traffic_limit_bytes > 0 AND LOWER(status) = 'active'
               AND used_traffic_bytes >= traffic_limit_bytes * ($1::float8 / 100)
@@ -393,16 +397,114 @@ async def users_over_traffic(min_percent: float) -> List[dict]:
     return [dict(r) for r in rows]
 
 
-async def expired_users_to_disable(cutoff) -> List[str]:
-    """uuid юзеров, у которых подписка истекла раньше cutoff и которые ещё не отключены."""
+async def expired_users_to_disable(cutoff, squad_uuids: Optional[List[str]] = None,
+                                   tag: Optional[str] = None) -> List[str]:
+    """uuid юзеров, у которых подписка истекла раньше cutoff и которые ещё не
+    отключены. Фильтр по сквадам и тегу — чтобы не задеть служебные аккаунты."""
     from shared.database import db_service
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT uuid::text AS uuid FROM users "
-            "WHERE expire_at IS NOT NULL AND expire_at < $1 AND UPPER(COALESCE(status, '')) <> 'DISABLED'",
-            cutoff,
+            """
+            SELECT uuid::text AS uuid FROM users
+            WHERE expire_at IS NOT NULL AND expire_at < $1
+              AND UPPER(COALESCE(status, '')) <> 'DISABLED'
+              AND ($2::text[] IS NULL OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(COALESCE(raw_data::jsonb->'activeInternalSquads', '[]'::jsonb)) s
+                    WHERE s->>'uuid' = ANY($2::text[])))
+              AND ($3::text IS NULL OR raw_data::jsonb->>'tag' = $3::text)
+            """,
+            cutoff, squad_uuids or None, tag or None,
         )
     return [r["uuid"] for r in rows]
+
+
+async def user_traffic_today(min_bytes: int) -> List[dict]:
+    """Трафик юзера за сегодня (сутки по часам панели) по всем нодам."""
+    from shared.database import db_service
+    z = timefmt.sql_zone()
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT h.user_uuid::text AS uuid, u.username, SUM(h.delta_bytes) AS traffic_bytes
+            FROM user_node_traffic_history h
+            JOIN users u ON u.uuid = h.user_uuid
+            WHERE h.recorded_at >= (date_trunc('day', NOW() AT TIME ZONE {z}) AT TIME ZONE {z})
+              AND UPPER(COALESCE(u.status, '')) NOT IN ('EXPIRED', 'DISABLED', 'LIMITED')
+            GROUP BY h.user_uuid, u.username
+            HAVING SUM(h.delta_bytes) >= $1
+            ORDER BY traffic_bytes DESC
+            """,
+            int(min_bytes),
+        )
+    return [dict(r) for r in rows]
+
+
+async def node_load() -> List[dict]:
+    """Нагрузка включённых нод на связи — из метрик Fleet."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT uuid::text AS uuid, name, cpu_usage, memory_usage, disk_usage FROM nodes "
+            "WHERE NOT is_disabled AND is_connected"
+        )
+    return [dict(r) for r in rows]
+
+
+async def count_since(what: str, since) -> int:
+    """Всплески: нарушения или новые юзеры с момента since."""
+    from shared.database import db_service
+    column = {"violations": ("violations", "detected_at"), "users": ("users", "created_at")}[what]
+    async with db_service.acquire() as conn:
+        return int(await conn.fetchval(
+            f"SELECT COUNT(*) FROM {column[0]} WHERE {column[1]} >= $1", since,
+        ) or 0)
+
+
+async def schedule_pending_action(rule_id: int, action: str, target: str, run_at) -> None:
+    """Отложенное действие: переживает рестарт, выполнит движок."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO automation_pending_actions (rule_id, action, target, run_at) VALUES ($1, $2, $3, $4)",
+            rule_id, action, target, run_at,
+        )
+
+
+async def claim_due_actions(limit: int = 50) -> List[dict]:
+    """Наступившие отложенные действия — забрать атомарно (без двойного исполнения)."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            UPDATE automation_pending_actions SET done_at = NOW()
+            WHERE id IN (
+                SELECT id FROM automation_pending_actions
+                WHERE done_at IS NULL AND run_at <= NOW()
+                ORDER BY run_at LIMIT $1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id, rule_id, action, target
+            """,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+async def finish_pending_action(action_id: int, result: str) -> None:
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        await conn.execute("UPDATE automation_pending_actions SET result = $2 WHERE id = $1", action_id, result)
+
+
+async def count_recent_successes(rule_id: int, target_id: str, action: str, minutes: int) -> int:
+    """Сколько раз правило успешно сделало action с целью за последние minutes."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        return int(await conn.fetchval(
+            f"SELECT COUNT(*) FROM {AUTOMATION_LOG_TABLE} WHERE rule_id = $1 AND target_id = $2 "
+            "AND action_taken = $3 AND result = 'success' AND triggered_at > NOW() - INTERVAL '1 minute' * $4",
+            rule_id, target_id, action, minutes,
+        ) or 0)
 
 
 async def cleanup_automation_history(keep_days: int = 90) -> int:
@@ -415,6 +517,10 @@ async def cleanup_automation_history(keep_days: int = 90) -> int:
         )
         await conn.execute(
             "DELETE FROM automation_trigger_locks WHERE last_triggered_at < NOW() - INTERVAL '1 day' * $1",
+            keep_days,
+        )
+        await conn.execute(
+            "DELETE FROM automation_pending_actions WHERE done_at < NOW() - INTERVAL '1 day' * $1",
             keep_days,
         )
     return int(result.split()[-1]) if result else 0
