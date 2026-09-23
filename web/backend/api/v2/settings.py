@@ -501,17 +501,8 @@ async def trigger_sync(
             from shared.database import db_service
             parser = ASNParser(db_service)
             try:
-                stats = await parser.sync_russian_asn_database(limit=None)
-                records = stats.get('success', 0) if isinstance(stats, dict) else 0
-                await db_service.update_sync_metadata(
-                    key="asn", status="success", records_synced=records
-                )
-                result = stats
-            except Exception as asn_err:
-                await db_service.update_sync_metadata(
-                    key="asn", status="error", error_message=str(asn_err)
-                )
-                raise
+                # статус в sync_metadata пишет сама синхронизация
+                result = await parser.sync_russian_asn_database(limit=None)
             finally:
                 await parser.close()
         else:
