@@ -15,7 +15,7 @@ The button creates a dump and it appears in the list, ready to download or resto
 | Setting | Meaning | Default |
 |---------|---------|---------|
 | Scheduled backup | enables everything below | off |
-| Backup time | daily time in UTC | `03:00` |
+| Backup time | daily time in the panel time zone (`display_timezone` setting) | `03:00` |
 | Interval, hours | `0` means once a day; `N` means every N hours starting at that time | `0` |
 | Send to Telegram | the dump goes to the notification chat | off |
 | Keep backups, count | how many recent ones to keep | `10` |

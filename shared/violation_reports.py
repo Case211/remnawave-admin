@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from shared import timefmt
 from shared.analyzers.models import ACTION_LABELS
 from shared.database import db_service
 from shared.logger import logger
@@ -130,8 +131,11 @@ class ViolationReportService:
         if reference_date is None:
             reference_date = datetime.now(timezone.utc)
 
-        # Убираем время, оставляем только дату
-        ref_date = reference_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Сутки считаем по зоне отображения: «вчера» у админа в Москве — с полуночи
+        # до полуночи по Москве, а не с 03:00 до 03:00. Границы остаются
+        # aware-датами, в запросах к базе они сами пересчитываются в UTC.
+        local = timefmt.to_display(reference_date)
+        ref_date = local.replace(hour=0, minute=0, second=0, microsecond=0)
 
         if report_type == ReportType.DAILY:
             # Вчера
@@ -315,8 +319,8 @@ class ViolationReportService:
         lines.append("")
 
         # Период
-        period_start_str = report.period_start.strftime("%d.%m.%Y")
-        period_end_str = (report.period_end - timedelta(seconds=1)).strftime("%d.%m.%Y")
+        period_start_str = timefmt.fmt_date(report.period_start)
+        period_end_str = timefmt.fmt_date(report.period_end - timedelta(seconds=1))
         if period_start_str == period_end_str:
             lines.append(f"📅 <b>Период:</b> {period_start_str}")
         else:
@@ -396,7 +400,7 @@ class ViolationReportService:
 
         # Футер
         lines.append("")
-        generated_at = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+        generated_at = timefmt.fmt(datetime.now(timezone.utc))
         lines.append(f"<i>Сгенерировано: {generated_at}</i>")
 
         return "\n".join(lines)
@@ -549,7 +553,7 @@ class ViolationReportService:
 
         # Заголовки CSV
         headers = [
-            "ID", "Дата", "Пользователь", "Email", "Telegram ID",
+            "ID", f"Дата ({timefmt.label()})", "Пользователь", "Email", "Telegram ID",
             "Скор", "Действие", "IP адреса", "Страны", "Провайдеры",
             "Одновременных подключений", "Причины"
         ]
@@ -559,7 +563,7 @@ class ViolationReportService:
         for v in violations:
             row = [
                 str(v.get('id', '')),
-                v.get('detected_at', '').strftime("%d.%m.%Y %H:%M") if v.get('detected_at') else '',
+                timefmt.fmt(v.get('detected_at'), "%d.%m.%Y %H:%M", with_label=False),
                 v.get('username', '') or '',
                 v.get('email', '') or '',
                 str(v.get('telegram_id', '') or ''),

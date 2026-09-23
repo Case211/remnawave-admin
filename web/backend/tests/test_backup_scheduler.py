@@ -14,7 +14,9 @@ def _fake_config(values):
 
 
 def _now_hhmm():
-    return datetime.now(timezone.utc).strftime("%H:%M")
+    # Время бэкапа задаётся в зоне отображения панели
+    from shared import timefmt
+    return timefmt.now().strftime("%H:%M")
 
 
 @pytest.fixture(autouse=True)

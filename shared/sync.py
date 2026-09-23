@@ -1730,16 +1730,9 @@ def _format_date(value) -> str:
     if value is None:
         return "Бессрочно"
     
-    if isinstance(value, str):
-        try:
-            # Try to parse ISO format
-            from datetime import datetime
-            dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            return dt.strftime("%d.%m.%Y %H:%M")
-        except ValueError:
-            return value
-    
-    return str(value)
+    from shared import timefmt
+
+    return timefmt.fmt(value)
 
 
 def _format_bool(value) -> str:

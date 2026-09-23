@@ -426,8 +426,9 @@ class TrafficRateMonitor:
                     limit_str = f"{round(limit / (1024 ** 3), 1)} GB" if limit > 0 else "∞"
                     extra_lines.append(f"📊 Статус: <b>{_esc(status)}</b> | Трафик: <b>{used_gb}</b> / {limit_str}")
                     if user_row["expire_at"]:
-                        exp = user_row["expire_at"]
-                        exp_str = exp.strftime("%d.%m.%Y") if hasattr(exp, "strftime") else str(exp)[:10]
+                        from shared import timefmt
+
+                        exp_str = timefmt.fmt_date(user_row["expire_at"])
                         extra_lines.append(f"📅 Истекает: {exp_str}")
                     if user_row["description"]:
                         extra_lines.append(f"📝 {_esc(user_row['description'])}")

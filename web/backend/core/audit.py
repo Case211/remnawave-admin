@@ -5,6 +5,7 @@ from typing import Optional, List, Tuple
 import logging
 logger = logging.getLogger(__name__)
 
+from shared import timefmt
 from shared.db_schema import AUDIT_TABLE
 from shared.db_query import select_sql, insert_sql
 
@@ -76,13 +77,16 @@ async def get_audit_logs(
             where_parts.append(f"resource_id = ${idx}")
             params.append(resource_id)
             idx += 1
-        if date_from:
-            where_parts.append(f"created_at >= ${idx}::timestamptz")
-            params.append(date_from)
+        # asyncpg не принимает строку для timestamptz; голая дата — сутки
+        # в часовом поясе панели, конец диапазона — весь выбранный день
+        since, until = timefmt.filter_bounds(date_from, date_to)
+        if since:
+            where_parts.append(f"created_at >= ${idx}")
+            params.append(since)
             idx += 1
-        if date_to:
-            where_parts.append(f"created_at <= ${idx}::timestamptz")
-            params.append(date_to)
+        if until:
+            where_parts.append(f"created_at < ${idx}")
+            params.append(until)
             idx += 1
         if search:
             where_parts.append(

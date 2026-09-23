@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useFormatters } from '@/lib/useFormatters'
+import { parseApiDate, useFormatters } from '@/lib/useFormatters'
+import { fromZonedInputValue, timeZoneLabel, toZonedInputValue } from '@/lib/timezone'
 import {
   Search,
   RefreshCw,
@@ -165,7 +166,7 @@ export default function BedolagaPromo() {
       balance_bonus_kopeks: promo.balance_bonus_kopeks?.toString() || '',
       subscription_days: promo.subscription_days?.toString() || '',
       max_uses: promo.max_uses?.toString() || '1',
-      valid_until: promo.valid_until?.slice(0, 16) || '',
+      valid_until: promo.valid_until ? toZonedInputValue(parseApiDate(promo.valid_until)) : '',
       is_active: promo.is_active ?? true,
     })
     setDialogOpen(true)
@@ -176,7 +177,11 @@ export default function BedolagaPromo() {
     if (form.balance_bonus_kopeks) payload.balance_bonus_kopeks = parseInt(form.balance_bonus_kopeks)
     if (form.subscription_days) payload.subscription_days = parseInt(form.subscription_days)
     if (form.max_uses) payload.max_uses = parseInt(form.max_uses)
-    if (form.valid_until) payload.valid_until = form.valid_until
+    if (form.valid_until) {
+      // Поле на часах зоны панели; наружу уходит момент в UTC
+      const until = fromZonedInputValue(form.valid_until)
+      if (until) payload.valid_until = until.toISOString()
+    }
     payload.is_active = form.is_active
 
     if (editingPromo) {
@@ -422,7 +427,7 @@ export default function BedolagaPromo() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.expiresAt')}</label>
+                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.expiresAt')} ({timeZoneLabel()})</label>
                 <input
                   type="datetime-local"
                   value={form.valid_until}

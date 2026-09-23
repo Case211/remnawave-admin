@@ -35,6 +35,7 @@ from web.backend.schemas.violation import (
     ThrottleItem,
     ThrottleListResponse,
 )
+from shared import timefmt
 from shared.database import DatabaseService
 from shared.geoip import get_geoip_service
 
@@ -142,7 +143,9 @@ async def list_violations(
         # Override start/end from date_from/date_to if provided
         if date_from:
             try:
-                start_date = datetime.fromisoformat(date_from)
+                # Дата из фильтра — сутки в часовом поясе панели; дальше код
+                # работает с naive UTC, как и значения по умолчанию выше
+                start_date = timefmt.parse_filter(date_from).replace(tzinfo=None)
             except ValueError:
                 raise HTTPException(
                     status_code=400,
@@ -150,7 +153,7 @@ async def list_violations(
                 )
         if date_to:
             try:
-                end_date = datetime.fromisoformat(date_to)
+                end_date = timefmt.parse_filter(date_to, end=True).replace(tzinfo=None)
             except ValueError:
                 raise HTTPException(
                     status_code=400,

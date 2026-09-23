@@ -71,7 +71,8 @@ import { InfoTooltip } from '@/components/InfoTooltip'
 import { QueryError } from '@/components/QueryError'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
-import { useFormatters } from '@/lib/useFormatters'
+import { parseApiDate, useFormatters } from '@/lib/useFormatters'
+import { getDisplayTimeZone } from '@/lib/timezone'
 
 // ── Period Switcher ─────────────────────────────────────────────
 
@@ -197,8 +198,8 @@ function GeoMapCard() {
   const chart = useChartTheme()
 
   const hasCustomDates = Boolean(geoDateFrom)
-  const apiDateFrom = hasCustomDates ? new Date(geoDateFrom).toISOString() : undefined
-  const apiDateTo = hasCustomDates && geoDateTo ? new Date(geoDateTo + 'T23:59:59').toISOString() : undefined
+  const apiDateFrom = hasCustomDates ? geoDateFrom : undefined
+  const apiDateTo = hasCustomDates && geoDateTo ? geoDateTo : undefined
 
   const { data: geoData, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-geo', geoPeriod, geoDateFrom, geoDateTo],
@@ -620,8 +621,8 @@ function TopUsersCard() {
   const [dateTo, setDateTo] = useState('')
 
   const hasCustomDates = Boolean(dateFrom && dateTo)
-  const apiDateFrom = hasCustomDates ? new Date(dateFrom).toISOString() : undefined
-  const apiDateTo = hasCustomDates ? new Date(dateTo + 'T23:59:59').toISOString() : undefined
+  const apiDateFrom = hasCustomDates ? dateFrom : undefined
+  const apiDateTo = hasCustomDates ? dateTo : undefined
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-top-users', limit, dateFrom, dateTo],
@@ -810,14 +811,14 @@ function OnlineTrendCard() {
   const chartData = useMemo(() => {
     const points = data?.points || []
     return points.map((p) => {
-      const dt = new Date(p.timestamp.replace(' ', 'T'))
+      const dt = parseApiDate(p.timestamp.replace(' ', 'T'))
       let label: string
       if (period === '24h') {
-        label = dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+        label = dt.toLocaleTimeString(undefined, { timeZone: getDisplayTimeZone(), hour: '2-digit', minute: '2-digit' })
       } else if (period === '30d') {
-        label = dt.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })
+        label = dt.toLocaleDateString(undefined, { timeZone: getDisplayTimeZone(), day: '2-digit', month: '2-digit' })
       } else {
-        label = dt.toLocaleString(undefined, { day: '2-digit', month: '2-digit', hour: '2-digit' })
+        label = dt.toLocaleString(undefined, { timeZone: getDisplayTimeZone(), day: '2-digit', month: '2-digit', hour: '2-digit' })
       }
       return { label, value: p.value }
     })
@@ -956,8 +957,8 @@ function TrendsCard() {
   const [trendDateTo, setTrendDateTo] = useUrlParam('trend_to', '')
 
   const hasCustomDates = Boolean(trendDateFrom)
-  const apiDateFrom = hasCustomDates ? new Date(trendDateFrom).toISOString() : undefined
-  const apiDateTo = hasCustomDates && trendDateTo ? new Date(trendDateTo + 'T23:59:59').toISOString() : undefined
+  const apiDateFrom = hasCustomDates ? trendDateFrom : undefined
+  const apiDateTo = hasCustomDates && trendDateTo ? trendDateTo : undefined
 
   // B1 fix: for traffic, use the real timeseries API (daily consumption)
   const isTraffic = metric === 'traffic'
@@ -1593,8 +1594,8 @@ function NodesTrafficCard() {
   const dateFrom = dateFromRaw || defaultFrom
   const dateTo = dateToRaw || defaultTo
 
-  const apiDateFrom = new Date(dateFrom).toISOString()
-  const apiDateTo = new Date(dateTo + 'T23:59:59').toISOString()
+  const apiDateFrom = dateFrom
+  const apiDateTo = dateTo
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['nodes-traffic', dateFrom, dateTo],

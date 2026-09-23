@@ -13,6 +13,7 @@ from typing import Optional
 from aiogram import Bot
 
 from src.config import get_settings
+from shared import timefmt
 from shared.config_service import config_service
 from shared.notification_config import (
     resolve_notification_topic,
@@ -100,7 +101,8 @@ class ReportScheduler:
         if not config_service.get("reports_enabled", True):
             return
 
-        now = datetime.now(timezone.utc)
+        # Время отчётов задаётся в зоне отображения (настройка display_timezone)
+        now = timefmt.now()
         current_time = now.strftime("%H:%M")
         current_date = now.strftime("%Y-%m-%d")
         current_weekday = now.weekday()  # 0 = Monday

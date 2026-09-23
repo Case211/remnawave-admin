@@ -8,6 +8,7 @@ import logging
 import math
 from typing import Optional, List, Tuple
 
+from shared import timefmt
 from shared.db_schema import AUTOMATION_RULES_TABLE, AUTOMATION_LOG_TABLE
 from shared.db_query import select_sql, insert_sql, update_sql, delete_sql, left_join_sql
 
@@ -410,13 +411,16 @@ async def get_automation_logs(
                 where_parts.append(f"l.result = ${idx}")
                 params.append(result)
                 idx += 1
-            if date_from is not None:
-                where_parts.append(f"l.triggered_at >= ${idx}::timestamptz")
-                params.append(date_from)
+            # asyncpg не принимает строку для timestamptz; голая дата — сутки
+            # в часовом поясе панели, конец диапазона — весь выбранный день
+            since, until = timefmt.filter_bounds(date_from, date_to)
+            if since:
+                where_parts.append(f"l.triggered_at >= ${idx}")
+                params.append(since)
                 idx += 1
-            if date_to is not None:
-                where_parts.append(f"l.triggered_at <= ${idx}::timestamptz")
-                params.append(date_to)
+            if until:
+                where_parts.append(f"l.triggered_at < ${idx}")
+                params.append(until)
                 idx += 1
 
             where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""

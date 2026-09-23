@@ -6,7 +6,7 @@ import logging
 import re
 import smtplib
 import ssl
-from datetime import datetime
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
@@ -22,6 +22,7 @@ from shared.db_schema import (
     NOTIFICATION_CHANNEL_CONFIGS_TABLE,
 )
 from shared.db_query import select_sql, insert_sql
+from shared import timefmt
 from shared.notification_config import (
     is_notification_type_enabled,
     resolve_notification_topic,
@@ -131,7 +132,7 @@ def _build_html_email(title: str, body: str, severity: str = "info", link: Optio
     {link_html}
 </td></tr>
 <tr><td style="padding:16px 32px;border-top:1px solid #2a3a4a;color:#64748b;font-size:12px">
-    Remnawave Admin &middot; {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}
+    Remnawave Admin &middot; {timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M")}
 </td></tr>
 </table>
 </td></tr>
@@ -744,7 +745,7 @@ def _esc_html(text: str) -> str:
 
 
 def _now_str() -> str:
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    return timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M:%S")
 
 
 async def notify_login_failed(

@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
+from shared import timefmt
 from shared.analyzers.models import ACTION_LABELS, dominant_analyzer
 
 logger = logging.getLogger(__name__)
@@ -208,12 +209,12 @@ async def _recap_lines(user_uuid: str) -> list:
 
     marks = []
     for item in history:
-        when = (item["detected_at"] + timedelta(hours=3)).strftime("%d.%m %H:%M")
+        when = timefmt.fmt(item["detected_at"], "%d.%m %H:%M", with_label=False)
         if item.get("action_taken") == "annulled":
             when += " (аннул.)"
         marks.append(when)
     if marks:
-        lines.append("   " + " · ".join(marks))
+        lines.append("   " + " · ".join(marks) + f" ({timefmt.label()})")
     return lines
 
 
@@ -297,9 +298,7 @@ async def send_violation_notification(
         if ip_count == 0 and active_connections:
             ip_count = len(set(str(c.ip_address) for c in active_connections))
 
-        # Moscow time (UTC+3)
-        moscow_time = now + timedelta(hours=3)
-        moscow_time_str = moscow_time.strftime("%d.%m.%Y %H:%M:%S")
+        event_time = timefmt.fmt(now, "%d.%m.%Y %H:%M:%S")
 
         # Collect unique IPs and nodes
         unique_ips = set()
@@ -488,7 +487,7 @@ async def send_violation_notification(
             if action_key == "hard_block":
                 lines.append("ℹ️ Автоблокировка выключена — решение за администратором")
         lines.append(f"\U0001f4ca Скор: <b>{total_score:.1f}</b> / 100")
-        lines.append(f"\U0001f550 Время (МСК): {moscow_time_str}")
+        lines.append(f"\U0001f550 Время: {event_time}")
         lines.extend(await _recap_lines(user_uuid))
 
         body = "\n".join(lines)
@@ -570,8 +569,7 @@ async def send_torrent_notification(
         email = info.get("email", "")
         telegram_id = info.get("telegramId")
 
-        moscow_time = now + timedelta(hours=3)
-        moscow_time_str = moscow_time.strftime("%d.%m.%Y %H:%M:%S")
+        event_time = timefmt.fmt(now, "%d.%m.%Y %H:%M:%S")
 
         event_count = len(torrent_events) if torrent_events else 0
 
@@ -608,7 +606,7 @@ async def send_torrent_notification(
 
         lines.append("")
         lines.append("\U0001f6d1 \u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435: <b>\u0416\u0451\u0441\u0442\u043a\u0430\u044f \u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430</b>")
-        lines.append(f"\U0001f550 \u0412\u0440\u0435\u043c\u044f (\u041c\u0421\u041a): <code>{moscow_time_str}</code>")
+        lines.append(f"\U0001f550 \u0412\u0440\u0435\u043c\u044f: <code>{event_time}</code>")
         lines.extend(await _recap_lines(user_uuid))
 
         body = "\n".join(lines)

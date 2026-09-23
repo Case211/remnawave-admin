@@ -93,6 +93,17 @@ async def get_panel_name(
         return {"panel_name": ""}
 
 
+@router.get("/timezone")
+async def get_display_timezone(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Часовой пояс, в котором админка показывает время. Нужна только авторизация:
+    время видит каждый админ, а не только тот, кому можно в настройки."""
+    from shared import timefmt
+
+    return {"timezone": timefmt.zone_name()}
+
+
 @router.get("/public-brand")
 async def get_public_brand():
     """Brand name for the login screen and browser tab title.

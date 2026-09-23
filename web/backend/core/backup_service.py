@@ -684,16 +684,18 @@ async def _run_auto_backup_if_due() -> None:
     """Create a DB (and optionally config) backup when the schedule is due.
 
     Two modes, config-driven:
-    - daily:    once a day at backup_auto_time (HH:MM UTC).
+    - daily:    once a day at backup_auto_time (HH:MM in the display time zone).
     - interval: first at backup_auto_time, then every backup_auto_interval_hours.
     """
     global _last_auto_backup_ts
+    from shared import timefmt
     from shared.config_service import config_service
 
     if not config_service.get("backup_auto_enabled", False):
         return
 
-    now = datetime.now(timezone.utc)
+    # Время бэкапа задаётся в зоне отображения, как и всё время в панели
+    now = timefmt.now()
     current_time = now.strftime("%H:%M")
     schedule_time = str(config_service.get("backup_auto_time", "03:00") or "03:00")
     interval_hours = int(config_service.get("backup_auto_interval_hours", 0) or 0)
@@ -708,7 +710,7 @@ async def _run_auto_backup_if_due() -> None:
     else:
         # Daily mode: once per day at schedule_time
         if _last_auto_backup_ts is not None and \
-                _last_auto_backup_ts.strftime("%Y-%m-%d") == now.strftime("%Y-%m-%d"):
+                timefmt.to_display(_last_auto_backup_ts).date() == now.date():
             return
         if current_time != schedule_time:
             return

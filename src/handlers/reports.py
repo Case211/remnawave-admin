@@ -14,6 +14,7 @@ from src.keyboards.reports_menu import (
     reports_view_keyboard,
 )
 from src.utils.auth import BotAdmin
+from shared import timefmt
 from shared.config_service import config_service
 from shared.database import db_service
 from src.services.report_scheduler import get_report_scheduler
@@ -64,8 +65,8 @@ async def generate_report(callback: CallbackQuery, admin: BotAdmin) -> None:
 
         if report.total_violations == 0:
             text = _("reports.generated_empty").format(
-                start=report.period_start.strftime('%d.%m.%Y'),
-                end=(report.period_end - timedelta(seconds=1)).strftime('%d.%m.%Y'),
+                start=timefmt.fmt_date(report.period_start),
+                end=timefmt.fmt_date(report.period_end - timedelta(seconds=1)),
             )
             await _edit_text_safe(callback.message, text, reply_markup=reports_back_keyboard(), parse_mode="HTML")
         else:
@@ -170,8 +171,8 @@ async def view_report(callback: CallbackQuery, admin: BotAdmin) -> None:
         text = _("reports.view_summary").format(
             id=report_id,
             rtype=report.get('report_type', _("reports.unknown_type")),
-            start=report.get('period_start', '?').strftime('%d.%m.%Y') if report.get('period_start') else '?',
-            end=report.get('period_end', '?').strftime('%d.%m.%Y') if report.get('period_end') else '?',
+            start=timefmt.fmt_date(report.get('period_start'), empty='?'),
+            end=timefmt.fmt_date(report['period_end'] - timedelta(seconds=1)) if report.get('period_end') else '?',
             total=report.get('total_violations', 0),
             critical=report.get('critical_count', 0),
             warnings=report.get('warning_count', 0),

@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Any, Callable
 import html
 import re
@@ -233,11 +232,9 @@ def format_bytes(value: float | int | None) -> str:
 def format_datetime(dt_str: str | None) -> str:
     if not dt_str:
         return NA
-    try:
-        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-        return dt.strftime("%Y-%m-%d %H:%M")
-    except Exception:
-        return dt_str
+    from shared import timefmt
+
+    return timefmt.fmt(dt_str, "%Y-%m-%d %H:%M")
 
 
 def format_uptime(seconds: float | int | None) -> str:

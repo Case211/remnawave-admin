@@ -1254,7 +1254,7 @@
       "more_devices": "... and {count} more",
       "duration": "⏱ In violation: <code>{seconds} sec</code>",
       "score": "📊 Score: <code>{score}/100</code>",
-      "time_msk": "🕐 Time (MSK): <code>{time}</code>",
+      "time": "🕐 Time: <code>{time}</code>",
       "btn": {
         "info": "👤 Details",
         "block": "🔒 Block",

@@ -5,6 +5,7 @@ import PageBreadcrumbs from './PageBreadcrumbs'
 import { CommandPalette } from '../CommandPalette'
 import { ShortcutsDialog } from '../ShortcutsDialog'
 import { useRealtimeUpdates } from '../../store/useWebSocket'
+import { useTimeZoneSync } from '../../lib/useTimeZoneSync'
 
 interface LayoutProps {
   children: ReactNode
@@ -17,6 +18,9 @@ export default function Layout({ children }: LayoutProps) {
 
   // Connect WebSocket for real-time updates (nodes, users, violations)
   useRealtimeUpdates()
+
+  // Всё время в админке показывается в часовом поясе из настроек панели
+  useTimeZoneSync()
 
   // Global keyboard shortcuts
   const handleKeyDown = useCallback(

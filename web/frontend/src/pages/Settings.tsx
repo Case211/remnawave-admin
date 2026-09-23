@@ -48,6 +48,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { DISPLAY_TIME_ZONE_QUERY } from '@/lib/useTimeZoneSync'
+
+// Настройки с зоной IANA: рядом кнопка «зона браузера»
+const TIME_ZONE_KEYS = new Set(['display_timezone', 'support_quiet_hours_tz'])
 
 // Types matching backend ConfigItemResponse
 interface ConfigItem {
@@ -1042,6 +1046,7 @@ export default function Settings() {
       setSavedKeys((prev) => new Set(prev).add(key))
       setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
+      if (key === 'display_timezone') queryClient.invalidateQueries({ queryKey: DISPLAY_TIME_ZONE_QUERY })
       clearTimeout(savedTimersRef.current[key])
       savedTimersRef.current[key] = setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
     },
@@ -1057,6 +1062,7 @@ export default function Settings() {
     onSuccess: (_data, key) => {
       setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
+      if (key === 'display_timezone') queryClient.invalidateQueries({ queryKey: DISPLAY_TIME_ZONE_QUERY })
       setSavedKeys((prev) => new Set(prev).add(key))
       clearTimeout(savedTimersRef.current[key])
       savedTimersRef.current[key] = setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
@@ -1375,7 +1381,7 @@ export default function Settings() {
           />
           {/* Свою зону в виде «Europe/Moscow» по памяти не напишет никто —
               подставляем ту, в которой сейчас открыт браузер. */}
-          {item.key === 'support_quiet_hours_tz' && isEditable && (
+          {TIME_ZONE_KEYS.has(item.key) && isEditable && (
             <Button
               variant="outline"
               size="sm"

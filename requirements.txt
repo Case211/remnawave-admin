@@ -33,3 +33,4 @@ freezegun>=1.4.0
 firebase-admin>=6.5.0
 # Prometheus exposition — shared/metrics.py инкрементируется из бота тоже
 prometheus-client>=0.20.0
+tzdata>=2024.1

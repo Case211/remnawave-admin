@@ -35,6 +35,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { useFormatters } from '@/lib/useFormatters'
+import { timeZoneLabel, useDisplayTimeZone } from '@/lib/timezone'
 import client from '../api/client'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -66,6 +67,7 @@ function FileIcon({ filename }: { filename: string }) {
 
 function AutoBackupScheduleCard() {
   const { t } = useTranslation()
+  const timeZone = useDisplayTimeZone()
   const queryClient = useQueryClient()
   const canEdit = useHasPermission('settings', 'edit')
 
@@ -112,7 +114,7 @@ function AutoBackupScheduleCard() {
         <p className="text-xs text-dark-300">{t('backup.schedule.description')}</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <Label className="text-xs text-dark-300">{t('backup.schedule.time')}</Label>
+            <Label className="text-xs text-dark-300">{t('backup.schedule.time', { zone: timeZoneLabel(timeZone) })}</Label>
             <Input
               type="time"
               value={s?.backup_auto_time || '03:00'}

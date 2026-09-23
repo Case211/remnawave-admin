@@ -366,20 +366,20 @@ async def _notify_penalty(node_uuid, node_name, settings_row, row_id, ev, user_l
         )
 
     from html import escape
-    from datetime import timedelta
+    from shared import timefmt
     from web.backend.core.notification_service import create_notification
 
     names = ", ".join(escape(u["username"] or u["uuid"][:8]) for u in fresh)
     rate = settings_row["penalty_kbit"] / 1000 if settings_row else None
     window = settings_row["penalty_window_sec"] if settings_row else None
-    until_msk = (ev["until"] + timedelta(hours=3)).strftime("%H:%M")
+    until_local = timefmt.fmt(ev["until"], "%H:%M")
     lines = [
         f"👤 {names}",
         f"🖥 Нода: <b>{escape(node_name)}</b>",
         f"📦 Прокачал: <b>{_format_bytes(ev['bytes'])}</b>" + (f" за {window} с" if window else ""),
     ]
     if rate:
-        lines.append(f"🔻 Скорость урезана до <b>{rate:g} Мбит/с</b> до {until_msk} МСК")
+        lines.append(f"🔻 Скорость урезана до <b>{rate:g} Мбит/с</b> до {until_local}")
     lines.append(f"🌐 IP: <code>{escape(ev['ip'])}</code>")
     body = "\n".join(lines)
 

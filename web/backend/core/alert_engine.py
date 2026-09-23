@@ -10,6 +10,7 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, Deque, List, Optional, Tuple
 
+from shared import timefmt
 from shared.db_schema import ALERT_RULES_TABLE, ALERT_RULE_LOG_TABLE, NODES_TABLE
 from shared.db_query import select_sql, insert_sql, update_sql
 
@@ -358,7 +359,7 @@ class AlertEngine:
             "nodes_total": str(metrics.get("nodes_total", 0)),
             "nodes_online": str(metrics.get("nodes_online", 0)),
             "nodes_offline": str(metrics.get("nodes_offline", 0)),
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "timestamp": timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M"),
         }
 
         # Render templates (with safe fallback if template has unknown keys)

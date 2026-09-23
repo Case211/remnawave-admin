@@ -23,6 +23,7 @@ The basics: language, logs, access to the Remnawave panel, third-party service k
 | **🗂️ Log backup count** | `log_backup_count` | `5` | Number of compressed backup files kept after rotation |
 | **🌍 MaxMind GeoIP source** | `maxmind_source` | `auto` | auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required) (`MAXMIND_SOURCE`) |
 | **🏷️ Panel name** | `panel_name` | empty | Project name displayed in the sidebar (next to the logo) |
+| **🕒 Time zone** | `display_timezone` | `Europe/Moscow` | IANA zone. All times are shown in it: web panel, bot, notifications, exports, report and backup times. The database and the API keep time in UTC |
 | **🔗 Public panel URL** | `web_panel_public_url` | empty | https address of the web panel. Used by the bot's "Open panel" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL (`APP_PUBLIC_URL`) |
 | **Access token lifetime (minutes)** | `web_session_access_minutes` | `30` | Lifetime of the web panel access token. Applies to new logins and refreshes. Recommended: 30-120 min (`WEB_JWT_EXPIRE_MINUTES`) |
 | **Session lifetime (hours)** | `web_session_refresh_hours` | `6` | Total session lifetime (refresh token). While it is valid the user stays signed in; after that a new login with 2FA is required. Recommended: 12-24h (`WEB_JWT_REFRESH_HOURS`) |
@@ -303,7 +304,7 @@ Schedule, retention and the dead-man switch that warns when backups have stopped
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | **Scheduled backup** | `backup_auto_enabled` | `false` | Create a database backup automatically on a schedule |
-| **Backup time** | `backup_auto_time` | `03:00` | Time of the daily backup (HH:MM UTC) |
+| **Backup time** | `backup_auto_time` | `03:00` | Time of the daily backup (HH:MM, panel time zone) |
 | **Send to Telegram** | `backup_auto_telegram` | `false` | Send the created backup to Telegram (chat_id from the notification settings) |
 | **Keep backups (count)** | `backup_auto_keep_count` | `10` | How many recent automatic backups to keep |
 | **Keep backups (days)** | `backup_auto_keep_days` | `30` | Maximum age of automatic backups in days |
@@ -335,13 +336,13 @@ Periodic summaries: what to send, when and to whom.
 |---|---|---|---|
 | **📊 Reports enabled** | `reports_enabled` | `true` | Global toggle for automatic reports |
 | **📅 Daily reports** | `reports_daily_enabled` | `true` | Enable daily violation reports |
-| **🕐 Daily report time** | `reports_daily_time` | `09:00` | Daily report send time (HH:MM UTC) |
+| **🕐 Daily report time** | `reports_daily_time` | `09:00` | Daily report send time (HH:MM, panel time zone) |
 | **📆 Weekly reports** | `reports_weekly_enabled` | `true` | Enable weekly violation reports |
 | **📅 Weekly report day** | `reports_weekly_day` | `0` | Day of week for weekly report (0=Mon, 6=Sun) |
-| **🕐 Weekly report time** | `reports_weekly_time` | `10:00` | Weekly report send time (HH:MM UTC) |
+| **🕐 Weekly report time** | `reports_weekly_time` | `10:00` | Weekly report send time (HH:MM, panel time zone) |
 | **🗓️ Monthly reports** | `reports_monthly_enabled` | `true` | Enable monthly violation reports |
 | **📅 Monthly report day** | `reports_monthly_day` | `1` | Day of month for monthly report (1-28) |
-| **🕐 Monthly report time** | `reports_monthly_time` | `10:00` | Monthly report send time (HH:MM UTC) |
+| **🕐 Monthly report time** | `reports_monthly_time` | `10:00` | Monthly report send time (HH:MM, panel time zone) |
 | **📐 Minimum score** | `reports_min_score` | `30.0` | Minimum violation score to include in report |
 | **🏆 Top violators** | `reports_top_violators_count` | `10` | Number of users in top violators list |
 | **📭 Send empty reports** | `reports_send_empty` | `false` | Send report when there are no violations for the period |

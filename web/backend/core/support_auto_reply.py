@@ -47,23 +47,16 @@ def _parse_time(value: str | None, fallback: str) -> time:
 
 
 def _zone():
-    """Часовой пояс часов тишины; неизвестная зона — UTC.
+    """Часовой пояс часов тишины: своя зона, если задана, иначе общая зона панели.
 
-    tzdata в образе может и не оказаться, а ронять из-за этого автоответ глупо:
-    UTC хуже настроенной зоны, но лучше исключения в фоновом цикле.
+    Неизвестная зона — UTC: ронять автоответ в фоновом цикле из-за опечатки
+    в настройке глупо.
     """
+    from shared import timefmt
     from shared.config_service import config_service
 
-    name = str(config_service.get("support_quiet_hours_tz", "UTC") or "UTC").strip()
-    if not name or name.upper() == "UTC":
-        return timezone.utc
-    try:
-        from zoneinfo import ZoneInfo
-
-        return ZoneInfo(name)
-    except Exception as exc:  # noqa: BLE001 — зона не найдена или нет базы tzdata
-        logger.warning("Support auto-reply: зона «%s» не найдена (%s), считаю по UTC", name, exc)
-        return timezone.utc
+    name = str(config_service.get("support_quiet_hours_tz", "") or "").strip()
+    return timefmt.zone(name) if name else timefmt.display_tz()
 
 
 def quiet_window() -> tuple[time, time]:

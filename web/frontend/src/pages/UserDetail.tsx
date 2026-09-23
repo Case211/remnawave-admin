@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useFormatters, formatDateShortUtil, parseApiDate } from '@/lib/useFormatters'
+import { fromZonedInputValue, timeZoneLabel, toZonedInputValue } from '@/lib/timezone'
 import { InteractiveChart, type ChartSeries } from '@/components/charts/InteractiveChart'
 import { translateBackendError } from '@/lib/mutationToast'
 import {
@@ -201,12 +202,10 @@ function gbToBytes(gb: string): number | null {
   return Math.round(val * 1024 * 1024 * 1024)
 }
 
+/** Срок в поле datetime-local — на часах зоны панели, а не браузера. */
 function formatDateForInput(dateStr: string | null): string {
   if (!dateStr) return ''
-  const d = new Date(dateStr)
-  // Format as YYYY-MM-DDTHH:mm for datetime-local input
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return toZonedInputValue(parseApiDate(dateStr))
 }
 
 interface TrafficStats {
@@ -326,7 +325,7 @@ function HourlyTrafficChart({ userUuid }: { userUuid: string }) {
     () =>
       (data?.points ?? []).map((p) => {
         const row: Record<string, string | number> = {
-          label: `${String(parseApiDate(p.bucket).getHours()).padStart(2, '0')}:00`,
+          label: `${toZonedInputValue(parseApiDate(p.bucket)).slice(11, 13)}:00`,
           raw: p.bucket,
           total: p.total_bytes,
         }
@@ -1947,8 +1946,8 @@ export default function UserDetail() {
 
     // Expire at
     if (editForm.expire_at) {
-      const newExpire = new Date(editForm.expire_at).toISOString()
-      if (user && newExpire !== user.expire_at) {
+      const newExpire = fromZonedInputValue(editForm.expire_at)?.toISOString() ?? null
+      if (user && newExpire && newExpire !== user.expire_at) {
         updateData.expire_at = newExpire
       }
     } else if (user?.expire_at) {
@@ -2455,7 +2454,7 @@ export default function UserDetail() {
 
                   {/* Expire date */}
                   <div className="space-y-2">
-                    <Label>{t('userDetail.fields.expireDate')}</Label>
+                    <Label>{t('userDetail.fields.expireDate')} ({timeZoneLabel()})</Label>
                     <div className="flex flex-wrap gap-1">
                       {[
                         { label: '7d', days: 7 },
@@ -2475,9 +2474,7 @@ export default function UserDetail() {
                             const d = days > 0
                               ? new Date(now.getTime() + days * 86400000)
                               : new Date(now.setFullYear(2099))
-                            const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                              .toISOString().slice(0, 16)
-                            setEditForm({ ...editForm, expire_at: local })
+                            setEditForm({ ...editForm, expire_at: toZonedInputValue(d) })
                           }}
                         >
                           {label === '2099' ? t('userDetail.indefinite') : `+${label}`}

@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { format, subDays } from 'date-fns'
+import { subDays } from 'date-fns'
+import { zonedTimestamp } from '@/lib/timezone'
 import {
   Search,
   Filter,
@@ -50,7 +51,7 @@ import { QueryError } from '@/components/QueryError'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON } from '@/lib/export'
 import { auditApi, type AuditLogEntry, type AuditLogParams } from '@/api/audit'
-import { useFormatters } from '@/lib/useFormatters'
+import { formatDateUtil, parseApiDate, useFormatters } from '@/lib/useFormatters'
 import type { TFunction } from 'i18next'
 
 // ── Constants ───────────────────────────────────────────────────
@@ -143,9 +144,7 @@ function formatDetailValue(t: TFunction, key: string, value: unknown): string {
   if (typeof value === 'boolean') return value ? t('common.yes') : t('common.no')
   if (key === 'data_limit' && typeof value === 'number') return formatBytesRaw(value)
   if (key === 'expire_date' && typeof value === 'string') {
-    try {
-      return format(new Date(value), 'dd.MM.yyyy HH:mm')
-    } catch { return String(value) }
+    return formatDateUtil(value)
   }
   if (key === 'new_state') return value === 'enabled' ? t('common.enabled') : t('common.disabled')
   if (key === 'is_disabled') return value ? t('common.yes') : t('common.no')
@@ -297,7 +296,7 @@ export default function AuditLog() {
         const details = tryParseJSON(item.details)
         return {
           id: item.id,
-          date: item.created_at ? format(new Date(item.created_at), 'yyyy-MM-dd HH:mm:ss') : '',
+          date: item.created_at ? zonedTimestamp(parseApiDate(item.created_at)) : '',
           admin: item.admin_username,
           resource,
           action: getActionLabelT(t, action),

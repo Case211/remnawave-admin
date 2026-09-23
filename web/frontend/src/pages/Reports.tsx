@@ -36,6 +36,7 @@ import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useHasPermission } from '@/components/PermissionGate'
+import { timeZoneLabel, useDisplayTimeZone } from '@/lib/timezone'
 import { QueryError } from '@/components/QueryError'
 import { useFormatters } from '@/lib/useFormatters'
 
@@ -482,6 +483,7 @@ interface ScheduleSettings {
 
 function ReportScheduleTab() {
   const { t } = useTranslation()
+  const timeZone = useDisplayTimeZone()
   const queryClient = useQueryClient()
   const canEdit = useHasPermission('settings', 'edit')
 
@@ -574,7 +576,7 @@ function ReportScheduleTab() {
               />
             </div>
             <div>
-              <Label className="text-xs text-dark-300">{t('reports.schedule.time')}</Label>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.time', { zone: timeZoneLabel(timeZone) })}</Label>
               <Input
                 type="time"
                 value={s.reports_daily_time || '09:00'}
@@ -618,7 +620,7 @@ function ReportScheduleTab() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-dark-300">{t('reports.schedule.time')}</Label>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.time', { zone: timeZoneLabel(timeZone) })}</Label>
               <Input
                 type="time"
                 value={s.reports_weekly_time || '10:00'}
@@ -662,7 +664,7 @@ function ReportScheduleTab() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-dark-300">{t('reports.schedule.time')}</Label>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.time', { zone: timeZoneLabel(timeZone) })}</Label>
               <Input
                 type="time"
                 value={s.reports_monthly_time || '10:00'}

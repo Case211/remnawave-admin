@@ -11,6 +11,7 @@ from web.backend.api.deps import require_permission, AdminUser
 from web.backend.core.cache import cached, CACHE_TTL_LONG
 from web.backend.core.rate_limit import limiter, RATE_ANALYTICS
 
+from shared import timefmt
 from shared.db_schema import (
     USERS_TABLE, NODES_TABLE, HOSTS_TABLE, USER_CONNECTIONS_TABLE,
     IP_METADATA_TABLE, VIOLATIONS_TABLE, NODE_METRICS_SNAPSHOTS_TABLE,
@@ -108,7 +109,7 @@ async def _compute_geo(period: str = "7d", date_from: Optional[str] = None, date
 
         now = datetime.now(timezone.utc)
         if date_from:
-            since = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+            since = timefmt.parse_filter(date_from)
         else:
             delta_map = {"24h": 1, "7d": 7, "30d": 30, "all": 3650}
             days = delta_map.get(period, 7)
@@ -546,9 +547,11 @@ async def _compute_trends(
         if not db_service.is_connected:
             return {"series": [], "total_growth": 0}
 
+        # Сутки на графиках — по часовому поясу панели
+        tz = timefmt.sql_zone()
         now = datetime.now(timezone.utc)
         if date_from:
-            since = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+            since = timefmt.parse_filter(date_from)
         else:
             delta_map = {"7d": 7, "30d": 30, "90d": 90, "all": 3650}
             days = delta_map.get(period, 30)
@@ -560,8 +563,8 @@ async def _compute_trends(
                     rows = await conn.fetch(
                         select_sql(
                             USERS_TABLE,
-                            "DATE(created_at) as day, COUNT(*) as count",
-                            "WHERE created_at >= $1 AND uuid::text = ANY($2) GROUP BY DATE(created_at) ORDER BY day",
+                            f"DATE(created_at AT TIME ZONE {tz}) as day, COUNT(*) as count",
+                            f"WHERE created_at >= $1 AND uuid::text = ANY($2) GROUP BY DATE(created_at AT TIME ZONE {tz}) ORDER BY day",
                         ),
                         since, user_uuid_whitelist,
                     )
@@ -577,8 +580,8 @@ async def _compute_trends(
                     rows = await conn.fetch(
                         select_sql(
                             USERS_TABLE,
-                            "DATE(created_at) as day, COUNT(*) as count",
-                            "WHERE created_at >= $1 GROUP BY DATE(created_at) ORDER BY day",
+                            f"DATE(created_at AT TIME ZONE {tz}) as day, COUNT(*) as count",
+                            f"WHERE created_at >= $1 GROUP BY DATE(created_at AT TIME ZONE {tz}) ORDER BY day",
                         ),
                         since,
                     )
@@ -594,8 +597,8 @@ async def _compute_trends(
                     rows = await conn.fetch(
                         select_sql(
                             VIOLATIONS_TABLE,
-                            "DATE(detected_at) as day, COUNT(*) as count",
-                            "WHERE detected_at >= $1 AND user_uuid = ANY($2::uuid[]) GROUP BY DATE(detected_at) ORDER BY day",
+                            f"DATE(detected_at AT TIME ZONE {tz}) as day, COUNT(*) as count",
+                            f"WHERE detected_at >= $1 AND user_uuid = ANY($2::uuid[]) GROUP BY DATE(detected_at AT TIME ZONE {tz}) ORDER BY day",
                         ),
                         since, user_uuid_whitelist,
                     )
@@ -603,8 +606,8 @@ async def _compute_trends(
                     rows = await conn.fetch(
                         select_sql(
                             VIOLATIONS_TABLE,
-                            "DATE(detected_at) as day, COUNT(*) as count",
-                            "WHERE detected_at >= $1 GROUP BY DATE(detected_at) ORDER BY day",
+                            f"DATE(detected_at AT TIME ZONE {tz}) as day, COUNT(*) as count",
+                            f"WHERE detected_at >= $1 GROUP BY DATE(detected_at AT TIME ZONE {tz}) ORDER BY day",
                         ),
                         since,
                     )
@@ -942,7 +945,7 @@ async def _compute_retention(weeks: int = 12):
                 f"""
                 WITH cohorts AS (
                     SELECT
-                        DATE_TRUNC('week', created_at)::date as cohort_week,
+                        DATE_TRUNC('week', created_at AT TIME ZONE {timefmt.sql_zone()})::date as cohort_week,
                         uuid,
                         status,
                         used_traffic_bytes,
@@ -1197,14 +1200,14 @@ async def _compute_cohort_matrix(granularity: str = "week", months: int = 3):
             rows = await conn.fetch(
                 f"""
                 WITH cohorts AS (
-                    SELECT uuid, DATE_TRUNC('{trunc}', created_at)::date AS cohort
+                    SELECT uuid, DATE_TRUNC('{trunc}', created_at AT TIME ZONE {timefmt.sql_zone()})::date AS cohort
                     FROM {USERS_TABLE}
                     WHERE created_at >= $1
                 ),
                 activity AS (
                     SELECT
                         c.cohort,
-                        DATE_TRUNC('{trunc}', uc.connected_at)::date AS activity_period,
+                        DATE_TRUNC('{trunc}', uc.connected_at AT TIME ZONE {timefmt.sql_zone()})::date AS activity_period,
                         COUNT(DISTINCT c.uuid) AS active_users
                     FROM cohorts c
                     JOIN {USER_CONNECTIONS_TABLE} uc ON uc.user_uuid = c.uuid
@@ -1283,7 +1286,7 @@ async def _compute_churn(period: str = "month", months: int = 6):
                 f"""
                 WITH periods AS (
                     SELECT
-                        DATE_TRUNC('{trunc}', connected_at)::date AS p,
+                        DATE_TRUNC('{trunc}', connected_at AT TIME ZONE {timefmt.sql_zone()})::date AS p,
                         COUNT(DISTINCT user_uuid) AS active_users
                     FROM {USER_CONNECTIONS_TABLE}
                     WHERE connected_at >= $1
@@ -1292,7 +1295,7 @@ async def _compute_churn(period: str = "month", months: int = 6):
                 ),
                 total_by_period AS (
                     SELECT
-                        DATE_TRUNC('{trunc}', created_at)::date AS p,
+                        DATE_TRUNC('{trunc}', created_at AT TIME ZONE {timefmt.sql_zone()})::date AS p,
                         COUNT(*) AS new_users
                     FROM {USERS_TABLE}
                     WHERE created_at >= $1

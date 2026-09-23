@@ -54,3 +54,6 @@ aiosmtpd>=1.4.4
 aiosmtplib>=3.0.0
 dnspython>=2.6.0
 dkimpy>=1.1.0
+
+# Часовые пояса (zoneinfo) — на slim-образах и Windows своей базы может не быть
+tzdata>=2024.1

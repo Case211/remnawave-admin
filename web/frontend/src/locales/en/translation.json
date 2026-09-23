@@ -3746,7 +3746,7 @@
       },
       "reports_daily_time": {
         "label": "🕐 Daily report time",
-        "description": "Daily report send time (HH:MM UTC)"
+        "description": "Daily report send time (HH:MM, panel time zone)"
       },
       "reports_weekly_enabled": {
         "label": "📆 Weekly reports",
@@ -3758,7 +3758,7 @@
       },
       "reports_weekly_time": {
         "label": "🕐 Weekly report time",
-        "description": "Weekly report send time (HH:MM UTC)"
+        "description": "Weekly report send time (HH:MM, panel time zone)"
       },
       "reports_monthly_enabled": {
         "label": "🗓️ Monthly reports",
@@ -3770,7 +3770,7 @@
       },
       "reports_monthly_time": {
         "label": "🕐 Monthly report time",
-        "description": "Monthly report send time (HH:MM UTC)"
+        "description": "Monthly report send time (HH:MM, panel time zone)"
       },
       "reports_min_score": {
         "label": "📐 Minimum score",
@@ -3791,6 +3791,10 @@
       "panel_name": {
         "label": "🏷️ Panel name",
         "description": "Project name displayed in the sidebar (next to the logo)"
+      },
+      "display_timezone": {
+        "label": "🕒 Time zone",
+        "description": "IANA zone, e.g. Europe/Moscow. All times are shown in it: web panel, bot, notifications, exports and report times. The database keeps time in UTC"
       },
       "map_tiles_api_key": {
         "label": "🗺️ CARTO maps key",
@@ -4278,7 +4282,7 @@
       },
       "backup_auto_time": {
         "label": "Backup time",
-        "description": "Time of the daily backup (HH:MM UTC)"
+        "description": "Time of the daily backup (HH:MM, panel time zone)"
       },
       "backup_auto_telegram": {
         "label": "Send to Telegram",
@@ -4470,7 +4474,7 @@
       },
       "support_quiet_hours_tz": {
         "label": "Support: quiet hours time zone",
-        "description": "IANA zone, for example Europe/Moscow. Empty or unknown zone is treated as UTC"
+        "description": "Own IANA zone for quiet hours, for example Europe/Moscow. Empty — the panel time zone"
       },
       "backup_s3_endpoint": {
         "label": "S3: endpoint",
@@ -5577,7 +5581,7 @@
       "daily": "Daily",
       "weekly": "Weekly",
       "monthly": "Monthly",
-      "time": "Time (UTC)",
+      "time": "Time ({{zone}})",
       "dayOfWeek": "Day of week",
       "dayOfMonth": "Day of month",
       "monday": "Monday",
@@ -5745,7 +5749,7 @@
     "schedule": {
       "title": "Automatic backup",
       "description": "Create a DB backup on schedule and optionally send it to Telegram",
-      "time": "Time (UTC)",
+      "time": "Time ({{zone}})",
       "sendTelegram": "Send to Telegram",
       "intervalHours": "Interval (hours)",
       "intervalHint": "0 — once a day at the time above; N>0 — starting there every N hours",

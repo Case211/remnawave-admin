@@ -37,6 +37,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
 import client from '@/api/client'
+import { getDisplayTimeZone, toZonedDate } from '@/lib/timezone'
 
 const QUEUES = ['wait_us', 'mine', 'late', 'wait_client', 'snoozed', 'all'] as const
 
@@ -87,7 +88,7 @@ function waitedFor(iso: string | null, now = Date.now()): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} ч ${minutes % 60} мин`
   const days = Math.floor(hours / 24)
-  return `${days} дн · ${new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })}`
+  return `${days} дн · ${new Date(iso).toLocaleDateString(undefined, { timeZone: getDisplayTimeZone(), day: '2-digit', month: '2-digit' })}`
 }
 
 function waitTone(iso: string | null, slaMinutes: number, slaOn = true, now = Date.now()): string {
@@ -166,7 +167,7 @@ function stateOf(
 
 function timeOfDay(iso: string | null): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString([], { timeZone: getDisplayTimeZone(), hour: '2-digit', minute: '2-digit' })
 }
 
 /** Момент в будущем: «14:30» для сегодняшнего срока и «22.09, 14:30» для
@@ -174,10 +175,10 @@ function timeOfDay(iso: string | null): string {
 function moment(iso: string | null, now: number): string {
   if (!iso) return ''
   const at = new Date(iso)
-  const sameDay = at.toDateString() === new Date(now).toDateString()
+  const sameDay = toZonedDate(at) === toZonedDate(new Date(now))
   return sameDay
     ? timeOfDay(iso)
-    : at.toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : at.toLocaleString([], { timeZone: getDisplayTimeZone(), day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function Support() {
@@ -1314,7 +1315,7 @@ export default function Support() {
                           ? t('support.customer.active')
                           : customer.subscription.status}
                         {customer.subscription.end_date
-                          ? ` ${t('support.customer.until')} ${new Date(customer.subscription.end_date).toLocaleDateString()}`
+                          ? ` ${t('support.customer.until')} ${new Date(customer.subscription.end_date).toLocaleDateString(undefined, { timeZone: getDisplayTimeZone() })}`
                           : ''}
                       </span>
                     </span>
@@ -1346,6 +1347,7 @@ export default function Support() {
                       {t('support.customer.lastSeen')}:{' '}
                       <span className="text-dark-100">
                         {new Date(customer.last_activity).toLocaleString(undefined, {
+                          timeZone: getDisplayTimeZone(),
                           day: '2-digit',
                           month: '2-digit',
                           hour: '2-digit',
@@ -1488,6 +1490,7 @@ export default function Support() {
                         <div key={`${entry.action}-${i}`} className="flex gap-2 text-[11px] text-dark-300">
                           <span className="tabular-nums">
                             {new Date(entry.created_at).toLocaleString(undefined, {
+                              timeZone: getDisplayTimeZone(),
                               day: '2-digit',
                               month: '2-digit',
                               hour: '2-digit',

@@ -1254,7 +1254,7 @@
       "more_devices": "... и ещё {count}",
       "duration": "⏱ В нарушении: <code>{seconds} сек</code>",
       "score": "📊 Скор: <code>{score}/100</code>",
-      "time_msk": "🕐 Время (МСК): <code>{time}</code>",
+      "time": "🕐 Время: <code>{time}</code>",
       "btn": {
         "info": "👤 Подробнее",
         "block": "🔒 Заблокировать",

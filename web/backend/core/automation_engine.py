@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
+from shared import timefmt
+
 logger = logging.getLogger(__name__)
 
 # Operator mapping for condition evaluation
@@ -275,7 +277,7 @@ class AutomationEngine:
                 # Execute action — enrich context for notify actions
                 context: Dict[str, Any] = {
                     "trigger": "schedule", "cron": cron, "interval_minutes": interval,
-                    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                    "timestamp": timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M"),
                 }
                 if rule["action_type"] == "notify":
                     from shared.database import db_service
@@ -770,7 +772,7 @@ class AutomationEngine:
         context.setdefault("rule_id", rule.get("id"))
         context.setdefault("rule_name", rule.get("name", ""))
         context.setdefault("category", rule.get("category", "system"))
-        context.setdefault("timestamp", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
+        context.setdefault("timestamp", timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M:%S"))
 
         try:
             handler = {
