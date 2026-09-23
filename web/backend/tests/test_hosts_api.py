@@ -154,3 +154,34 @@ class TestListHostsRBAC:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.post("/api/v2/hosts", json={"remark": "test"})
             assert resp.status_code == 403
+
+
+class TestHostToggle:
+    """Панель 3.x отвечает на включение/выключение хоста 204 без тела."""
+
+    @pytest.fixture()
+    def panel(self, app):
+        from web.backend.api.deps import get_api_client
+
+        api = AsyncMock()
+        app.dependency_overrides[get_api_client] = lambda: api
+        yield api
+        app.dependency_overrides.pop(get_api_client, None)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("action", ["enable", "disable"])
+    @patch("web.backend.api.v2.hosts.write_audit_log", new_callable=AsyncMock)
+    @patch("web.backend.api.v2.hosts.check_access", new_callable=AsyncMock, return_value=True)
+    async def test_empty_panel_response_is_success(self, _access, _audit, action, panel, client):
+        getattr(panel, f"{action}_hosts").return_value = {}
+        resp = await client.post(f"/api/v2/hosts/host-111/{action}")
+        assert resp.status_code == 200
+        getattr(panel, f"{action}_hosts").assert_awaited_once_with(["host-111"])
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("action", ["enable", "disable"])
+    @patch("web.backend.api.v2.hosts.check_access", new_callable=AsyncMock, return_value=True)
+    async def test_panel_error_is_reported(self, _access, action, panel, client):
+        getattr(panel, f"{action}_hosts").side_effect = RuntimeError("panel down")
+        resp = await client.post(f"/api/v2/hosts/host-111/{action}")
+        assert resp.status_code == 400

@@ -493,9 +493,12 @@ async def enable_host(
     """Включить хост."""
     if not await check_access(admin, "host", host_uuid, "edit"):
         raise api_error(403, E.FORBIDDEN)
-    result = await api_client.enable_hosts([host_uuid])
-
-    if not result:
+    # Панель 3.x отвечает 204 без тела — успех означает «не было исключения»,
+    # а пустой ответ ошибкой не считается
+    try:
+        await api_client.enable_hosts([host_uuid])
+    except Exception as e:
+        logger.error("Host %s enable failed: %s", host_uuid, e)
         raise api_error(400, E.HOST_ENABLE_FAILED)
 
     await write_audit_log(
@@ -521,9 +524,12 @@ async def disable_host(
     """Отключить хост."""
     if not await check_access(admin, "host", host_uuid, "edit"):
         raise api_error(403, E.FORBIDDEN)
-    result = await api_client.disable_hosts([host_uuid])
-
-    if not result:
+    # Панель 3.x отвечает 204 без тела — успех означает «не было исключения»,
+    # а пустой ответ ошибкой не считается
+    try:
+        await api_client.disable_hosts([host_uuid])
+    except Exception as e:
+        logger.error("Host %s disable failed: %s", host_uuid, e)
         raise api_error(400, E.HOST_DISABLE_FAILED)
 
     await write_audit_log(
