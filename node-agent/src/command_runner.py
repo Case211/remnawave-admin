@@ -15,6 +15,10 @@ from typing import Any, Callable, Awaitable, Dict, Optional
 
 from .config import Settings
 
+
+#: Сколько помнить отправленные штрафы (и не слать события старше этого)
+_PENALTY_MEMORY_SEC = 86400
+
 logger = logging.getLogger(__name__)
 
 # ── Security: Forbidden Patterns ──────────────────────────────────
@@ -112,6 +116,8 @@ class CommandRunner:
         self._shaper_loaded = False
         # Штрафы, о которых панель уже знает: (адрес, начало) → конец штрафа
         self._penalties_seen: Dict[tuple, float] = {}
+        #: Последний ответ set_shaper — отдаём его, если настройки не менялись
+        self._shaper_state: Optional[dict] = None
 
     async def handle(self, msg: dict) -> None:
         """Route an incoming command message."""
@@ -360,7 +366,13 @@ class CommandRunner:
         if exit_code != 0:
             return []
         events = shaper.parse_penalties(output, time.monotonic_ns(), time.time())
-        return [e for e in events if (e["ip"], e["start_ns"]) not in self._penalties_seen]
+        # Карта штрафов не чистится, а память об отправленных живёт сутки:
+        # старое событие иначе снова показалось бы новым и уходило бы каждую минуту
+        cutoff = time.time() - _PENALTY_MEMORY_SEC
+        return [
+            e for e in events
+            if e["until"] > cutoff and (e["ip"], e["start_ns"]) not in self._penalties_seen
+        ]
 
     async def watch_penalties(self, shutdown_event: asyncio.Event, interval: int = 60) -> None:
         """Раз в минуту сообщать панели о новых штрафах шейпера.
@@ -388,7 +400,7 @@ class CommandRunner:
                     for e in fresh:
                         self._penalties_seen[(e["ip"], e["start_ns"])] = e["until"]
                     # Давно закончившиеся забываем, чтобы память не росла
-                    cutoff = time.time() - 86400
+                    cutoff = time.time() - _PENALTY_MEMORY_SEC
                     self._penalties_seen = {
                         k: until for k, until in self._penalties_seen.items() if until > cutoff
                     }
@@ -612,9 +624,26 @@ class CommandRunner:
             })
             return
 
+        # Панель шлёт настройки при каждом подключении агента. Если они те же,
+        # а программа стоит, переустановка только сбросила бы счётчики клиентов
+        # и снятые с них штрафы — отвечаем прежним состоянием.
+        if cfg.enabled and cfg == self._shaper_general and self._shaper_loaded                 and self._shaper_state is not None:
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "completed",
+                "output": json.dumps(
+                    dict(self._shaper_state, personal=len(self._shaper_personal)),
+                    ensure_ascii=False,
+                ),
+                "exit_code": 0,
+            })
+            return
+
         self._shaper_general = cfg
         output, exit_code = await self._shaper_apply()
         state = shaper.summarize(cfg, output, exit_code, personal=len(self._shaper_personal))
+        self._shaper_state = state if exit_code == 0 else None
 
         if exit_code == 0:
             logger.info(

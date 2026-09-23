@@ -11,7 +11,7 @@ os.environ.setdefault("AGENT_NODE_UUID", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 os.environ.setdefault("AGENT_COLLECTOR_URL", "http://collector.test")
 os.environ.setdefault("AGENT_AUTH_TOKEN", "token")
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -58,6 +58,7 @@ def runner(dump_output, penalty_mb=100):
                                             penalty_window_sec=60, penalty_kbit=2000, penalty_minutes=5)
     r._shaper_personal = {}
     r._shaper_loaded = True
+    r._shaper_state = None
     r._penalties_seen = {}
     r._communicate = AsyncMock(return_value=(dump_output, 0))
     r._send = AsyncMock(return_value=True)
@@ -107,3 +108,22 @@ class TestCollect:
 
         assert r._send.await_count >= 2
         assert len(await r.collect_penalties()) == 1
+
+
+class TestOldEvents:
+    @pytest.mark.asyncio
+    async def test_event_older_than_a_day_is_not_resent(self):
+        """Карта штрафов не чистится: штраф, закончившийся больше суток назад,
+        не должен всплывать заново каждую минуту после того, как его забыли."""
+        now_mono = 10 * 86400 * 10**9
+        two_days = 2 * 86400 * 10**9
+        r = runner(dump(("1.2.3.4", now_mono - two_days - 10**9, now_mono - two_days, 3)))
+        with patch("src.command_runner.time.monotonic_ns", return_value=now_mono):
+            assert await r.collect_penalties() == []
+
+    @pytest.mark.asyncio
+    async def test_recent_event_is_still_reported(self):
+        now_mono = 10 * 86400 * 10**9
+        r = runner(dump(("1.2.3.4", now_mono - 60 * 10**9, now_mono + 60 * 10**9, 3)))
+        with patch("src.command_runner.time.monotonic_ns", return_value=now_mono):
+            assert len(await r.collect_penalties()) == 1

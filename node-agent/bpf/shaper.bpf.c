@@ -16,8 +16,8 @@
  * назначения. Собственные соединения ноды в интернет сюда не попадают,
  * иначе потолок достался бы адресам сайтов, а не клиентам.
  *
- * Режим штрафа: если клиент за окно прокачал больше порога (обе стороны
- * вместе), на заданное время его скорость падает до штрафной.
+ * Режим штрафа: если клиент за скользящее окно прокачал больше порога (обе
+ * стороны вместе), на заданное время его скорость падает до штрафной.
  *
  * Персональный лимит (мягкая блокировка юзера) живёт в карте rws_personal
  * по адресу клиента и от портов не зависит: урезанный клиент режется на
@@ -67,6 +67,7 @@ struct client_state {
 	__u64 up_next;         /* виртуальные часы полисера отдачи */
 	__u64 win_start;
 	__u64 win_bytes;
+	__u64 prev_bytes;      /* сколько набрал в предыдущем окне — для скользящей оценки */
 	__u64 pen_until;
 };
 
@@ -110,7 +111,7 @@ struct {
 struct penalty_event {
 	__u64 start_ns;        /* bpf_ktime_get_ns, CLOCK_MONOTONIC */
 	__u64 until_ns;
-	__u64 bytes;           /* сколько клиент набрал за окно к моменту штрафа */
+	__u64 bytes;           /* оценка за скользящее окно к моменту штрафа */
 };
 
 struct {
@@ -231,26 +232,50 @@ static __always_inline __u64 pick_rate(const struct shaper_cfg *cfg, struct clie
 				       __u64 general, __u64 personal, int on_port)
 {
 	struct penalty_event ev = {};
-
+	__u64 window, elapsed, total;
 	__u64 rate = min_rate(general, personal);
 
 	if (!on_port || !cfg->pen_bytes)
 		return rate;
 	if (st->pen_until > now)
 		return min_rate(rate, cfg->pen_rate);
-	if (now - st->win_start > cfg->pen_window_ns) {
-		st->win_start = now;
+
+	window = cfg->pen_window_ns;
+	elapsed = now - st->win_start;
+	if (elapsed >= window) {
+		/* Окна идут встык: только что закончившееся становится предыдущим.
+		 * Простой дольше окна — прошлого нет. */
+		if (elapsed < 2 * window) {
+			st->prev_bytes = st->win_bytes;
+			st->win_start += window;
+		} else {
+			st->prev_bytes = 0;
+			st->win_start = now;
+		}
 		st->win_bytes = 0;
+		elapsed = now - st->win_start;
 	}
 	__sync_fetch_and_add(&st->win_bytes, len);
-	if (st->win_bytes > cfg->pen_bytes) {
+
+	/*
+	 * Скользящее окно: к текущему добавляется доля предыдущего, которая ещё
+	 * попадает в последние window наносекунд. Без этого на стыке двух окон
+	 * можно было прокачать почти двойной порог. Считаем в КиБ и ~мс, чтобы
+	 * произведение не переполнило 64 бита на суточном окне.
+	 */
+	total = st->win_bytes;
+	if (st->prev_bytes && (window >> 20))
+		total += (((st->prev_bytes >> 10) * ((window - elapsed) >> 20)) / (window >> 20)) << 10;
+
+	if (total > cfg->pen_bytes) {
 		st->pen_until = now + cfg->pen_duration_ns;
 		ev.start_ns = now;
 		ev.until_ns = st->pen_until;
-		ev.bytes = st->win_bytes;
+		ev.bytes = total;
 		bpf_map_update_elem(&rws_penalties, key, &ev, BPF_ANY);
 		st->win_start = now;
 		st->win_bytes = 0;
+		st->prev_bytes = 0;
 		stat_inc(ST_PENALTIES);
 		return min_rate(rate, cfg->pen_rate);
 	}

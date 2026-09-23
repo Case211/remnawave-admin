@@ -27,6 +27,7 @@ def runner(result=APPLIED):
     r._shaper_general = shaper.DISABLED
     r._shaper_personal = {}
     r._shaper_loaded = False
+    r._shaper_state = None
     r._run_hostnet = AsyncMock(return_value=result)
     r._send = AsyncMock()
     return r

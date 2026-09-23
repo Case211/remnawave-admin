@@ -199,6 +199,15 @@ _IFACE = [
 
 _HAD = ['HAD=""']
 
+# Установка упала после того, как мы поставили свой fq в корень, — вернуть
+# корень ядру: fq без программы ничего не режет, а ноду мы бы оставили
+# не такой, какой нашли
+_ROLLBACK = [
+    'NEWROOT=""',
+    "trap 'RC=$?; if [ \"$RC\" -ne 0 ] && [ -n \"$NEWROOT\" ]; then "
+    "tc qdisc del dev \"$IFACE\" root 2>/dev/null || true; echo \"ROOT=rolled_back\"; fi' EXIT",
+]
+
 # Прежние раскладки мягкой блокировки. Узнаются по своим меткам и снимаются
 # один раз; идёт до решения про корень — старый prio иначе сочли бы чужим.
 _LEGACY = [
@@ -252,7 +261,7 @@ def build_apply_script(cfg: ShaperConfig, personal: Optional[Dict[str, int]] = N
         f"key hex {_hex(struct.pack('<H', port))} value hex 01"
         for port in (cfg.ports if cfg.enabled else ())
     ]
-    lines = ["set -e", *_IFACE, *_HAD, *_LEGACY, *_remove_filters(strict=True)]
+    lines = ["set -e", *_IFACE, *_HAD, *_ROLLBACK, *_LEGACY, *_remove_filters(strict=True)]
     lines += [
         # Своя bpffs: смонтирована — чистим прошлые пины, нет — монтируем
         f"if mountpoint -q {PIN_DIR}; then rm -rf {PIN_DIR}/progs {PIN_DIR}/maps; "
@@ -275,6 +284,7 @@ def build_apply_script(cfg: ShaperConfig, personal: Optional[Dict[str, int]] = N
         "  else",
         f'    tc qdisc replace dev "$IFACE" root handle {ROOT_HANDLE} fq',
         "  fi",
+        "  NEWROOT=1",
         '  echo "ROOT=installed:$KIND"',
         "else",
         '  echo "ROOT=foreign:$KIND"',

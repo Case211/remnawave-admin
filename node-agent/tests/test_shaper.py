@@ -122,6 +122,23 @@ class TestApplyScript:
         assert all(guard < i < foreign for i in installs)
         assert all(f"handle {shaper.ROOT_HANDLE}" in lines[i] for i in installs)
 
+    def test_failed_install_gives_the_root_back(self):
+        """Упали после того, как поставили свой fq, — корень возвращается ядру.
+        Чужой или уже стоявший корень откат не трогает: NEWROOT ставится только
+        в ветке, где fq поставили мы."""
+        lines = shaper.build_apply_script(cfg()).splitlines()
+        trap = next(i for i, line in enumerate(lines) if line.startswith("trap "))
+        assert 'tc qdisc del dev "$IFACE" root' in lines[trap]
+        assert '[ -n "$NEWROOT" ]' in lines[trap] and '[ "$RC" -ne 0 ]' in lines[trap]
+        guard = next(i for i, line in enumerate(lines) if 'elif [ "$HANDLE" = "0:" ]' in line)
+        foreign = next(i for i, line in enumerate(lines) if "ROOT=foreign" in line)
+        marks = [i for i, line in enumerate(lines) if line.strip() == "NEWROOT=1"]
+        assert marks and all(guard < i < foreign for i in marks)
+        # Ловушка ставится раньше, чем что-либо меняется на интерфейсе
+        first_change = next(i for i, line in enumerate(lines)
+                            if i != trap and ("tc qdisc del" in line or "tc filter del" in line))
+        assert trap < first_change
+
     def test_both_hooks_get_the_program(self):
         script = shaper.build_apply_script(cfg())
         assert f"egress pref {shaper.SHAPER_PREF} bpf da pinned {shaper.PIN_DIR}/progs/rws_egress" in script
@@ -218,6 +235,7 @@ def runner():
     r._shaper_general = shaper.DISABLED
     r._shaper_personal = {}
     r._shaper_loaded = False
+    r._shaper_state = None
     r._run_hostnet = AsyncMock(return_value=("IFACE=ens3\nROOT=kept:fq\nACTIVE=1\n", 0))
     r._send = AsyncMock()
     return r
@@ -238,6 +256,37 @@ class TestCommand:
         assert reply["command_id"] == "shaper"
         assert reply["status"] == "completed"
         assert json.loads(reply["output"])["active"] is True
+
+    @pytest.mark.asyncio
+    async def test_same_settings_on_reconnect_do_not_reinstall(self):
+        """Панель шлёт настройки при каждом подключении агента; переустановка
+        сбросила бы счётчики клиентов и снятые штрафы качальщиков."""
+        r = runner()
+        msg = {**BASE, "type": "set_shaper", "command_id": "shaper"}
+        await r._set_shaper(msg)
+        await r._set_shaper(msg)
+
+        assert r._run_hostnet.await_count == 1
+        reply = r._send.await_args.args[0]
+        assert reply["status"] == "completed"
+        assert json.loads(reply["output"])["active"] is True
+
+    @pytest.mark.asyncio
+    async def test_changed_settings_reinstall(self):
+        r = runner()
+        await r._set_shaper({**BASE, "type": "set_shaper", "command_id": "shaper"})
+        await r._set_shaper({**BASE, "type": "set_shaper", "command_id": "shaper",
+                             "down_kbit": BASE["down_kbit"] + 1000})
+        assert r._run_hostnet.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_failed_install_is_retried(self):
+        r = runner()
+        r._run_hostnet = AsyncMock(return_value=("IFACE=ens3\nERROR=boom\n", 1))
+        msg = {**BASE, "type": "set_shaper", "command_id": "shaper"}
+        await r._set_shaper(msg)
+        await r._set_shaper(msg)
+        assert r._run_hostnet.await_count == 2
 
     @pytest.mark.asyncio
     async def test_personal_limits_survive_disabling_the_general_shaper(self):
