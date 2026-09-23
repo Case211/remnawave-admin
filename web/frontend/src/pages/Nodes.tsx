@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useDeferredAction } from '@/lib/useDeferredAction'
 import { toastMutationError } from '@/lib/mutationToast'
 import { cmpVersions } from '@/lib/version'
@@ -6,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { useFormatters } from '@/lib/useFormatters'
+import { useUserLinkProps } from '@/lib/useOpenUser'
 import { useHasPermission } from '@/components/PermissionGate'
 import {
   RefreshCw,
@@ -15,11 +17,6 @@ import {
   Users,
   BarChart3,
   Clock,
-  MoreVertical,
-  Pencil,
-  Trash2,
-  Play,
-  Square,
   Plus,
   Key,
   Copy,
@@ -35,7 +32,9 @@ import {
   ArrowUp,
   ArrowUpDown,
   RotateCcw,
-  Gauge,
+  Search,
+  Upload,
+  X,
 } from '@/components/brand/icons'
 import {
   DndContext,
@@ -69,13 +68,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -88,34 +80,26 @@ import { NodesTable } from '@/components/nodes/NodesTable'
 import { NodeCompactCard } from '@/components/nodes/NodeCompactCard'
 import { NodeShaperDialog } from '@/components/nodes/NodeShaperDialog'
 import { ShaperBadge } from '@/components/nodes/ShaperBadge'
+import {
+  NodeActionsMenu,
+  agentStatus,
+  countryFlag,
+  nodeStatus,
+  type AgentStatus,
+  type NodeActions,
+  type NodeRow,
+  type NodeStatus,
+} from '@/components/nodes/nodeShared'
 
 // Types
-interface Node {
-  uuid: string
-  name: string
-  address: string
-  port: number
-  is_connected: boolean
-  is_disabled: boolean
+interface Node extends NodeRow {
   is_xray_running: boolean
-  users_online: number
-  xray_version: string | null
   message: string | null
-  note?: string | null
   proxy_url?: string | null
-  node_consumption_multiplier?: number | null
-  traffic_total_bytes: number
-  traffic_today_bytes: number
   created_at: string
-  last_seen_at: string | null
   // Node-agent state (independent of Panel's is_connected)
-  has_agent_token?: boolean
-  agent_v2_connected?: boolean
   agent_v2_last_ping?: string | null
   agent_version?: string | null
-  shaper_state?: string | null
-  // null/undefined = no access-policy restriction
-  allowed_actions?: string[] | null
 }
 
 interface NodeEditFormData {
@@ -159,11 +143,26 @@ function NodeEditModal({
     node_consumption_multiplier: node.node_consumption_multiplier != null ? String(node.node_consumption_multiplier) : '',
   })
   const [form, setForm] = useState<NodeEditFormData>(initForm)
+  const initialProfile = node.config_profile_uuid || ''
+  const initialInbounds = node.active_inbound_uuids || []
+  const [profileUuid, setProfileUuid] = useState(initialProfile)
+  const [inbounds, setInbounds] = useState<string[]>(initialInbounds)
 
   useEffect(() => {
     setForm(initForm())
+    setProfileUuid(node.config_profile_uuid || '')
+    setInbounds(node.active_inbound_uuids || [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node])
+
+  const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
+  const profileChanged = profileUuid !== initialProfile || !sameSet(inbounds, initialInbounds)
+
+  // Порт 1–65535, множитель — неотрицательное число или пусто
+  const portNum = Number(form.port)
+  const portValid = Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535
+  const multValid = form.node_consumption_multiplier === '' ||
+    (Number.isFinite(Number(form.node_consumption_multiplier)) && Number(form.node_consumption_multiplier) >= 0)
 
   const handleSubmit = () => {
     const updateData: Record<string, unknown> = {}
@@ -178,6 +177,11 @@ function NodeEditModal({
       const m = parseFloat(form.node_consumption_multiplier)
       if (form.node_consumption_multiplier === '') updateData.node_consumption_multiplier = null
       else if (!isNaN(m)) updateData.node_consumption_multiplier = m
+    }
+    // Панель принимает профиль и inbound'ы только парой
+    if (profileChanged && profileUuid) {
+      updateData.config_profile_uuid = profileUuid
+      updateData.active_inbounds = inbounds
     }
     if (Object.keys(updateData).length === 0) {
       onOpenChange(false)
@@ -262,6 +266,15 @@ function NodeEditModal({
               placeholder="1.0"
             />
           </div>
+          <ProfileInboundsPicker
+            enabled={open}
+            profileUuid={profileUuid}
+            inbounds={inbounds}
+            onChange={(profile, ibs) => { setProfileUuid(profile); setInbounds(ibs) }}
+          />
+          {profileChanged && (
+            <p className="text-xs text-amber-300/90">{t('nodes.editNode.profileWarning')}</p>
+          )}
         </div>
 
         <DialogFooter>
@@ -274,7 +287,10 @@ function NodeEditModal({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isPending || !form.name.trim() || !form.address.trim() || !form.port}
+            disabled={
+              isPending || !form.name.trim() || !form.address.trim() || !portValid || !multValid ||
+              (!!profileUuid && inbounds.length === 0)
+            }
           >
             {isPending ? t('nodes.actions.saving') : t('nodes.actions.save')}
           </Button>
@@ -289,6 +305,91 @@ interface Inbound {
   uuid: string
   tag: string
   type: string
+}
+
+/**
+ * Профиль конфигурации и inbound'ы ноды — в окнах создания и правки.
+ * Смена профиля сбрасывает выбранные inbound'ы: у другого профиля они свои.
+ */
+function ProfileInboundsPicker({
+  enabled,
+  profileUuid,
+  inbounds,
+  onChange,
+}: {
+  enabled: boolean
+  profileUuid: string
+  inbounds: string[]
+  onChange: (profileUuid: string, inbounds: string[]) => void
+}) {
+  const { t } = useTranslation()
+
+  const { data: configProfiles = [] } = useQuery({
+    queryKey: ['config-profiles'],
+    queryFn: resourcesApi.getConfigProfiles,
+    enabled,
+  })
+
+  const { data: profileInbounds = [] } = useQuery<Inbound[]>({
+    queryKey: ['config-profile-inbounds', profileUuid],
+    queryFn: async () => {
+      const { data } = await client.get(`/config-profiles/${profileUuid}/inbounds`)
+      return Array.isArray(data) ? data : []
+    },
+    enabled: enabled && !!profileUuid,
+  })
+
+  const toggleInbound = (uuid: string) =>
+    onChange(profileUuid, inbounds.includes(uuid) ? inbounds.filter((id) => id !== uuid) : [...inbounds, uuid])
+
+  const toggleAll = () =>
+    onChange(profileUuid, inbounds.length === profileInbounds.length ? [] : profileInbounds.map((ib) => ib.uuid))
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>{t('nodes.createNode.configProfile')}</Label>
+        <Select value={profileUuid} onValueChange={(uuid) => onChange(uuid, [])}>
+          <SelectTrigger>
+            <SelectValue placeholder={t('nodes.createNode.selectProfile')} />
+          </SelectTrigger>
+          <SelectContent>
+            {configProfiles.map((p: { uuid: string; name: string }) => (
+              <SelectItem key={p.uuid} value={p.uuid}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {profileUuid && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>{t('nodes.createNode.inbounds')}</Label>
+            {profileInbounds.length > 0 && (
+              <button type="button" className="text-xs text-primary hover:underline" onClick={toggleAll}>
+                {inbounds.length === profileInbounds.length
+                  ? t('nodes.createNode.deselectAll')
+                  : t('nodes.createNode.selectAll')}
+              </button>
+            )}
+          </div>
+          {profileInbounds.length === 0 ? (
+            <p className="text-sm text-dark-300">{t('nodes.createNode.noInbounds')}</p>
+          ) : (
+            <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border border-dark-600 p-3">
+              {profileInbounds.map((ib) => (
+                <label key={ib.uuid} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={inbounds.includes(ib.uuid)} onCheckedChange={() => toggleInbound(ib.uuid)} />
+                  <span className="text-sm">{ib.tag}</span>
+                  <span className="text-xs text-dark-300 ml-auto">{ib.type}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  )
 }
 
 // Node create modal
@@ -309,7 +410,7 @@ function NodeCreateModal({
   const [form, setForm] = useState<NodeEditFormData>({
     name: '',
     address: '',
-    port: '62050',
+    port: '2222',
     note: '',
     proxy_url: '',
     node_consumption_multiplier: '',
@@ -317,50 +418,14 @@ function NodeCreateModal({
   const [selectedProfileUuid, setSelectedProfileUuid] = useState('')
   const [selectedInbounds, setSelectedInbounds] = useState<string[]>([])
 
-  // Fetch config profiles
-  const { data: configProfiles = [] } = useQuery({
-    queryKey: ['config-profiles'],
-    queryFn: resourcesApi.getConfigProfiles,
-    enabled: open,
-  })
-
-  // Fetch inbounds for selected profile
-  const { data: profileInbounds = [] } = useQuery<Inbound[]>({
-    queryKey: ['config-profile-inbounds', selectedProfileUuid],
-    queryFn: async () => {
-      const { data } = await client.get(`/config-profiles/${selectedProfileUuid}/inbounds`)
-      return Array.isArray(data) ? data : []
-    },
-    enabled: open && !!selectedProfileUuid,
-  })
-
   // Reset form when modal closes
   useEffect(() => {
     if (!open) {
-      setForm({ name: '', address: '', port: '62050', note: '', proxy_url: '', node_consumption_multiplier: '' })
+      setForm({ name: '', address: '', port: '2222', note: '', proxy_url: '', node_consumption_multiplier: '' })
       setSelectedProfileUuid('')
       setSelectedInbounds([])
     }
   }, [open])
-
-  // Reset inbounds when profile changes
-  useEffect(() => {
-    setSelectedInbounds([])
-  }, [selectedProfileUuid])
-
-  const toggleInbound = (uuid: string) => {
-    setSelectedInbounds((prev) =>
-      prev.includes(uuid) ? prev.filter((id) => id !== uuid) : [...prev, uuid]
-    )
-  }
-
-  const selectAllInbounds = () => {
-    if (selectedInbounds.length === profileInbounds.length) {
-      setSelectedInbounds([])
-    } else {
-      setSelectedInbounds(profileInbounds.map((ib) => ib.uuid))
-    }
-  }
 
   const handleSubmit = () => {
     const createData: Record<string, unknown> = {
@@ -374,7 +439,9 @@ function NodeCreateModal({
     onSave(createData)
   }
 
-  const isValid = form.name.trim() && form.address.trim() && form.port && selectedProfileUuid && selectedInbounds.length > 0
+  const portNum = Number(form.port)
+  const portValid = Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535
+  const isValid = form.name.trim() && form.address.trim() && portValid && selectedProfileUuid && selectedInbounds.length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -423,56 +490,12 @@ function NodeCreateModal({
             />
           </div>
 
-          {/* Config Profile */}
-          <div className="space-y-2">
-            <Label>{t('nodes.createNode.configProfile')}</Label>
-            <Select value={selectedProfileUuid} onValueChange={setSelectedProfileUuid}>
-              <SelectTrigger>
-                <SelectValue placeholder={t('nodes.createNode.selectProfile')} />
-              </SelectTrigger>
-              <SelectContent>
-                {configProfiles.map((p: { uuid: string; name: string }) => (
-                  <SelectItem key={p.uuid} value={p.uuid}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Inbounds */}
-          {selectedProfileUuid && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>{t('nodes.createNode.inbounds')}</Label>
-                {profileInbounds.length > 0 && (
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={selectAllInbounds}
-                  >
-                    {selectedInbounds.length === profileInbounds.length
-                      ? t('nodes.createNode.deselectAll')
-                      : t('nodes.createNode.selectAll')}
-                  </button>
-                )}
-              </div>
-              {profileInbounds.length === 0 ? (
-                <p className="text-sm text-dark-300">{t('nodes.createNode.noInbounds')}</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border border-dark-600 p-3">
-                  {profileInbounds.map((ib) => (
-                    <label key={ib.uuid} className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox
-                        checked={selectedInbounds.includes(ib.uuid)}
-                        onCheckedChange={() => toggleInbound(ib.uuid)}
-                      />
-                      <span className="text-sm">{ib.tag}</span>
-                      <span className="text-xs text-dark-300 ml-auto">{ib.type}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <ProfileInboundsPicker
+            enabled={open}
+            profileUuid={selectedProfileUuid}
+            inbounds={selectedInbounds}
+            onChange={(profile, inbounds) => { setSelectedProfileUuid(profile); setSelectedInbounds(inbounds) }}
+          />
         </div>
 
         <DialogFooter>
@@ -776,12 +799,17 @@ function AgentTokenModal({
 // ── Node Users IPs Dialog ──────────────────────────────────────
 
 interface NodeUserIps {
-  userId: string
+  userId: number | string
+  /** Подставляет наш бэкенд по числовому id панели; null — юзера нет в базе */
+  uuid?: string | null
+  username?: string | null
   ips: ({ ip: string; lastSeen?: string } | string)[]
 }
 
 function NodeUsersIpsDialog({ node, open, onClose }: { node: Node; open: boolean; onClose: () => void }) {
   const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
+  const userLink = useUserLinkProps()
   const [jobId, setJobId] = useState<string | null>(null)
   const [polling, setPolling] = useState(false)
   const [result, setResult] = useState<{
@@ -875,13 +903,32 @@ function NodeUsersIpsDialog({ node, open, onClose }: { node: Node; open: boolean
               <div className="space-y-2">
                 {users.map((u) => (
                   <div key={u.userId} className="bg-[var(--glass-bg)] rounded-lg border border-[var(--glass-border)] p-2.5">
-                    <p className="text-xs font-mono text-primary-300 mb-1.5 truncate">{u.userId}</p>
+                    {u.uuid ? (
+                      <a
+                        href={`/users/${u.uuid}`}
+                        {...userLink(u.uuid)}
+                        className="block text-sm font-medium text-primary-300 hover:underline mb-1.5 truncate"
+                      >
+                        {u.username || u.uuid}
+                      </a>
+                    ) : (
+                      <p className="text-xs font-mono text-dark-300 mb-1.5 truncate">
+                        {t('nodes.fetchUsersIps.unknownUser', { id: u.userId })}
+                      </p>
+                    )}
                     <div className="flex flex-wrap gap-1.5">
                       {u.ips.map((ip, i) => {
                         const addr = typeof ip === 'string' ? ip : ip.ip
+                        const seen = typeof ip === 'string' ? undefined : ip.lastSeen
                         return (
-                          <Badge key={i} variant="secondary" className="text-[10px] font-mono">
+                          <Badge
+                            key={i}
+                            variant="secondary"
+                            className="text-[10px] font-mono"
+                            title={seen ? t('nodes.fetchUsersIps.lastSeen', { ago: formatTimeAgo(seen) }) : undefined}
+                          >
                             {addr}
+                            {seen && <span className="ml-1 text-dark-300">· {formatTimeAgo(seen)}</span>}
                           </Badge>
                         )
                       })}
@@ -1012,46 +1059,36 @@ function AgentBadge({ node }: { node: Node }) {
   )
 }
 
+/** Аптайм коротко: «21 д 4 ч», «3 ч 12 мин», «45 мин». */
+function formatUptime(seconds: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d > 0) return t('nodes.metrics.uptimeDays', { d, h })
+  if (h > 0) return t('nodes.metrics.uptimeHours', { h, m })
+  return t('nodes.metrics.uptimeMinutes', { m })
+}
+
 // Node card component
 function NodeCard({
   node,
-  onRestart,
-  onEdit,
-  onEnable,
-  onDisable,
-  onDelete,
-  onTokenManage,
-  onFetchIps,
-  onShaper,
+  actions,
   canEdit,
   canDelete,
   dragHandle,
   isDragging,
 }: {
   node: Node
-  onRestart: () => void
-  onEdit: () => void
-  onEnable: () => void
-  onDisable: () => void
-  onDelete: () => void
-  onTokenManage: () => void
-  onFetchIps: () => void
-  onShaper: () => void
+  actions: NodeActions
   canEdit: boolean
   canDelete: boolean
   dragHandle?: React.ReactNode
   isDragging?: boolean
 }) {
   const { t } = useTranslation()
-  const { formatBytes, formatTimeAgo } = useFormatters()
+  const { formatBytes, formatSpeed, formatTimeAgo } = useFormatters()
   const isOnline = node.is_connected && !node.is_disabled
-
-  // Intersect role permission with per-node access-policy scope.
-  // If allowed_actions is null/undefined — no scope restriction (full access).
-  const scopeAllowsEdit = node.allowed_actions == null || node.allowed_actions.includes('edit')
-  const scopeAllowsDelete = node.allowed_actions == null || node.allowed_actions.includes('delete')
-  const effectiveCanEdit = canEdit && scopeAllowsEdit
-  const effectiveCanDelete = canDelete && scopeAllowsDelete
+  const status = nodeStatus(node)
 
   const statusVariant = node.is_disabled
     ? 'secondary'
@@ -1111,7 +1148,9 @@ function NodeCard({
               )}
             </div>
             <div>
-              <h3 className="font-semibold text-white">{node.name}</h3>
+              <h3 className="font-semibold text-white">
+                {countryFlag(node.country_code)} {node.name}
+              </h3>
               <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
                 <Globe className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="truncate">{node.address}:{node.port}</span>
@@ -1127,69 +1166,7 @@ function NodeCard({
               {statusText}
             </Badge>
 
-            {/* Actions menu */}
-            {(effectiveCanEdit || effectiveCanDelete) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('common.openMenu')}>
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {effectiveCanEdit && (
-                    <DropdownMenuItem onClick={onRestart}>
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      {t('nodes.actions.restart')}
-                    </DropdownMenuItem>
-                  )}
-                  {effectiveCanEdit && (
-                    <DropdownMenuItem onClick={onEdit}>
-                      <Pencil className="w-4 h-4 mr-2" />
-                      {t('nodes.actions.edit')}
-                    </DropdownMenuItem>
-                  )}
-                  {effectiveCanEdit && (
-                    <DropdownMenuItem onClick={onTokenManage}>
-                      <Key className="w-4 h-4 mr-2" />
-                      {t('nodes.actions.agentToken')}
-                    </DropdownMenuItem>
-                  )}
-                  {effectiveCanEdit && (
-                    <DropdownMenuItem onClick={onShaper}>
-                      <Gauge className="w-4 h-4 mr-2" />
-                      {t('nodes.actions.shaper')}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={onFetchIps}>
-                    <Scan className="w-4 h-4 mr-2" />
-                    {t('nodes.actions.fetchUsersIps')}
-                  </DropdownMenuItem>
-                  {(effectiveCanEdit || effectiveCanDelete) && <DropdownMenuSeparator />}
-                  {effectiveCanEdit && (
-                    node.is_disabled ? (
-                      <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
-                        <Play className="w-4 h-4 mr-2" />
-                        {t('nodes.actions.enable')}
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
-                        <Square className="w-4 h-4 mr-2" />
-                        {t('nodes.actions.disable')}
-                      </DropdownMenuItem>
-                    )
-                  )}
-                  {effectiveCanDelete && (
-                    <DropdownMenuItem
-                      onClick={onDelete}
-                      className="text-red-400 focus:text-red-400"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      {t('nodes.actions.delete')}
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <NodeActionsMenu node={node} canEdit={canEdit} canDelete={canDelete} actions={actions} />
           </div>
         </div>
       </CardHeader>
@@ -1216,7 +1193,9 @@ function NodeCard({
           <div className="text-center p-2 md:p-3 bg-[var(--glass-bg)] rounded-lg">
             <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
               <BarChart3 className="w-3.5 h-3.5" />
-              <span className="text-[10px] md:text-xs">{t('nodes.stats.total')}</span>
+              <span className="text-[10px] md:text-xs" title={t('nodes.stats.periodHint', { day: node.traffic_reset_day ?? 1 })}>
+                {t('nodes.stats.period')}
+              </span>
             </div>
             <p className="text-sm md:text-lg font-semibold text-white">
               {formatBytes(node.traffic_total_bytes)}
@@ -1224,17 +1203,40 @@ function NodeCard({
           </div>
         </div>
 
+        {/* Живые метрики машины: панель их присылает, раньше они не показывались */}
+        {isOnline && (
+          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dark-200 font-mono">
+            <span title={t('nodes.metrics.speed')}>
+              <span className="text-blue-400">↓{formatSpeed(node.download_speed_bps || 0)}</span>{' '}
+              <span className="text-emerald-400">↑{formatSpeed(node.upload_speed_bps || 0)}</span>
+            </span>
+            {node.cpu_usage != null && <span>CPU {Math.round(node.cpu_usage)}%</span>}
+            {node.memory_usage != null && <span>RAM {Math.round(node.memory_usage)}%</span>}
+            {node.uptime_seconds != null && (
+              <span title={t('nodes.metrics.uptime')}>⏱ {formatUptime(node.uptime_seconds, t)}</span>
+            )}
+          </div>
+        )}
+
+        {node.note && (
+          <p className="mb-3 text-xs text-dark-200 italic truncate" title={node.note}>📝 {node.note}</p>
+        )}
+
         {/* Footer info */}
         <Separator className="mb-3" />
         <div className="flex items-center justify-between text-xs text-dark-200">
           <div className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
-            {node.last_seen_at ? formatTimeAgo(node.last_seen_at) : t('nodes.status.never')}
+            {node.last_status_change
+              ? t(`nodes.since.${status}`, { ago: formatTimeAgo(node.last_status_change) })
+              : '—'}
           </div>
-          {node.xray_version && (
-            <span className="flex items-center gap-1 text-dark-300">
+          {(node.xray_version || node.node_version) && (
+            <span className="flex items-center gap-1 text-dark-300" title={t('nodes.metrics.versions')}>
               <Zap className="w-3 h-3 text-yellow-400" />
-              {node.xray_version}
+              {[node.xray_version && `xray ${node.xray_version}`, node.node_version && `node ${node.node_version}`]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           )}
         </div>
@@ -1283,10 +1285,10 @@ function NodeSkeleton() {
 
 // ── Sorting presets ─────────────────────────────────────────────
 
-type SortPreset = 'auto' | 'name' | 'address' | 'users' | 'today' | 'total' | 'lastSeen'
+type SortPreset = 'auto' | 'panel' | 'name' | 'address' | 'users' | 'today' | 'total' | 'lastSeen'
   | 'created' | 'xray' | 'agent' | 'custom'
 
-const SORT_PRESETS: SortPreset[] = ['auto', 'name', 'address', 'users', 'today', 'total',
+const SORT_PRESETS: SortPreset[] = ['auto', 'panel', 'name', 'address', 'users', 'today', 'total',
   'lastSeen', 'created', 'xray', 'agent', 'custom']
 
 interface SortState {
@@ -1349,14 +1351,19 @@ function compareByPreset(preset: SortPreset, a: Node, b: Node): number {
     case 'total':
       return (b.traffic_total_bytes || 0) - (a.traffic_total_bytes || 0)
     case 'lastSeen': {
-      const at = a.last_seen_at ? Date.parse(a.last_seen_at) : 0
-      const bt = b.last_seen_at ? Date.parse(b.last_seen_at) : 0
+      const at = a.last_status_change ? Date.parse(a.last_status_change) : 0
+      const bt = b.last_status_change ? Date.parse(b.last_status_change) : 0
       return bt - at
     }
     case 'created':
       return Date.parse(b.created_at || '') - Date.parse(a.created_at || '')
     case 'xray':
       return (b.xray_version || '').localeCompare(a.xray_version || '', undefined, { numeric: true })
+    case 'panel': {
+      // Порядок в панели — он же порядок локаций в подписке у клиентов
+      const diff = (a.view_position ?? Number.MAX_SAFE_INTEGER) - (b.view_position ?? Number.MAX_SAFE_INTEGER)
+      return diff !== 0 ? diff : (a.name || '').localeCompare(b.name || '')
+    }
     case 'agent': {
       const diff = agentPriority(a) - agentPriority(b)
       return diff !== 0 ? diff : (a.name || '').localeCompare(b.name || '')
@@ -1396,14 +1403,7 @@ function SortableNodeCard({
 }: {
   node: Node
   enabled: boolean
-  onRestart: () => void
-  onEdit: () => void
-  onEnable: () => void
-  onDisable: () => void
-  onDelete: () => void
-  onTokenManage: () => void
-  onFetchIps: () => void
-  onShaper: () => void
+  actions: NodeActions
   canEdit: boolean
   canDelete: boolean
 }) {
@@ -1452,7 +1452,8 @@ function SortableNodeCard({
   )
 }
 
-export default function Nodes() {
+/** embedded — вкладка страницы «Сервера»: заголовок рисует она. */
+export default function Nodes({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('nodes', 'create')
@@ -1469,6 +1470,9 @@ export default function Nodes() {
   const { schedule: scheduleAction } = useDeferredAction()
   const [sortState, setSortStateRaw] = useState<SortState>(() => loadSortState())
   const [viewMode, setViewMode] = useViewMode('nodes')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | NodeStatus>('all')
+  const [agentFilter, setAgentFilter] = useState<'all' | AgentStatus>('all')
 
   const setSortState = (next: SortState | ((prev: SortState) => SortState)) => {
     setSortStateRaw((prev) => {
@@ -1485,7 +1489,7 @@ export default function Nodes() {
   )
 
   // Fetch nodes
-  const { data: nodes = [], isLoading, refetch } = useQuery({
+  const { data: nodes = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ['nodes'],
     queryFn: fetchNodes,
     refetchInterval: 30000, // Fallback polling (WebSocket handles real-time)
@@ -1567,9 +1571,67 @@ export default function Nodes() {
     },
   })
 
+  // Диплинк ?node=<uuid> (из «Флота», уведомлений): подвести к карточке и
+  // подсветить; параметр после этого снимается, чтобы не залипать
+  const [searchParams, setSearchParams] = useSearchParams()
+  const focusUuid = searchParams.get('node')
+  const [highlightUuid, setHighlightUuid] = useState<string | null>(null)
+  useEffect(() => {
+    if (!focusUuid || !nodes.some((n) => n.uuid === focusUuid)) return
+    setHighlightUuid(focusUuid)
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-node-uuid="${focusUuid}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    const timer = setTimeout(() => setHighlightUuid(null), 2500)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('node')
+      return next
+    }, { replace: true })
+    return () => clearTimeout(timer)
+  }, [focusUuid, nodes, setSearchParams])
+
+  // Одни и те же действия для всех трёх видов. Ноду берём из свежего списка:
+  // строка таблицы может быть копией со старыми полями.
+  const pick = (n: NodeRow) => nodes.find((x) => x.uuid === n.uuid) ?? null
+  const nodeActions: NodeActions = {
+    onRestart: (n) => setConfirmAction({ type: 'restart', uuid: n.uuid }),
+    onEdit: (n) => { setEditingNode(pick(n)); setEditError('') },
+    onEnable: (n) => enableNode.mutate(n.uuid),
+    onDisable: (n) => setConfirmAction({ type: 'disable', uuid: n.uuid }),
+    onDelete: (n) => setConfirmAction({ type: 'delete', uuid: n.uuid }),
+    onTokenManage: (n) => setTokenNode(pick(n)),
+    onFetchIps: (n) => setIpsNode(pick(n)),
+    onShaper: (n) => setShaperNode(pick(n)),
+  }
+
   // Apply sort preset (or stored custom order)
   const sortedNodes = applySortPreset(nodes, sortState)
   const sortedIds = sortedNodes.map((n) => n.uuid)
+
+  // Поиск и фильтры: порядок не меняют, только прячут лишнее
+  const query = search.trim().toLowerCase()
+  const visibleNodes = sortedNodes.filter((n) =>
+    (statusFilter === 'all' || nodeStatus(n) === statusFilter) &&
+    (agentFilter === 'all' || agentStatus(n) === agentFilter) &&
+    (!query || [n.name, n.address, n.note, n.country_code].some((v) => v?.toLowerCase().includes(query))),
+  )
+  const filtersActive = !!query || statusFilter !== 'all' || agentFilter !== 'all'
+  const resetFilters = () => { setSearch(''); setStatusFilter('all'); setAgentFilter('all') }
+  const toggleStatusFilter = (s: NodeStatus) => setStatusFilter((prev) => (prev === s ? 'all' : s))
+
+  // Свой порядок из браузера — в панель, где он станет порядком локаций в подписке
+  const saveOrderToPanel = useMutation({
+    mutationFn: () => client.post('/nodes/reorder', { uuids: sortedIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      setSortState({ preset: 'panel', customOrder: [] })
+      toast.success(t('nodes.sort.savedToPanel'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
+    },
+  })
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
@@ -1598,11 +1660,13 @@ export default function Nodes() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-header-title">{t('nodes.title')}</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">{t('nodes.subtitle')}</p>
-        </div>
+      <div className={embedded ? 'flex justify-end' : 'page-header'}>
+        {!embedded && (
+          <div>
+            <h1 className="page-header-title">{t('nodes.title')}</h1>
+            <p className="text-dark-200 mt-1 text-sm md:text-base">{t('nodes.subtitle')}</p>
+          </div>
+        )}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {canCreate && (
             <Button
@@ -1615,9 +1679,9 @@ export default function Nodes() {
           <Button
             variant="secondary"
             onClick={() => refetch()}
-            disabled={isLoading}
+            disabled={isFetching}
           >
-            <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
+            <RefreshCw className={cn('w-4 h-4 mr-2', isFetching && 'animate-spin')} />
             <span className="hidden sm:inline">{t('nodes.actions.refresh')}</span>
           </Button>
         </div>
@@ -1635,7 +1699,18 @@ export default function Nodes() {
             </p>
           </CardContent>
         </Card>
-        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleStatusFilter('online')}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleStatusFilter('online')}
+          title={t('nodes.filter.byStatusHint')}
+          className={cn(
+            'text-center animate-fade-in-up cursor-pointer transition-shadow',
+            statusFilter === 'online' && 'ring-2 ring-primary-400/60',
+          )}
+          style={{ animationDelay: '0.1s' }}
+        >
           <CardContent className="p-4 md:p-6">
             <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.online')}</p>
             <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
@@ -1643,7 +1718,18 @@ export default function Nodes() {
             </p>
           </CardContent>
         </Card>
-        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleStatusFilter('offline')}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleStatusFilter('offline')}
+          title={t('nodes.filter.byStatusHint')}
+          className={cn(
+            'text-center animate-fade-in-up cursor-pointer transition-shadow',
+            statusFilter === 'offline' && 'ring-2 ring-primary-400/60',
+          )}
+          style={{ animationDelay: '0.15s' }}
+        >
           <CardContent className="p-4 md:p-6">
             <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.offline')}</p>
             <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
@@ -1651,7 +1737,18 @@ export default function Nodes() {
             </p>
           </CardContent>
         </Card>
-        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleStatusFilter('disabled')}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleStatusFilter('disabled')}
+          title={t('nodes.filter.byStatusHint')}
+          className={cn(
+            'text-center animate-fade-in-up cursor-pointer transition-shadow',
+            statusFilter === 'disabled' && 'ring-2 ring-primary-400/60',
+          )}
+          style={{ animationDelay: '0.2s' }}
+        >
           <CardContent className="p-4 md:p-6">
             <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.disabled')}</p>
             <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
@@ -1682,9 +1779,47 @@ export default function Nodes() {
         </Card>
       </div>
 
-      {/* Toolbar: sort + view toggle */}
+      {/* Toolbar: search, filters, sort + view toggle */}
       {!isLoading && nodes.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative w-full sm:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-dark-300 pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('nodes.filter.search')}
+              className="h-8 pl-8 text-xs"
+              aria-label={t('nodes.filter.search')}
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | NodeStatus)}>
+            <SelectTrigger className="h-8 w-[140px] text-xs" aria-label={t('nodes.table.status')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">{t('nodes.filter.anyStatus')}</SelectItem>
+              {(['online', 'offline', 'disabled'] as const).map((s) => (
+                <SelectItem key={s} value={s} className="text-xs">{t(`nodes.status.${s}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v as 'all' | AgentStatus)}>
+            <SelectTrigger className="h-8 w-[150px] text-xs" aria-label={t('nodes.table.agent')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">{t('nodes.filter.anyAgent')}</SelectItem>
+              {(['connected', 'offline', 'missing'] as const).map((s) => (
+                <SelectItem key={s} value={s} className="text-xs">{t(`nodes.agent.${s}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {filtersActive && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-dark-200 hover:text-white" onClick={resetFilters}>
+              <X className="w-3.5 h-3.5 mr-1" />
+              {t('nodes.filter.reset')}
+            </Button>
+          )}
           {viewMode !== 'table' && (
             <>
               <div className="flex items-center gap-1.5 text-xs text-dark-200">
@@ -1727,6 +1862,21 @@ export default function Nodes() {
                   {t('nodes.sort.resetCustom', { defaultValue: 'Сбросить порядок' })}
                 </Button>
               )}
+              {sortState.preset === 'custom' && canEdit && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => saveOrderToPanel.mutate()}
+                  disabled={saveOrderToPanel.isPending}
+                  title={t('nodes.sort.saveToPanelHint')}
+                >
+                  {saveOrderToPanel.isPending
+                    ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+                  {t('nodes.sort.saveToPanel')}
+                </Button>
+              )}
             </>
           )}
           <ViewToggle mode={viewMode} onChange={setViewMode} className="ml-auto" />
@@ -1736,21 +1886,14 @@ export default function Nodes() {
       {/* Nodes list */}
       {!isLoading && viewMode === 'table' && nodes.length > 0 ? (
         <NodesTable
-          nodes={sortedNodes}
+          nodes={visibleNodes}
           canEdit={canEdit}
           canDelete={canDelete}
-          onRestart={(n) => restartNode.mutate(n.uuid)}
-          onEdit={(n) => { setEditingNode(nodes.find((x) => x.uuid === n.uuid) ?? null); setEditError('') }}
-          onEnable={(n) => enableNode.mutate(n.uuid)}
-          onDisable={(n) => setConfirmAction({ type: 'disable', uuid: n.uuid })}
-          onDelete={(n) => setConfirmAction({ type: 'delete', uuid: n.uuid })}
-          onTokenManage={(n) => setTokenNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
-          onFetchIps={(n) => setIpsNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
-          onShaper={(n) => setShaperNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
+          {...nodeActions}
         />
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={sortedIds} strategy={rectSortingStrategy}>
+          <SortableContext items={visibleNodes.map((n) => n.uuid)} strategy={rectSortingStrategy}>
             <div
               className={cn(
                 'grid gap-4',
@@ -1762,44 +1905,45 @@ export default function Nodes() {
               {isLoading ? (
                 // Loading skeletons
                 Array.from({ length: 4 }).map((_, i) => <NodeSkeleton key={i} />)
-              ) : sortedNodes.length === 0 ? (
+              ) : visibleNodes.length === 0 ? (
                 <div className="col-span-full">
                   <Card className="text-center py-12">
                     <CardContent>
                       <WifiOff className="w-12 h-12 text-dark-300 mx-auto mb-3" />
-                      <p className="text-dark-200">{t('nodes.status.noNodes')}</p>
+                      <p className="text-dark-200">
+                        {filtersActive ? t('nodes.filter.nothingFound') : t('nodes.status.noNodes')}
+                      </p>
+                      {filtersActive && (
+                        <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={resetFilters}>
+                          {t('nodes.filter.reset')}
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
               ) : (
-                sortedNodes.map((node, i) => (
-                  <div key={node.uuid} className="animate-fade-in-up" style={{ animationDelay: `${0.05 + i * 0.04}s` }}>
+                visibleNodes.map((node, i) => (
+                  <div
+                    key={node.uuid}
+                    data-node-uuid={node.uuid}
+                    className={cn(
+                      'animate-fade-in-up rounded-xl transition-shadow duration-500',
+                      highlightUuid === node.uuid && 'ring-2 ring-primary-400/70',
+                    )}
+                    style={{ animationDelay: `${0.05 + i * 0.04}s` }}
+                  >
                     {viewMode === 'compact' ? (
                       <NodeCompactCard
                         node={node}
                         canEdit={canEdit}
                         canDelete={canDelete}
-                        onRestart={(n) => restartNode.mutate(n.uuid)}
-                        onEdit={(n) => { setEditingNode(nodes.find((x) => x.uuid === n.uuid) ?? null); setEditError('') }}
-                        onEnable={(n) => enableNode.mutate(n.uuid)}
-                        onDisable={(n) => setConfirmAction({ type: 'disable', uuid: n.uuid })}
-                        onDelete={(n) => setConfirmAction({ type: 'delete', uuid: n.uuid })}
-                        onTokenManage={(n) => setTokenNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
-                        onFetchIps={(n) => setIpsNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
-                        onShaper={(n) => setShaperNode(nodes.find((x) => x.uuid === n.uuid) ?? null)}
+                        {...nodeActions}
                       />
                     ) : (
                       <SortableNodeCard
                         node={node}
                         enabled
-                        onRestart={() => restartNode.mutate(node.uuid)}
-                        onEdit={() => { setEditingNode(node); setEditError('') }}
-                        onEnable={() => enableNode.mutate(node.uuid)}
-                        onDisable={() => setConfirmAction({ type: 'disable', uuid: node.uuid })}
-                        onDelete={() => setConfirmAction({ type: 'delete', uuid: node.uuid })}
-                        onTokenManage={() => setTokenNode(node)}
-                        onFetchIps={() => setIpsNode(node)}
-                        onShaper={() => setShaperNode(node)}
+                        actions={nodeActions}
                         canEdit={canEdit}
                         canDelete={canDelete}
                       />
@@ -1849,22 +1993,30 @@ export default function Nodes() {
         title={
           confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.title')
           : confirmAction?.type === 'disable' ? t('nodes.disableConfirm.title', 'Disable node?')
+          : confirmAction?.type === 'restart' ? t('nodes.restartConfirm.title')
           : ''
         }
         description={
           confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.description')
           : confirmAction?.type === 'disable' ? t('nodes.disableConfirm.description', 'The node will stop accepting connections. You can re-enable it later.')
+          : confirmAction?.type === 'restart'
+            ? t('nodes.restartConfirm.description', {
+                name: getNodeName(confirmAction.uuid),
+                count: nodes.find((n) => n.uuid === confirmAction.uuid)?.users_online ?? 0,
+              })
           : ''
         }
         confirmLabel={
           confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.confirm')
           : confirmAction?.type === 'disable' ? t('nodes.actions.disable')
+          : confirmAction?.type === 'restart' ? t('nodes.actions.restart')
           : t('nodes.actions.confirm')
         }
         variant={confirmAction?.type === 'delete' ? 'destructive' : 'default'}
         onConfirm={() => {
           if (!confirmAction) return
           if (confirmAction.type === 'delete') deleteNode.mutate(confirmAction.uuid)
+          if (confirmAction.type === 'restart') restartNode.mutate(confirmAction.uuid)
           if (confirmAction.type === 'disable') {
             const uuid = confirmAction.uuid
             scheduleAction(`node-disable-${uuid}`, {

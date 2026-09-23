@@ -150,6 +150,7 @@
     "prev": "Back"
   },
   "nav": {
+    "servers": "Servers",
     "dashboard": "Dashboard",
     "users": "Users",
     "nodes": "Nodes",
@@ -1057,7 +1058,53 @@
     },
     "gb": "GB"
   },
+  "servers": {
+    "openInFleet": "Open in Fleet",
+    "openInNodes": "Open the node in the “Panel nodes” tab",
+    "panelNode": "panel node",
+    "title": "Servers",
+    "subtitle": "Machine fleet and panel nodes: server health, scripts, node configuration",
+    "tabs": {
+      "nodes": "Panel nodes"
+    }
+  },
   "nodes": {
+    "filter": {
+      "search": "Name, address, note…",
+      "anyStatus": "Any status",
+      "anyAgent": "Any agent",
+      "reset": "Reset",
+      "nothingFound": "No node matches the filter",
+      "byStatusHint": "Show only nodes with this status"
+    },
+    "table": {
+      "node": "Node",
+      "status": "Status",
+      "agent": "Agent",
+      "users": "Users",
+      "today": "Today",
+      "period": "This period",
+      "speed": "Speed",
+      "xray": "Xray",
+      "since": "In status since"
+    },
+    "since": {
+      "online": "online · {{ago}}",
+      "offline": "offline · {{ago}}",
+      "disabled": "disabled · {{ago}}"
+    },
+    "metrics": {
+      "speed": "Current speed: in / out",
+      "uptime": "Machine uptime",
+      "versions": "Xray and node versions",
+      "uptimeDays": "{{d}}d {{h}}h",
+      "uptimeHours": "{{h}}h {{m}}m",
+      "uptimeMinutes": "{{m}}m"
+    },
+    "restartConfirm": {
+      "title": "Restart the node?",
+      "description": "Node {{name}} will restart Xray: connections of {{count}} online users will drop for a few seconds."
+    },
     "shaper": {
       "badge": {
         "label": "Shaper",
@@ -1136,6 +1183,7 @@
     "todayTraffic": "Today",
     "totalTraffic": "Total",
     "editNode": {
+      "profileWarning": "Changing the profile or inbounds restarts Xray on the node — user connections drop for a few seconds.",
       "title": "Edit node",
       "description": "Node parameters edit form",
       "name": "Name",
@@ -1187,6 +1235,8 @@
       "node": "Node"
     },
     "stats": {
+      "period": "This period",
+      "periodHint": "Panel traffic counter: resets on day {{day}} of each month",
       "total": "Total",
       "online": "Online",
       "offline": "Offline",
@@ -1260,6 +1310,8 @@
       "error": "Error"
     },
     "fetchUsersIps": {
+      "unknownUser": "User #{{id}} — not in the admin database",
+      "lastSeen": "Last seen {{ago}}",
       "title": "Users IP Addresses",
       "starting": "Starting scan...",
       "scanning": "Scanning nodes...",
@@ -1270,10 +1322,14 @@
       "error": "Failed to start scan"
     },
     "sort": {
+      "saveToPanel": "Save order to the panel",
+      "saveToPanelHint": "This order becomes the node order in the panel — and the location order in client subscriptions",
+      "savedToPanel": "Order saved to the panel",
       "label": "Sort",
       "resetCustom": "Reset order",
       "dragHandle": "Drag to reorder",
       "preset": {
+        "panel": "As in the panel (subscription order)",
         "auto": "Auto (issues first)",
         "name": "Name (A→Z)",
         "users": "Online users (↓)",

@@ -1,7 +1,7 @@
 """Node schemas for web panel API."""
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class NodeBase(BaseModel):
@@ -30,6 +30,19 @@ class NodeListItem(NodeBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
+    # Когда нода последний раз сменила статус в панели: «в сети с» / «офлайн с».
+    # Поля «последний раз была» панель не присылает — last_seen_at всегда пуст.
+    last_status_change: Optional[datetime] = None
+    # Порядок в панели и профиль — для правки ноды и сортировки «как в панели»
+    view_position: Optional[int] = None
+    config_profile_uuid: Optional[str] = None
+    active_inbound_uuids: List[str] = []
+    node_version: Optional[str] = None
+    country_code: Optional[str] = None
+    # Счётчик трафика ноды (traffic_total_bytes) обнуляется в этот день месяца
+    traffic_reset_day: Optional[int] = None
+    is_traffic_tracking_active: bool = False
+    memory_total_bytes: Optional[int] = None
     # Extended metrics
     cpu_usage: Optional[float] = None
     cpu_cores: Optional[int] = None
@@ -80,11 +93,27 @@ class NodeUpdate(BaseModel):
 
     name: Optional[str] = None
     address: Optional[str] = None
-    port: Optional[int] = None
-    is_disabled: Optional[bool] = None
+    port: Optional[int] = Field(None, ge=1, le=65535)
     note: Optional[str] = None
     proxy_url: Optional[str] = None
-    node_consumption_multiplier: Optional[float] = None
+    node_consumption_multiplier: Optional[float] = Field(None, ge=0)
+    # Профиль и inbound'ы меняются только вместе: панель принимает их парой
+    config_profile_uuid: Optional[str] = None
+    active_inbounds: Optional[List[str]] = None
+
+    @model_validator(mode="after")
+    def _profile_with_inbounds(self):
+        if (self.config_profile_uuid is None) != (self.active_inbounds is None):
+            raise ValueError("config_profile_uuid and active_inbounds go together")
+        if self.active_inbounds is not None and not self.active_inbounds:
+            raise ValueError("at least one inbound is required")
+        return self
+
+
+class NodeReorder(BaseModel):
+    """Порядок нод в панели (он же порядок в подписке): uuid по порядку."""
+
+    uuids: List[str] = Field(..., min_length=1, max_length=500)
 
 
 class NodeStats(BaseModel):

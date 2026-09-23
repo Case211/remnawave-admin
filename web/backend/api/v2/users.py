@@ -35,7 +35,7 @@ from web.backend.api.deps import (  # noqa: F401  get_current_admin — точк
 from web.backend.core.api_helper import fetch_users_from_api
 from web.backend.core.audit import write_audit_log
 from web.backend.core.admin_accounts import get_admin_account_by_id
-from web.backend.core.rbac import get_visible_user_uuids, get_scope
+from web.backend.core.rbac import check_access, get_visible_user_uuids, get_scope
 from web.backend.core.webhook_security import fire_event
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
@@ -2609,6 +2609,8 @@ async def fetch_users_ips_by_node(
     """Запускает сбор IP всех пользователей на ноде. Возвращает jobId."""
     from shared.api_client import api_client
 
+    if not await check_access(admin, "node", node_uuid, "view"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         result = await api_client.fetch_users_ips_by_node(node_uuid)
         payload = result.get("response", result) if isinstance(result, dict) else result
@@ -2624,14 +2626,58 @@ async def get_fetch_users_ips_result(
     job_id: str,
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
-    """Получает результат сбора IP пользователей по jobId."""
+    """Получает результат сбора IP пользователей по jobId.
+
+    Панель отдаёт юзеров числовым id — подставляем uuid и имя из нашей базы,
+    чтобы админ видел, кто это, и мог открыть карточку. Юзеров вне зоны
+    видимости админа из ответа убираем: иначе ограниченный админ получал бы
+    адреса всех юзеров ноды.
+    """
     from shared.api_client import api_client
 
+    if not await check_access(admin, "node", node_uuid, "view"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         result = await api_client.get_fetch_users_ips_result(job_id)
-        payload = result.get("response", result) if isinstance(result, dict) else result
-        return payload
     except Exception as e:
         logger.error("Failed to get fetch users IPs result for job %s: %s", job_id, e)
         raise api_error(502, E.API_SERVICE_UNAVAILABLE)
+    payload = result.get("response", result) if isinstance(result, dict) else result
+    inner = payload.get("result") if isinstance(payload, dict) else None
+    if isinstance(inner, dict) and isinstance(inner.get("users"), list):
+        inner["users"] = await _resolve_node_ip_users(admin, inner["users"])
+    return payload
+
+
+async def _resolve_node_ip_users(admin, users: list) -> list:
+    """Числовые id панели → uuid и имя; невидимых админу юзеров отбросить."""
+    from shared.database import db_service
+
+    ids = []
+    for u in users:
+        try:
+            ids.append(int(u.get("userId")))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    known = {}
+    if ids and db_service.is_connected:
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(
+                select_sql(USERS_TABLE, "id, uuid::text AS uuid, username", "WHERE id = ANY($1::bigint[])"),
+                ids,
+            )
+        known = {int(r["id"]): (r["uuid"], r["username"]) for r in rows}
+    visible = await get_visible_user_uuids(admin)
+    out = []
+    for u in users:
+        if not isinstance(u, dict):
+            continue
+        try:
+            uuid, username = known.get(int(u.get("userId")), (None, None))
+        except (TypeError, ValueError):
+            uuid, username = None, None
+        if visible is not None and (uuid is None or uuid.lower() not in visible):
+            continue
+        out.append({**u, "uuid": uuid, "username": username})
+    return out
 

@@ -24,7 +24,8 @@ from web.backend.core.api_helper import (
     fetch_nodes_from_api, fetch_nodes_realtime_usage,
     fetch_nodes_usage_by_range, _normalize,
 )
-from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
+from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeReorder, NodeUpdate
+from shared.exceptions import ValidationError as ApiValidationError
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
 logger = logging.getLogger(__name__)
@@ -228,6 +229,13 @@ def _ensure_node_snake_case(node: dict) -> dict:
             mem_used = stats.get("memoryUsed")
             if mem_total and mem_used and mem_total > 0:
                 result["memoryUsage"] = round(mem_used / mem_total * 100, 1)
+    # Профиль и inbound'ы ноды — для окна правки
+    profile = result.get("configProfile")
+    if isinstance(profile, dict):
+        result.setdefault("config_profile_uuid", profile.get("activeConfigProfileUuid"))
+        result.setdefault("active_inbound_uuids", [
+            ib.get("uuid") for ib in profile.get("activeInbounds") or [] if isinstance(ib, dict) and ib.get("uuid")
+        ])
     for camel, snake in mappings.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]
@@ -527,8 +535,61 @@ async def update_node(
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
+    except ApiValidationError as e:
+        # Панель объяснила, что не так (занятый порт, чужой inbound…) — отдаём как есть
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error("Node %s update failed: %s", node_uuid, e)
         raise HTTPException(status_code=400, detail="Internal server error")
+
+
+@router.post("/reorder", response_model=SuccessResponse)
+async def reorder_nodes(
+    data: NodeReorder,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
+):
+    """Сохранить порядок нод в панели — он же порядок локаций в подписке.
+
+    Порядок общий для всех, поэтому менять его может только админ без
+    ограничений по нодам: иначе он переставил бы и ноды, которых не видит.
+    """
+    if await get_scope(admin, "node", "edit") is not None:
+        raise api_error(403, E.FORBIDDEN)
+    if len(set(data.uuids)) != len(data.uuids):
+        raise HTTPException(status_code=422, detail="Duplicate node uuids")
+    try:
+        from shared.api_client import api_client
+
+        result = await api_client.reorder_nodes(
+            [{"uuid": uuid, "viewPosition": i} for i, uuid in enumerate(data.uuids)]
+        )
+    except ApiValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Node reorder failed: %s", e)
+        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
+
+    # Панель вернула ноды с новым порядком — кладём их в базу сразу, не ждём синка
+    nodes = result.get("response") if isinstance(result, dict) else None
+    if isinstance(nodes, list):
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                await db_service.bulk_upsert_nodes(nodes)
+        except Exception as e:
+            logger.warning("Reordered nodes not stored locally, next sync will: %s", e)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="node.reorder",
+        resource="nodes",
+        resource_id="",
+        details=json.dumps({"count": len(data.uuids)}),
+        ip_address=get_client_ip(request),
+    )
+    return {"success": True}
 
 
 @router.delete("/{node_uuid}", response_model=SuccessResponse)

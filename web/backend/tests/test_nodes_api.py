@@ -147,3 +147,27 @@ class TestGetNodeInvalidUuid:
         """Мусор вместо UUID — 404, а не поход в панель и необработанный 500."""
         resp = await client.get("/api/v2/nodes/definitely-not-a-uuid")
         assert resp.status_code == 404
+
+
+def test_panel_node_fields_reach_the_list_item():
+    """«Последний раз в сети» на карточке всегда пустовал: поля lastSeenAt панель
+    не присылает. Карточка показывает момент смены статуса — он должен доходить."""
+    from web.backend.api.v2.nodes import _ensure_node_snake_case, _normalize
+    from web.backend.schemas.node import NodeListItem
+
+    raw = {
+        "uuid": "6a4a7ce3-5574-4c2f-83ff-7cd979c82251", "name": "Finland", "address": "100.108.75.189",
+        "port": 3000, "isConnected": True, "isDisabled": False, "usersOnline": 0,
+        "lastStatusChange": "2026-09-23T10:53:31.400Z", "countryCode": "FI",
+        "trafficResetDay": 1, "isTrafficTrackingActive": False, "trafficUsedBytes": 25_070_198_691_136,
+        "versions": {"xray": "26.6.27", "node": "2.8.0"},
+        "system": {"info": {"cpus": 1, "memoryTotal": 2058178560},
+                   "stats": {"memoryUsed": 630784000, "uptime": 694.61, "loadAvg": [0, 0.03, 0.04],
+                             "interface": {"rxBytesPerSec": 9176, "txBytesPerSec": 8350}}},
+    }
+    item = NodeListItem(**_ensure_node_snake_case(_normalize(raw))).model_dump()
+    assert item["last_status_change"].isoformat().startswith("2026-09-23T10:53:31")
+    assert item["country_code"] == "FI"
+    assert item["node_version"] == "2.8.0" and item["xray_version"] == "26.6.27"
+    assert item["traffic_reset_day"] == 1
+    assert item["uptime_seconds"] == 694 and item["memory_usage"] == 30.6
