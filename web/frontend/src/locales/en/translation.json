@@ -2633,7 +2633,7 @@
     },
     "geo": {
       "title": "Connection Geography",
-      "tooltip": "Geographic distribution of user connections by city",
+      "tooltip": "Where connections came from in the period: unique users and addresses by country and city. Each city lists its 100 most active users.",
       "noData": "No geolocation data",
       "noDataHint": "Data will appear after first connections",
       "noMapKey": "Without a CARTO key the map shows an “API key required” watermark. Get a free key at carto.com/basemaps/apikey and paste it in Settings → General → “CARTO maps key”.",
@@ -2650,7 +2650,6 @@
       "uniqueUsersColumn": "Users",
       "searchPlaceholder": "Search by city or user...",
       "citiesCount": "{{count}} cities",
-      "totalConnections": "{{formattedCount}} conn.",
       "allCountries": "All countries",
       "sort": {
         "countDesc": "Connections (desc)",
@@ -2659,11 +2658,12 @@
         "usersAsc": "Users (asc)",
         "cityAsc": "City (A-Z)",
         "cityDesc": "City (Z-A)"
-      }
+      },
+      "ipsCount": "{{formatted}} IP"
     },
     "topUsers": {
       "title": "Top users by traffic",
-      "tooltip": "Users with the highest traffic consumption",
+      "tooltip": "Without dates — by the panel counter since the last traffic reset. With dates — traffic for the selected days from panel statistics.",
       "top10": "Top 10",
       "top20": "Top 20",
       "top50": "Top 50",
@@ -2672,7 +2672,8 @@
       "status": "Status",
       "traffic": "Traffic",
       "limit": "Limit",
-      "usage": "Usage"
+      "usage": "Usage",
+      "deleted": "deleted"
     },
     "status": {
       "ACTIVE": "Active",
@@ -2695,7 +2696,10 @@
         "violations": "Violations",
         "traffic": "Traffic"
       },
-      "compare": "Compare with previous period"
+      "compare": "Compare with previous period",
+      "today": "today",
+      "previousPeriod": "previous period",
+      "trafficUtcHint": "Traffic follows the panel statistics days (UTC)."
     },
     "onlineTrend": {
       "title": "Online trend",
@@ -2707,11 +2711,13 @@
       "peak": "Peak",
       "average": "Avg",
       "points": "Points",
-      "empty": "No data yet — online snapshots are recorded every minute."
+      "empty": "No data yet — online snapshots are recorded every minute.",
+      "avg": "Average",
+      "max": "Maximum"
     },
     "providers": {
       "title": "Providers & ASN",
-      "tooltip": "Connection types, ASN distribution, and security flags",
+      "tooltip": "Unique addresses users connected from in the period: connection types, providers (ASN) and the share of VPN, proxy, Tor and hosting.",
       "connectionTypes": "Connection Types",
       "topAsn": "Top ASN",
       "connectionType": {
@@ -2735,7 +2741,8 @@
       "found": "Found",
       "showing": "showing first",
       "preview": "Preview",
-      "downloadCsv": "Download CSV"
+      "downloadCsv": "Download CSV",
+      "exportTruncated": "Only the first {{count}} addresses were exported — narrow the period or filters."
     },
     "nodes": {
       "title": "Nodes",
@@ -2767,7 +2774,8 @@
       "cpu": "CPU",
       "ram": "RAM",
       "uptime": "Uptime",
-      "as": "AS"
+      "as": "AS",
+      "noFleetPermission": "Node metrics come from Fleet — the \"Fleet: view\" permission is required."
     },
     "retention": {
       "title": "Retention Analysis",
@@ -2803,17 +2811,27 @@
       "activeSub": "Connected during period",
       "newSub": "Registered",
       "churnedSub": "Stopped connecting",
-      "churnPctSub": "% churned"
+      "churnPctSub": "% churned",
+      "active": "Active",
+      "new": "New",
+      "churned": "Churned",
+      "churnPct": "Churn",
+      "retentionHint": "Connections are kept for {{days}} days — earlier periods are incomplete."
     },
     "ltv": {
-      "title": "User Lifetime Value",
-      "tooltip": "User lifetime estimate: average days between registration and last activity. LTV = avg lifetime × cost per user per month. Based on last 6 months data.",
-      "avgLifetime": "Avg Lifetime (days)",
-      "avgLifetimeSub": "Average time from registration to last connection",
-      "estimatedLtv": "Estimated LTV",
-      "estimatedLtvSub": "Cost per user over entire lifetime",
-      "sampleSize": "Sample Size",
-      "sampleSizeSub": "Users with activity in last 6 months"
+      "title": "User lifetime value (LTV)",
+      "tooltip": "LTV = ARPU × average lifetime. ARPU is Bedolaga top-ups for 30 days divided by the number of paid subscriptions. Lifetime runs from sign-up to the last time online (users from the last 12 months). For comparison — what an active user costs per month in recurring expenses.",
+      "avgLifetime": "Lifetime, days",
+      "avgLifetimeSub": "sign-up to last online, users: {{count}}",
+      "estimatedLtv": "LTV",
+      "estimatedLtvSub": "ARPU × lifetime",
+      "arpu": "ARPU per month",
+      "arpuSub": "top-ups for 30 days / paid subscriptions",
+      "costPerUser": "Cost per user per month",
+      "costPerUserSub": "recurring expenses / {{count}} active",
+      "revenueLine": "Top-ups for 30 days: {{revenue}}, paid subscriptions in Bedolaga: {{count}}.",
+      "bedolagaNotConfigured": "Bedolaga is not connected — there is nothing to compute ARPU and LTV from.",
+      "bedolagaUnavailable": "Bedolaga is not responding — ARPU and LTV are temporarily unavailable."
     },
     "ipPreview": {
       "ip": "IP",
@@ -2833,7 +2851,16 @@
       "regions": "Regions",
       "node": "Node",
       "topCountries": "Top countries",
-      "topRegions": "Top regions"
+      "topRegions": "Top regions",
+      "metric": {
+        "cpu": "CPU",
+        "memory": "RAM",
+        "disk": "Disk"
+      },
+      "rec": {
+        "overloaded": "Node {{node}} is overloaded: {{reasons}}",
+        "unbalanced": "Node {{node}} has {{users}} users online against a median of {{median}} — consider rebalancing."
+      }
     },
     "torrent": {
       "title": "Torrent traffic",
@@ -2846,7 +2873,14 @@
       "affectedNodes": "Affected nodes",
       "topNodes": "Top nodes",
       "topUsers": "Top users",
-      "topDestinations": "Top destinations"
+      "topDestinations": "Top destinations",
+      "tooltip": "Agent events on nodes for the selected period. Below is the summary of the panel torrent-blocker plugin: it is all-time only, so it is shown separately.",
+      "uniqueDestinations": "Destinations",
+      "eventsCount": "{{count}} evt.",
+      "usersCount": "{{count}} users",
+      "noAgentEvents": "The agent saw no torrents in this period.",
+      "panelTitle": "Panel plugin (torrent-blocker)",
+      "panelHint": "All-time — not added to the period above."
     }
   },
   "automations": {

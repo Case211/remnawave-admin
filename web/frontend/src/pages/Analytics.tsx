@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback, useEffect, memo, lazy, Suspense } from 'react'
+import { useState, useMemo, useCallback, useEffect, memo, lazy, Suspense, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useOpenUser } from '@/lib/useOpenUser'
 import { useTabParam } from '@/lib/useTabParam'
 import { useUrlParam } from '@/lib/useUrlParam'
@@ -26,6 +27,7 @@ import {
   GitCompare,
   CalendarDays,
   Download,
+  Lock,
 } from '@/components/brand/icons'
 import {
   Tooltip as RechartsTooltip,
@@ -39,7 +41,7 @@ import client from '@/api/client'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
 import { InteractiveChart } from '@/components/charts/InteractiveChart'
 import { MiddleTruncate } from '@/components/MiddleTruncate'
-import type { GeoCity, GeoCityUser, TopUser, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem } from '@/api/advancedAnalytics'
+import type { GeoCity, GeoCityUser, TopUser, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem, TorrentTopUser } from '@/api/advancedAnalytics'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON, formatBytesForExport } from '@/lib/export'
 
@@ -72,7 +74,7 @@ import { QueryError } from '@/components/QueryError'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
 import { parseApiDate, useFormatters } from '@/lib/useFormatters'
-import { getDisplayTimeZone } from '@/lib/timezone'
+import { getDisplayTimeZone, toZonedDate } from '@/lib/timezone'
 
 // ── Period Switcher ─────────────────────────────────────────────
 
@@ -481,9 +483,11 @@ function CityUsersList({
                   {city.city}, {city.country}
                 </span>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs text-muted-foreground">
-                    {t('analytics.geo.totalConnections', { count: city.count, formattedCount: city.count.toLocaleString() })}
-                  </span>
+                  {city.unique_ips != null && (
+                    <span className="text-xs text-muted-foreground">
+                      {t('analytics.geo.ipsCount', { count: city.unique_ips, formatted: city.unique_ips.toLocaleString() })}
+                    </span>
+                  )}
                   {city.unique_users > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       {city.unique_users} {t('analytics.geo.users').toLowerCase()}
@@ -708,9 +712,9 @@ function TopUsersCard() {
               <TableBody>
                 {items.map((user: TopUser, idx: number) => (
                   <TableRow
-                    key={user.uuid}
-                    className="cursor-pointer hover:bg-[var(--glass-bg-hover)]/30"
-                    {...openUser(user.uuid)}
+                    key={user.uuid || user.username}
+                    className={cn(user.uuid && 'cursor-pointer hover:bg-[var(--glass-bg-hover)]/30')}
+                    {...(user.uuid ? openUser(user.uuid) : {})}
                   >
                     <TableCell className="font-mono text-muted-foreground text-xs">
                       {idx + 1}
@@ -721,6 +725,9 @@ function TopUsersCard() {
                         <span className="font-medium text-white text-sm truncate max-w-[200px]">
                           {user.username || user.uuid.slice(0, 8)}
                         </span>
+                        {!user.uuid && (
+                          <span className="text-[10px] text-muted-foreground">{t('analytics.topUsers.deleted')}</span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
@@ -960,54 +967,24 @@ function TrendsCard() {
   const apiDateFrom = hasCustomDates ? trendDateFrom : undefined
   const apiDateTo = hasCustomDates && trendDateTo ? trendDateTo : undefined
 
-  // B1 fix: for traffic, use the real timeseries API (daily consumption)
   const isTraffic = metric === 'traffic'
-  const tsPeriod = period === '90d' ? '30d' : period
 
-  // Previous period for comparison
-  const prevPeriodMap: Record<string, string> = { '7d': '7d', '30d': '30d', '90d': '90d' }
-  const prevPeriod = prevPeriodMap[period] || '30d'
-
-  const { data: trendsData, isLoading: trendsLoading, isError: trendsError, refetch: trendsRefetch } = useQuery({
+  const { data: trendsData, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-trends', metric, period, trendDateFrom, trendDateTo],
     queryFn: () => advancedAnalyticsApi.trends(metric, period, apiDateFrom, apiDateTo),
     staleTime: 60_000,
     refetchInterval: 60_000,
-    enabled: !isTraffic,
   })
 
-  const { data: tsData, isLoading: tsLoading, isError: tsError, refetch: tsRefetch } = useQuery({
-    queryKey: ['timeseries', tsPeriod, 'traffic'],
-    queryFn: () => advancedAnalyticsApi.timeseries(tsPeriod, 'traffic'),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    enabled: isTraffic,
-  })
-
-  // F5: comparison — fetch previous period
+  // Сравнение — с предыдущим окном той же длины, сразу перед выбранным
   const { data: prevTrendsData } = useQuery({
-    queryKey: ['advanced-trends', metric, prevPeriod, 'prev'],
-    queryFn: () => advancedAnalyticsApi.trends(metric, prevPeriod),
+    queryKey: ['advanced-trends', metric, period, trendDateFrom, trendDateTo, 'prev'],
+    queryFn: () => advancedAnalyticsApi.trends(metric, period, apiDateFrom, apiDateTo, true),
     staleTime: 60_000,
-    enabled: compare && !isTraffic,
+    enabled: compare,
   })
 
-  const isLoading = isTraffic ? tsLoading : trendsLoading
-  const isError = isTraffic ? tsError : trendsError
-  const refetch = isTraffic ? tsRefetch : trendsRefetch
-
-  // Normalize data from both APIs into same chartData format
   const { chartData, growth } = useMemo(() => {
-    if (isTraffic) {
-      const points = tsData?.points || []
-      const mapped = points.map((p) => ({
-        date: formatDate(p.timestamp.split('T')[0]),
-        rawDate: p.timestamp.split('T')[0],
-        value: p.value,
-      }))
-      const totalGrowth = points.reduce((s, p) => s + p.value, 0)
-      return { chartData: mapped, growth: totalGrowth }
-    }
     const series = trendsData?.series || []
     const prevSeries = compare ? (prevTrendsData?.series || []) : []
 
@@ -1018,7 +995,7 @@ function TrendsCard() {
       prevValue: prevSeries[i]?.value ?? undefined,
     }))
     return { chartData: mapped, growth: trendsData?.total_growth || 0 }
-  }, [isTraffic, tsData, trendsData, compare, prevTrendsData])
+  }, [trendsData, compare, prevTrendsData])
 
   const formatBytesShort = (bytes: number): string => {
     if (bytes <= 0) return '0'
@@ -1029,11 +1006,15 @@ function TrendsCard() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]
   }
 
-  const periodLabel = period === '7d'
-    ? t('analytics.trends.last7d')
-    : period === '30d'
-      ? t('analytics.trends.last30d')
-      : t('analytics.trends.last90d')
+  const periodLabel = hasCustomDates
+    ? `${formatDate(trendDateFrom)} — ${trendDateTo ? formatDate(trendDateTo) : t('analytics.trends.today')}`
+    : period === '7d'
+      ? t('analytics.trends.last7d')
+      : period === '30d'
+        ? t('analytics.trends.last30d')
+        : period === '90d'
+          ? t('analytics.trends.last90d')
+          : t('analytics.periods.all')
 
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
@@ -1048,7 +1029,7 @@ function TrendsCard() {
             />
           </div>
           <div className="flex items-center gap-2">
-            {!isTraffic && !hasCustomDates && (
+            {period !== 'all' && (
               <Button
                 variant={compare ? 'default' : 'outline'}
                 size="sm"
@@ -1096,11 +1077,19 @@ function TrendsCard() {
           <div>
             <p className="text-sm font-medium text-white">
               {t(`analytics.trends.metric.${metric}`)}: {growth >= 0 ? '+' : ''}
-              {metric === 'traffic' ? formatBytes(Math.abs(growth)) : growth.toLocaleString()}
+              {isTraffic ? formatBytes(Math.abs(growth)) : growth.toLocaleString()}
             </p>
             <p className="text-xs text-muted-foreground">
               {periodLabel}
+              {compare && prevTrendsData && (
+                <> · {t('analytics.trends.previousPeriod')}: {isTraffic
+                  ? formatBytes(prevTrendsData.total_growth)
+                  : prevTrendsData.total_growth.toLocaleString()}</>
+              )}
             </p>
+            {isTraffic && (
+              <p className="text-[11px] text-muted-foreground mt-0.5">{t('analytics.trends.trafficUtcHint')}</p>
+            )}
           </div>
         </div>
 
@@ -1123,7 +1112,7 @@ function TrendsCard() {
             tooltip={<TrendTooltip metric={metric} />}
             onRangeSelect={(from, to) => { setTrendDateFrom(from.slice(0, 10)); setTrendDateTo(to.slice(0, 10)) }}
             series={
-              compare && !isTraffic
+              compare
                 ? [
                     { key: 'value', name: t(`analytics.trends.metric.${metric}`) },
                     { key: 'prevValue', name: t('analytics.trends.compare', { defaultValue: 'Compare' }), dashed: true },
@@ -1366,8 +1355,9 @@ function ProvidersCard() {
 
 function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { t } = useTranslation()
-  const today = new Date().toISOString().slice(0, 10)
-  const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10)
+  // Дни — по часам панели, как их поймёт бэкенд
+  const today = toZonedDate(new Date())
+  const weekAgo = toZonedDate(new Date(Date.now() - 7 * 86400_000))
 
   const [dateFrom, setDateFrom] = useState(weekAgo)
   const [dateTo, setDateTo] = useState(today)
@@ -1378,6 +1368,7 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState<IpExportItem[] | null>(null)
   const [totalCount, setTotalCount] = useState(0)
+  const [truncated, setTruncated] = useState(false)
 
   const { data: nodesData } = useQuery<{ items?: { uuid: string; name: string }[] }>({
     queryKey: ['nodes-list-for-export'],
@@ -1399,6 +1390,7 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
       })
       setPreview(resp.items.slice(0, 50))
       setTotalCount(resp.total)
+      setTruncated(Boolean(resp.truncated))
     } catch {
       toast.error(t('common.error', { defaultValue: 'Error' }))
     } finally {
@@ -1420,6 +1412,7 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
         ip: ip.ip,
         username: ip.username || '',
         node: ip.node_name || '',
+        connections: ip.connections ?? '',
         country: ip.country_code || '',
         city: ip.city || '',
         asn: ip.asn ? `AS${ip.asn}` : '',
@@ -1432,6 +1425,7 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
         connected_at: ip.connected_at || '',
       })), `ips-${dateFrom}-${dateTo}`)
       toast.success(`${t('common.exported', { defaultValue: 'Exported' })}: ${resp.total} IP`)
+      if (resp.truncated) toast.warning(t('analytics.providers.exportTruncated', { count: resp.total }))
     } catch {
       toast.error(t('common.error', { defaultValue: 'Error' }))
     } finally {
@@ -1529,6 +1523,11 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             <p className="text-xs text-muted-foreground mb-2">
               {t('analytics.providers.found', { defaultValue: 'Found' })}: <span className="text-white font-medium">{totalCount}</span> IP
               {totalCount > 50 && ` (${t('analytics.providers.showing', { defaultValue: 'showing first' })} 50)`}
+              {truncated && (
+                <span className="block text-amber-400 mt-0.5">
+                  {t('analytics.providers.exportTruncated', { count: totalCount })}
+                </span>
+              )}
             </p>
             <div className="max-h-48 overflow-auto rounded border border-[var(--glass-border)]">
               <table className="w-full text-xs">
@@ -1700,7 +1699,8 @@ function NodesCard() {
   const nodes: NodeFleetItem[] = data?.nodes || []
   const totalNodes = data?.total || 0
   const onlineNodes = data?.online || 0
-  const offlineNodes = totalNodes - onlineNodes
+  // Выключенные вручную — не «упавшие»
+  const offlineNodes = data?.offline ?? nodes.filter((n) => !n.is_connected && !n.is_disabled).length
 
   const avgCpu = useMemo(() => {
     const vals = nodes.filter((n) => n.cpu_usage != null && n.is_connected).map((n) => n.cpu_usage!)
@@ -1772,7 +1772,7 @@ function NodesCard() {
           <ExportDropdown
             disabled={nodes.length === 0}
             onExportCSV={() => exportCSV(nodes.map((n) => ({
-              name: n.name, status: n.is_connected ? 'online' : n.is_disabled ? 'disabled' : 'offline',
+              name: n.name, status: n.is_disabled ? 'disabled' : n.is_connected ? 'online' : 'offline',
               cpu: n.cpu_usage != null ? `${n.cpu_usage}%` : '', ram: n.memory_usage != null ? `${n.memory_usage}%` : '',
               users_online: n.users_online, traffic_today: formatBytesForExport(n.traffic_today_bytes),
               uptime: formatUptime(n.uptime_seconds),
@@ -1808,6 +1808,8 @@ function NodesCard() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
+        ) : !canViewFleet ? (
+          <FleetPermissionHint />
         ) : isError ? (
           <QueryError onRetry={refetch} />
         ) : nodes.length === 0 ? (
@@ -1916,15 +1918,30 @@ const ResourceBar = memo(function ResourceBar({ value }: { value: number }) {
 
 const METRIC_COLORS = { cpu: '#ef4444', memory: '#f59e0b', disk: '#3b82f6' }
 
+/** Метрики нод — из Fleet: без права fleet:view их не видно. */
+function FleetPermissionHint() {
+  const { t } = useTranslation()
+  return (
+    <div className="h-32 flex items-center justify-center text-muted-foreground">
+      <div className="text-center">
+        <Lock className="w-10 h-10 mx-auto mb-2 opacity-30" />
+        <p className="text-sm">{t('analytics.nodes.noFleetPermission')}</p>
+      </div>
+    </div>
+  )
+}
+
 function NodeMetricsHistoryCard() {
   const { t } = useTranslation()
   const [period, setPeriod] = useState('24h')
+  const canViewFleet = usePermissionStore((s) => s.hasPermission)('fleet', 'view')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['node-metrics-history', period],
     queryFn: () => advancedAnalyticsApi.nodeMetricsHistory(period),
     staleTime: 60_000,
     refetchInterval: 60_000,
+    enabled: canViewFleet,
   })
 
   const nodes: NodeMetricsHistoryItem[] = Array.isArray(data?.nodes) ? data!.nodes : []
@@ -1938,12 +1955,14 @@ function NodeMetricsHistoryCard() {
       const cpuVals = vals.map((v) => v.cpu).filter((v): v is number => v !== null)
       const memVals = vals.map((v) => v.memory).filter((v): v is number => v !== null)
       const diskVals = vals.map((v) => v.disk).filter((v): v is number => v !== null)
-      const ts = point.timestamp
+      // Точка — момент в UTC; подписи — на часах панели
+      const dt = parseApiDate(point.timestamp)
+      const timeZone = getDisplayTimeZone()
       const label = period === '30d'
-        ? ts.slice(5, 10)
+        ? dt.toLocaleDateString(undefined, { timeZone, day: '2-digit', month: '2-digit' })
         : period === '7d'
-          ? `${ts.slice(5, 10)} ${ts.slice(11, 13)}h`
-          : ts.slice(11, 16)
+          ? dt.toLocaleString(undefined, { timeZone, day: '2-digit', month: '2-digit', hour: '2-digit' })
+          : dt.toLocaleTimeString(undefined, { timeZone, hour: '2-digit', minute: '2-digit' })
       return {
         time: label,
         cpu: cpuVals.length ? Math.round(cpuVals.reduce((a, b) => a + b, 0) / cpuVals.length * 10) / 10 : null,
@@ -1985,7 +2004,9 @@ function NodeMetricsHistoryCard() {
         </div>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
+        {!canViewFleet ? (
+          <FleetPermissionHint />
+        ) : isLoading ? (
           <Skeleton className="h-64 w-full" />
         ) : isError ? (
           <QueryError onRetry={refetch} />
@@ -2240,6 +2261,9 @@ function ChurnCard() {
 
   const series = Array.isArray(data?.series) ? data!.series : []
   const avgChurn = data?.avg_churn ?? 0
+  // Активность берётся из подключений, а они хранятся ограниченно
+  const retentionDays = data?.connections_retention_days ?? 0
+  const beyondRetention = retentionDays > 0 && parseInt(months, 10) * 30 > retentionDays
 
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
@@ -2292,6 +2316,11 @@ function ChurnCard() {
             <span className="text-sm font-medium text-white">{series.length}</span>
           </div>
         </div>
+        {beyondRetention && (
+          <p className="text-xs text-amber-400/90 mb-3">
+            {t('analytics.churn.retentionHint', { days: retentionDays })}
+          </p>
+        )}
 
         {isLoading ? (
           <Skeleton className="h-64 w-full" />
@@ -2310,9 +2339,9 @@ function ChurnCard() {
               height={260}
               exportName="churn-retention"
               series={[
-                { key: 'active_users', name: 'Active', color: '#06b6d4' },
-                { key: 'new_users', name: 'New', color: '#10b981' },
-                { key: 'churned_users', name: 'Churned', color: '#ef4444' },
+                { key: 'active_users', name: t('analytics.churn.active'), color: '#06b6d4' },
+                { key: 'new_users', name: t('analytics.churn.new'), color: '#10b981' },
+                { key: 'churned_users', name: t('analytics.churn.churned'), color: '#ef4444' },
               ]}
             />
 
@@ -2325,19 +2354,19 @@ function ChurnCard() {
                       {t('analytics.churn.period', { defaultValue: 'Period' })}
                     </TableHead>
                     <TableHead className="text-xs text-right">
-                      Active
+                      {t('analytics.churn.active')}
                       <span className="block text-[10px] text-muted-foreground font-normal">{t('analytics.churn.activeSub')}</span>
                     </TableHead>
                     <TableHead className="text-xs text-right">
-                      New
+                      {t('analytics.churn.new')}
                       <span className="block text-[10px] text-muted-foreground font-normal">{t('analytics.churn.newSub')}</span>
                     </TableHead>
                     <TableHead className="text-xs text-right">
-                      Churned
+                      {t('analytics.churn.churned')}
                       <span className="block text-[10px] text-muted-foreground font-normal">{t('analytics.churn.churnedSub')}</span>
                     </TableHead>
                     <TableHead className="text-xs text-center">
-                      Churn %
+                      {t('analytics.churn.churnPct')}
                       <span className="block text-[10px] text-muted-foreground font-normal">{t('analytics.churn.churnPctSub')}</span>
                     </TableHead>
                   </TableRow>
@@ -2376,57 +2405,71 @@ function ChurnCard() {
 function LtvCard() {
   const { t } = useTranslation()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-ltv'],
     queryFn: () => advancedAnalyticsApi.ltv(),
     refetchInterval: 300_000,
   })
 
-  const avgDays = data?.avg_lifetime_days ?? 0
-  const ltv = data?.estimated_ltv ?? 0
-  const sampleSize = data?.sample_size ?? 0
+  const rub = (v: number | null | undefined) => (v == null
+    ? '—'
+    : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(v))
+
+  const tiles = data ? [
+    {
+      value: data.avg_lifetime_days.toFixed(0),
+      label: t('analytics.ltv.avgLifetime'),
+      sub: t('analytics.ltv.avgLifetimeSub', { count: data.sample_size }),
+      accent: false,
+    },
+    { value: rub(data.arpu_month), label: t('analytics.ltv.arpu'), sub: t('analytics.ltv.arpuSub'), accent: false },
+    { value: rub(data.ltv), label: t('analytics.ltv.estimatedLtv'), sub: t('analytics.ltv.estimatedLtvSub'), accent: true },
+    {
+      value: rub(data.cost_per_user_month),
+      label: t('analytics.ltv.costPerUser'),
+      sub: t('analytics.ltv.costPerUserSub', { count: data.active_users }),
+      accent: false,
+    },
+  ] : []
 
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <Activity className="w-5 h-5 text-primary-400" />
-          <CardTitle className="text-base">
-            {t('analytics.ltv.title', { defaultValue: 'User Lifetime Value' })}
-          </CardTitle>
-          <InfoTooltip
-            text={t('analytics.ltv.tooltip')}
-            side="right"
-          />
+          <CardTitle className="text-base">{t('analytics.ltv.title')}</CardTitle>
+          <InfoTooltip text={t('analytics.ltv.tooltip')} side="right" />
         </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-20 w-full" />
+        ) : isError || !data ? (
+          <QueryError onRetry={refetch} />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="flex flex-col items-center gap-1 p-4 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
-              <span className="text-2xl font-bold text-white">{avgDays.toFixed(0)}</span>
-              <span className="text-xs text-muted-foreground text-center">
-                {t('analytics.ltv.avgLifetime', { defaultValue: 'Avg Lifetime (days)' })}
-              </span>
-              <span className="text-[10px] text-muted-foreground">{t('analytics.ltv.avgLifetimeSub')}</span>
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {tiles.map((tile) => (
+                <div
+                  key={tile.label}
+                  className="flex flex-col items-center gap-1 p-4 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]"
+                >
+                  <span className={cn('text-2xl font-bold tabular-nums', tile.accent ? 'text-primary-400' : 'text-white')}>
+                    {tile.value}
+                  </span>
+                  <span className="text-xs text-muted-foreground text-center">{tile.label}</span>
+                  <span className="text-[10px] text-muted-foreground text-center">{tile.sub}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex flex-col items-center gap-1 p-4 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
-              <span className="text-2xl font-bold text-primary-400">${ltv.toFixed(2)}</span>
-              <span className="text-xs text-muted-foreground text-center">
-                {t('analytics.ltv.estimatedLtv', { defaultValue: 'Estimated LTV' })}
-              </span>
-              <span className="text-[10px] text-muted-foreground">{t('analytics.ltv.estimatedLtvSub')}</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 p-4 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
-              <span className="text-2xl font-bold text-white">{sampleSize.toLocaleString()}</span>
-              <span className="text-xs text-muted-foreground text-center">
-                {t('analytics.ltv.sampleSize', { defaultValue: 'Sample Size' })}
-              </span>
-              <span className="text-[10px] text-muted-foreground">{t('analytics.ltv.sampleSizeSub')}</span>
-            </div>
-          </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              {data.revenue_source === 'ok'
+                ? t('analytics.ltv.revenueLine', { revenue: rub(data.revenue_30d), count: data.paying_users ?? 0 })
+                : data.revenue_source === 'not_configured'
+                  ? t('analytics.ltv.bedolagaNotConfigured')
+                  : t('analytics.ltv.bedolagaUnavailable')}
+            </p>
+          </>
         )}
       </CardContent>
     </Card>
@@ -2435,6 +2478,22 @@ function LtvCard() {
 
 
 // ── Geo-Balance ─────────────────────────────────────────────────
+
+/** Рекомендация приходит кодом с параметрами — текст собираем тут. */
+function recommendationText(rec: GeoBalanceRecommendation, t: TFunction): string {
+  if (rec.type === 'overloaded') {
+    const reasons = (rec.reasons || [])
+      .map((r) => `${t(`analytics.geoBalance.metric.${r.metric}`)} ${r.value}%`)
+      .join(', ')
+    return t('analytics.geoBalance.rec.overloaded', { node: rec.node, reasons })
+  }
+  if (rec.type === 'unbalanced') {
+    return t('analytics.geoBalance.rec.unbalanced', {
+      node: rec.node, users: rec.users_online ?? 0, median: rec.median ?? 0,
+    })
+  }
+  return rec.message || rec.type
+}
 
 function GeoBalanceCard() {
   const { t } = useTranslation()
@@ -2516,7 +2575,7 @@ function GeoBalanceCard() {
                     'px-3 py-2 rounded-lg border text-sm',
                     rec.severity === 'critical' ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300',
                   )}>
-                    {rec.message}
+                    {recommendationText(rec, t)}
                   </div>
                 ))}
               </div>
@@ -2611,7 +2670,7 @@ function TorrentAnalyticsCard() {
   const timeseries = Array.isArray(data?.timeseries) ? data!.timeseries : []
   const topUsers = Array.isArray(data?.top_users) ? data!.top_users : []
   const topDest = Array.isArray(data?.top_destinations) ? data!.top_destinations : []
-  const topNodes = Array.isArray(data?.top_nodes) ? data!.top_nodes : []
+  const panel = data?.panel ?? null
 
   const chartData = useMemo(
     () => timeseries.map((p) => ({ date: p.date?.slice(5, 10) ?? '', events: p.events, users: p.users })),
@@ -2624,15 +2683,16 @@ function TorrentAnalyticsCard() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-red-400" />
-            <CardTitle className="text-base">{t('analytics.torrent.title', { defaultValue: 'P2P / Torrent Activity' })}</CardTitle>
+            <CardTitle className="text-base">{t('analytics.torrent.title')}</CardTitle>
+            <InfoTooltip text={t('analytics.torrent.tooltip')} side="right" />
           </div>
           <PeriodSwitcher
             value={days}
             onChange={setDays}
             options={[
-              { value: '7', label: '7d' },
-              { value: '30', label: '30d' },
-              { value: '90', label: '90d' },
+              { value: '7', label: t('analytics.periods.7d') },
+              { value: '30', label: t('analytics.periods.30d') },
+              { value: '90', label: t('analytics.periods.90d') },
               { value: '3650', label: t('analytics.periods.all') },
             ]}
           />
@@ -2643,109 +2703,143 @@ function TorrentAnalyticsCard() {
           <Skeleton className="h-64 w-full" />
         ) : isError ? (
           <QueryError onRetry={refetch} />
-        ) : !summary.total_events ? (
+        ) : !summary.total_events && !panel?.summary.total_events ? (
           <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
-            <p>{t('analytics.torrent.noData', { defaultValue: 'No torrent events detected' })}</p>
+            <p>{t('analytics.torrent.noData')}</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Summary badges */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                { label: t('analytics.torrent.totalEvents', { defaultValue: 'Events' }), value: summary.total_events, color: 'text-red-400' },
-                ...(summary.reports_last_24h != null ? [{ label: t('analytics.torrent.last24h', { defaultValue: 'Last 24h' }), value: summary.reports_last_24h, color: 'text-red-300' }] : []),
-                { label: t('analytics.torrent.uniqueUsers', { defaultValue: 'Users' }), value: summary.unique_users, color: 'text-orange-400' },
-                { label: t('analytics.torrent.affectedNodes', { defaultValue: 'Nodes' }), value: summary.affected_nodes, color: 'text-blue-400' },
-              ].map((s) => (
-                <div key={s.label} className="bg-[var(--glass-bg)] rounded-lg p-3 text-center">
-                  <p className={cn('text-xl font-bold', s.color)}>{s.value.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-                </div>
-              ))}
-            </div>
+          <div className="space-y-5">
+            {summary.total_events > 0 ? (
+              <div className="space-y-4">
+                <TorrentStatGrid stats={[
+                  { label: t('analytics.torrent.totalEvents'), value: summary.total_events, color: 'text-red-400' },
+                  { label: t('analytics.torrent.uniqueUsers'), value: summary.unique_users, color: 'text-orange-400' },
+                  { label: t('analytics.torrent.uniqueDestinations'), value: summary.unique_destinations, color: 'text-yellow-400' },
+                  { label: t('analytics.torrent.affectedNodes'), value: summary.affected_nodes, color: 'text-blue-400' },
+                ]} />
 
-            {/* Timeline chart */}
-            {chartData.length > 1 && (
-              <InteractiveChart
-                data={chartData}
-                xKey="date"
-                height={192}
-                exportName="torrent-timeline"
-                series={[
-                  { key: 'events', name: t('analytics.torrent.events', { defaultValue: 'Events' }), color: '#ef4444' },
-                  { key: 'users', name: t('analytics.torrent.users', { defaultValue: 'Users' }), color: '#f97316' },
-                ]}
-              />
+                {chartData.length > 1 && (
+                  <InteractiveChart
+                    data={chartData}
+                    xKey="date"
+                    height={192}
+                    exportName="torrent-timeline"
+                    series={[
+                      { key: 'events', name: t('analytics.torrent.events'), color: '#ef4444' },
+                      { key: 'users', name: t('analytics.torrent.users'), color: '#f97316' },
+                    ]}
+                  />
+                )}
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  {topDest.length > 0 && (
+                    <TorrentList title={t('analytics.torrent.topDestinations')}>
+                      {topDest.map((d, i) => (
+                        <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
+                          <span className="text-white/80 truncate max-w-[200px]" title={d.destination}>{d.destination}</span>
+                          <div className="flex gap-3 text-muted-foreground shrink-0">
+                            <span>{t('analytics.torrent.eventsCount', { count: d.events })}</span>
+                            <span>{t('analytics.torrent.usersCount', { count: d.users })}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </TorrentList>
+                  )}
+                  {topUsers.length > 0 && (
+                    <TorrentList title={t('analytics.torrent.topUsers')}>
+                      {topUsers.map((u, i) => (
+                        <TorrentUserRow key={i} user={u} openUser={openUser} />
+                      ))}
+                    </TorrentList>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t('analytics.torrent.noAgentEvents')}</p>
             )}
 
-            {/* Top destinations + Top users side by side */}
-            <div className="grid md:grid-cols-2 gap-4">
-              {/* Top destinations */}
-              {topDest.length > 0 && (
+            {panel && panel.summary.total_events > 0 && (
+              <div className="space-y-4 pt-4 border-t border-[var(--glass-border)]">
                 <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">
-                    {t('analytics.torrent.topDestinations', { defaultValue: 'Top Trackers' })}
-                  </h4>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {topDest.map((d, i) => (
-                      <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
-                        <span className="text-white/80 truncate max-w-[200px]" title={d.destination}>{d.destination}</span>
-                        <div className="flex gap-3 text-muted-foreground shrink-0">
-                          <span>{d.events} evt</span>
-                          <span>{d.users} usr</span>
+                  <h4 className="text-sm font-medium text-white">{t('analytics.torrent.panelTitle')}</h4>
+                  <p className="text-xs text-muted-foreground">{t('analytics.torrent.panelHint')}</p>
+                </div>
+                <TorrentStatGrid stats={[
+                  { label: t('analytics.torrent.totalEvents'), value: panel.summary.total_events, color: 'text-red-400' },
+                  { label: t('analytics.torrent.last24h'), value: panel.summary.reports_last_24h ?? 0, color: 'text-red-300' },
+                  { label: t('analytics.torrent.uniqueUsers'), value: panel.summary.unique_users, color: 'text-orange-400' },
+                  { label: t('analytics.torrent.affectedNodes'), value: panel.summary.affected_nodes, color: 'text-blue-400' },
+                ]} />
+                <div className="grid md:grid-cols-2 gap-4">
+                  {panel.top_users.length > 0 && (
+                    <TorrentList title={t('analytics.torrent.topUsers')}>
+                      {panel.top_users.map((u, i) => (
+                        <TorrentUserRow key={i} user={u} openUser={openUser} />
+                      ))}
+                    </TorrentList>
+                  )}
+                  {panel.top_nodes.length > 0 && (
+                    <TorrentList title={t('analytics.torrent.topNodes')}>
+                      {panel.top_nodes.map((n, i) => (
+                        <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
+                          <span className="flex items-center gap-1 min-w-0 max-w-[200px] text-white/80">
+                            {n.country_code && <span className="shrink-0">{n.country_code}</span>}
+                            <MiddleTruncate text={n.name} />
+                          </span>
+                          <Badge variant="secondary" className="text-[10px]">{n.total}</Badge>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </TorrentList>
+                  )}
                 </div>
-              )}
-
-              {/* Top users */}
-              {topUsers.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">
-                    {t('analytics.torrent.topUsers', { defaultValue: 'Top Violators' })}
-                  </h4>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {topUsers.map((u, i) => (
-                      <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
-                        <span
-                          className="text-white/80 font-mono truncate max-w-[200px] cursor-pointer hover:text-primary hover:underline transition-colors"
-                          {...openUser(u.user_uuid)}
-                        >
-                          {u.username || (u.user_uuid ? `${u.user_uuid.slice(0, 8)}...` : '?')}
-                        </span>
-                        <Badge variant="destructive" className="text-[10px]">{u.event_count}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Top nodes */}
-              {topNodes.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">
-                    {t('analytics.torrent.topNodes', { defaultValue: 'Top Nodes' })}
-                  </h4>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {topNodes.map((n, i) => (
-                      <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
-                        <span className="flex items-center gap-1 min-w-0 max-w-[200px] text-white/80">
-                          {n.country_code && <span className="shrink-0">{n.country_code}</span>}
-                          <MiddleTruncate text={n.name} />
-                        </span>
-                        <Badge variant="secondary" className="text-[10px]">{n.total}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function TorrentStatGrid({ stats }: { stats: { label: string; value: number; color: string }[] }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {stats.map((s) => (
+        <div key={s.label} className="bg-[var(--glass-bg)] rounded-lg p-3 text-center">
+          <p className={cn('text-xl font-bold', s.color)}>{s.value.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TorrentList({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <h4 className="text-sm font-medium text-muted-foreground mb-2">{title}</h4>
+      <div className="space-y-1.5 max-h-60 overflow-y-auto">{children}</div>
+    </div>
+  )
+}
+
+function TorrentUserRow({ user, openUser }: {
+  user: TorrentTopUser
+  openUser: ReturnType<typeof useOpenUser>
+}) {
+  return (
+    <div className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
+      <span
+        className={cn(
+          'text-white/80 font-mono truncate max-w-[200px]',
+          user.user_uuid && 'cursor-pointer hover:text-primary hover:underline transition-colors',
+        )}
+        {...(user.user_uuid ? openUser(user.user_uuid) : {})}
+      >
+        {user.username || (user.user_uuid ? `${user.user_uuid.slice(0, 8)}...` : '?')}
+      </span>
+      <Badge variant="destructive" className="text-[10px]">{user.event_count}</Badge>
+    </div>
   )
 }
 

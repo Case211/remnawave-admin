@@ -1,9 +1,11 @@
 import client from './client'
 
+/** count — уникальные юзеры за период */
 export interface GeoCountry {
   country: string
   country_code: string
   count: number
+  unique_ips?: number
 }
 
 export interface GeoCityUser {
@@ -19,8 +21,11 @@ export interface GeoCity {
   country: string
   lat: number
   lon: number
+  /** Уникальные юзеры за период (= unique_users) */
   count: number
   unique_users: number
+  unique_ips?: number
+  /** Самые активные, не больше 100 */
   users: GeoCityUser[]
 }
 
@@ -49,6 +54,8 @@ export interface TrendData {
   metric: string
   period: string
   total_growth: number
+  since?: string
+  until?: string
 }
 
 export interface SharedHwidUser {
@@ -251,10 +258,12 @@ export const advancedAnalyticsApi = {
     return data
   },
 
-  trends: async (metric = 'users', period = '30d', dateFrom?: string, dateTo?: string): Promise<TrendData> => {
+  /** previous=true — окно той же длины сразу перед выбранным (для сравнения). */
+  trends: async (metric = 'users', period = '30d', dateFrom?: string, dateTo?: string, previous = false): Promise<TrendData> => {
     const params: Record<string, string> = { metric, period }
     if (dateFrom) params.date_from = dateFrom
     if (dateTo) params.date_to = dateTo
+    if (previous) params.previous = 'true'
     const { data } = await client.get('/analytics/advanced/trends', { params })
     return data
   },
@@ -346,6 +355,7 @@ export interface CohortMatrixData {
   }[]
   periods: string[]
   granularity: string
+  connections_retention_days?: number
 }
 
 export interface ChurnData {
@@ -358,12 +368,21 @@ export interface ChurnData {
   }[]
   avg_churn: number
   period: string
+  connections_retention_days?: number
 }
 
+/** LTV в рублях: ARPU (пополнения Bedolaga за 30 дней / платные подписки) × срок жизни. */
 export interface LtvData {
+  currency: 'RUB'
   avg_lifetime_days: number
   sample_size: number
-  estimated_ltv: number
+  revenue_source: 'ok' | 'not_configured' | 'unavailable'
+  revenue_30d: number
+  paying_users: number | null
+  arpu_month: number | null
+  ltv: number | null
+  cost_per_user_month: number | null
+  active_users: number
 }
 
 export interface GeoBalanceNode {
@@ -379,12 +398,16 @@ export interface GeoBalanceNode {
   top_countries: { country_code: string; country_name: string; user_count: number; connection_count: number }[]
 }
 
+/** Рекомендация кодом: overloaded — с причинами, unbalanced — с онлайном и медианой. */
 export interface GeoBalanceRecommendation {
-  type: string
+  type: 'overloaded' | 'unbalanced' | string
   severity: string
   node: string
   node_uuid: string
-  message: string
+  reasons?: { metric: 'cpu' | 'memory' | 'disk'; value: number }[]
+  users_online?: number
+  median?: number
+  message?: string
 }
 
 export interface GeoBalanceRegion {
@@ -403,8 +426,12 @@ export interface GeoBalanceData {
 
 export interface IpExportItem {
   ip: string
+  /** Все, кто ходил с адреса, через запятую; списком — usernames */
   username?: string
+  usernames?: string[]
   node_name?: string
+  node_names?: string[]
+  connections?: number
   connected_at?: string
   country_code?: string
   country_name?: string
@@ -421,18 +448,31 @@ export interface IpExportItem {
 export interface IpExportResponse {
   items: IpExportItem[]
   total: number
+  /** Упёрлись в предел выгрузки — сузьте период или фильтры */
+  truncated?: boolean
 }
 
+export interface TorrentTopUser {
+  user_uuid: string
+  username?: string
+  event_count: number
+}
+
+/** События агента за период + отдельно сводка плагина панели (у неё только «за всё время»). */
 export interface TorrentStatsResponse {
   summary: {
     total_events: number
     unique_users: number
     unique_destinations: number
     affected_nodes: number
-    reports_last_24h?: number
   }
   timeseries: { date: string; events: number; users: number }[]
-  top_users: { user_uuid: string; username?: string; event_count: number }[]
+  top_users: TorrentTopUser[]
   top_destinations: { destination: string; events: number; users: number }[]
-  top_nodes?: { name: string; uuid: string; country_code: string; total: number }[]
+  /** null — плагина нет или админ ограничен областью видимости */
+  panel: {
+    summary: { total_events: number; unique_users: number; affected_nodes: number; reports_last_24h?: number }
+    top_users: TorrentTopUser[]
+    top_nodes: { name: string; uuid: string; country_code: string; total: number }[]
+  } | null
 }

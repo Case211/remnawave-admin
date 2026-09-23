@@ -14,8 +14,9 @@ from shared.db_schema import NODE_ATTACK_EVENTS_TABLE
 from web.backend.core.api_helper import (
     fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api,
     fetch_bandwidth_stats, fetch_nodes_realtime_usage,
-    fetch_nodes_usage_by_range, _normalize,
+    fetch_nodes_usage_by_range, parse_nodes_usage_series, _normalize,
 )
+from web.backend.core.errors import api_error, E
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -588,28 +589,12 @@ async def get_timeseries(
                         if uid:
                             node_names[uid] = name
 
-                    series = resp.get('series', [])
-                    if isinstance(series, list) and series:
-                        for entry in series:
-                            if not isinstance(entry, dict):
-                                continue
-                            ts = entry.get('date') or entry.get('timestamp') or ''
-                            total = 0
-                            per_node: Dict[str, int] = {}
-                            for key, val in entry.items():
-                                if key in ('date', 'timestamp'):
-                                    continue
-                                try:
-                                    v = int(float(val))
-                                except (ValueError, TypeError):
-                                    continue
-                                per_node[key] = v
-                                total += v
-                            if ts:
-                                points.append(TimeseriesPoint(timestamp=ts, value=total))
-                                node_points.append(NodeTimeseriesPoint(
-                                    timestamp=ts, total=total, nodes=per_node,
-                                ))
+                    for ts, per_node in parse_nodes_usage_series(resp):
+                        total = sum(per_node.values())
+                        points.append(TimeseriesPoint(timestamp=ts, value=total))
+                        node_points.append(NodeTimeseriesPoint(
+                            timestamp=ts, total=total, nodes=per_node,
+                        ))
 
                     if not points and top_nodes:
                         points, node_points = await _build_daily_points(
@@ -849,7 +834,8 @@ async def get_online_trend(
 ):
     """Bucketed online-users trend (cluster-wide).
 
-    Bucket sizing scales with period: 24h → 60min, 7d → 60min, 30d → 1440min (daily).
+    Bucket sizing scales with period: 24h → 1min, 7d → 60min, 30d → 1440min
+    (daily, по суткам часового пояса панели).
     """
     try:
         now = datetime.utcnow()
@@ -886,9 +872,7 @@ async def get_online_trend(
         )
     except Exception as e:
         logger.error("Error getting online trend: %s", e, exc_info=True)
-        return OnlineTrendResponse(
-            period=period, aggregation=aggregation, bucket_minutes=60, points=[],
-        )
+        raise api_error(500, E.INTERNAL_ERROR, "online trend failed")
 
 
 @router.get("/deltas", response_model=DeltaStats)

@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from shared import timefmt
 from shared.logger import logger
 from shared.db._base import _db_row_to_api_format
 from shared.db_schema import (
@@ -509,22 +510,29 @@ class NodesMixin:
         self,
         period: str = "24h",
         node_uuid: str | None = None,
+        node_uuids: list | None = None,
     ) -> list:
         """Get time-bucketed average metrics for charting.
 
-        24h -> hourly, 7d -> 6h, 30d -> daily.
+        24h -> hourly, 7d -> 6h, 30d/all -> daily (сутки — по часам панели).
+        ``node_uuids`` — видимые админу ноды; None — без ограничения.
         """
         if not self.is_connected:
             return []
 
         delta_map = {"24h": 1, "7d": 7, "30d": 30, "all": 3650}
-        trunc_map = {"24h": "hour", "7d": "hour", "30d": "day", "all": "day"}
-        # For 7d we truncate to hour then floor to 6h in Python for simplicity
         days = delta_map.get(period, 1)
-        trunc = trunc_map.get(period, "hour")
+        if period == "7d":
+            bucket = ("date_trunc('hour', s.created_at) - "
+                      "INTERVAL '1 hour' * (EXTRACT(HOUR FROM s.created_at AT TIME ZONE 'UTC')::int % 6)")
+        elif period in ("30d", "all"):
+            z = timefmt.sql_zone()
+            bucket = f"(date_trunc('day', s.created_at AT TIME ZONE {z}) AT TIME ZONE {z})"
+        else:
+            bucket = "date_trunc('hour', s.created_at)"
 
         columns = f"""
-            date_trunc('{trunc}', s.created_at) as bucket,
+            {bucket} as bucket,
             s.node_uuid,
             n.name as node_name,
             ROUND(AVG(s.cpu_usage)::numeric, 1) as avg_cpu,
@@ -534,23 +542,19 @@ class NodesMixin:
         suffix = "s JOIN nodes n ON n.uuid = s.node_uuid WHERE s.created_at >= NOW() - make_interval(days => $1)"
         params: list = [days]
         if node_uuid:
-            suffix += " AND s.node_uuid = $2::uuid"
             params.append(node_uuid)
-        suffix += f" GROUP BY bucket, s.node_uuid, n.name ORDER BY bucket"
+            suffix += f" AND s.node_uuid = ${len(params)}::uuid"
+        if node_uuids is not None:
+            params.append([str(u) for u in node_uuids])
+            suffix += f" AND s.node_uuid = ANY(${len(params)}::uuid[])"
+        suffix += " GROUP BY bucket, s.node_uuid, n.name ORDER BY bucket"
 
         query = select_sql(NODE_METRICS_SNAPSHOTS_TABLE, columns, suffix)
 
         try:
             async with self.acquire() as conn:
                 rows = await conn.fetch(query, *params)
-                result = [dict(r) for r in rows]
-                # For 7d period, floor hourly buckets to 6h
-                if period == "7d":
-                    for row in result:
-                        b = row["bucket"]
-                        if b:
-                            row["bucket"] = b.replace(hour=(b.hour // 6) * 6, minute=0, second=0, microsecond=0)
-                return result
+                return [dict(r) for r in rows]
         except Exception as e:
             logger.error("get_node_metrics_timeseries failed: %s", e)
             return []
