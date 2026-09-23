@@ -26,7 +26,10 @@ from web.backend.core.automation import (
     AUTOMATION_TEMPLATES,
 )
 from web.backend.core.automation_engine import engine as automation_engine
+from pydantic import ValidationError
+
 from web.backend.schemas.automation import (
+    DESTRUCTIVE_ACTIONS,
     AutomationRuleCreate,
     AutomationRuleUpdate,
     AutomationRuleResponse,
@@ -119,6 +122,7 @@ async def list_automations(
         pages=pages,
         total_active=stats["total_active"],
         total_triggers=stats["total_triggers"],
+        last_triggered_at=stats.get("last_triggered_at"),
     )
 
 
@@ -180,10 +184,13 @@ async def activate_template(
     if not template:
         raise api_error(404, E.TEMPLATE_NOT_FOUND)
 
+    # Шаблон, который меняет юзеров или ноды, включать сразу нельзя: «блокировать
+    # за торрент» начинал блокировать в момент клика. Такие создаются
+    # выключенными — админ проверяет и включает сам.
     rule = await create_automation_rule(
         name=template["name"],
         description=template["description"],
-        is_enabled=True,
+        is_enabled=template["action_type"] not in DESTRUCTIVE_ACTIONS,
         category=template["category"],
         trigger_type=template["trigger_type"],
         trigger_config=template["trigger_config"],
@@ -284,9 +291,26 @@ async def update_automation(
     if not existing:
         raise api_error(404, E.AUTOMATION_NOT_FOUND)
 
-    fields = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
+    # Переданные поля; описание можно очистить явным null
+    fields = {
+        k: v for k, v in data.model_dump(exclude_unset=True).items()
+        if v is not None or k == "description"
+    }
     if not fields:
         return _rule_to_response(existing)
+
+    # Итоговое правило проверяем так же, как при создании: иначе через PUT
+    # проходили любые ключи конфигурации и несуществующие события
+    current = _rule_to_response(existing).model_dump()
+    try:
+        AutomationRuleCreate(**{
+            k: fields.get(k, current[k]) for k in (
+                "name", "description", "is_enabled", "category", "trigger_type",
+                "trigger_config", "conditions", "action_type", "action_config",
+            )
+        })
+    except ValidationError as e:
+        raise api_error(422, E.INVALID_INPUT, e.errors()[0].get("msg", "Invalid rule"))
 
     rule = await update_automation_rule(rule_id, **fields)
     if not rule:

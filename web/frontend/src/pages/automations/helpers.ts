@@ -351,7 +351,6 @@ export function getThresholdMetrics() {
   return [
     { value: 'users_online', label: t('automations.metrics.users_online'), description: t('automations.metrics.users_onlineDesc') },
     { value: 'traffic_today', label: t('automations.metrics.traffic_today'), description: t('automations.metrics.traffic_todayDesc') },
-    { value: 'node_uptime_percent', label: t('automations.metrics.node_uptime_percent'), description: t('automations.metrics.node_uptime_percentDesc') },
     { value: 'user_traffic_percent', label: t('automations.metrics.user_traffic_percent'), description: t('automations.metrics.user_traffic_percentDesc') },
     { value: 'user_node_traffic_gb', label: t('automations.metrics.user_node_traffic_gb'), description: t('automations.metrics.user_node_traffic_gbDesc') },
     { value: 'user_node_traffic_today_gb', label: t('automations.metrics.user_node_traffic_today_gb'), description: t('automations.metrics.user_node_traffic_today_gbDesc') },
@@ -377,15 +376,64 @@ export const CONDITION_OPERATORS = new Proxy([] as unknown as ReturnType<typeof 
   get(_target, prop) { const d = getConditionOperators(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
+// Поля, которые движок реально кладёт в данные срабатывания, — по триггеру.
+// Условие на поле, которого нет в данных, всегда ложно, и правило молчит.
+const TRIGGER_FIELDS: Record<string, string[]> = {
+  'violation.detected': ['score'],
+  'torrent.detected': ['event_count', 'score'],
+  'node.went_offline': ['offline_minutes'],
+  'user.traffic_exceeded': ['percent', 'traffic_gb'],
+  users_online: ['users_online'],
+  traffic_today: ['traffic_today_gb'],
+  user_traffic_percent: ['percent', 'over_percent'],
+  user_node_traffic_gb: ['traffic_gb', 'over_gb'],
+  user_node_traffic_today_gb: ['traffic_gb', 'over_gb'],
+  schedule: ['users_online', 'users_total', 'nodes_online', 'violations_today'],
+}
+
+// Переменные для текста уведомления — по триггеру
+const TRIGGER_VARS: Record<string, string[]> = {
+  'violation.detected': ['{user}', '{user_code}', '{score}'],
+  'torrent.detected': ['{user}', '{user_code}', '{event_count}'],
+  'node.went_offline': ['{node}', '{node_code}', '{offline_minutes}'],
+  'user.traffic_exceeded': ['{user}', '{user_code}', '{percent}', '{traffic_gb}'],
+  users_online: ['{users_online}'],
+  traffic_today: ['{traffic_today_gb}'],
+  user_traffic_percent: ['{user}', '{user_code}', '{percent}', '{over_percent}', '{threshold}'],
+  user_node_traffic_gb: ['{user}', '{user_code}', '{node}', '{node_code}', '{traffic}', '{over}', '{threshold}'],
+  user_node_traffic_today_gb: ['{user}', '{user_code}', '{node}', '{node_code}', '{traffic}', '{over}', '{threshold}'],
+  schedule: [
+    '{users_total}', '{users_online}', '{nodes_online}', '{nodes_total}', '{traffic_today}',
+    '{traffic_yesterday}', '{report_date}', '{top_nodes_yesterday}', '{users_new_yesterday}',
+    '{users_expired_yesterday}', '{violations_today}', '{violations_yesterday}',
+  ],
+}
+
+function triggerKey(triggerType: string, event: string, metric: string): string {
+  if (triggerType === 'event') return event
+  if (triggerType === 'threshold') return metric
+  return 'schedule'
+}
+
+const ALL_CONDITION_FIELDS = [...new Set(Object.values(TRIGGER_FIELDS).flat())]
+
+function fieldOption(value: string) {
+  return { value, label: t(`automations.conditionFields.${value}`, { defaultValue: value }) }
+}
+
+/** Поля условий для выбранного триггера. */
+export function conditionFieldsFor(triggerType: string, event: string, metric: string) {
+  return (TRIGGER_FIELDS[triggerKey(triggerType, event, metric)] || []).map(fieldOption)
+}
+
+/** Переменные текста уведомления для выбранного триггера. */
+export function messageVarsFor(triggerType: string, event: string, metric: string): string[] {
+  return [...(TRIGGER_VARS[triggerKey(triggerType, event, metric)] || []), '{rule_name}', '{timestamp}']
+}
+
+/** Все известные поля — для подписи уже сохранённых условий. */
 export function getConditionFields() {
-  return [
-    { value: 'score', label: t('automations.conditionFields.score') },
-    { value: 'percent', label: t('automations.conditionFields.percent') },
-    { value: 'traffic_gb', label: t('automations.conditionFields.traffic_gb') },
-    { value: 'uptime', label: t('automations.conditionFields.uptime') },
-    { value: 'online_count', label: t('automations.conditionFields.online_count') },
-    { value: 'days_expired', label: t('automations.conditionFields.days_expired') },
-  ] as const
+  return ALL_CONDITION_FIELDS.map(fieldOption)
 }
 export const CONDITION_FIELDS = new Proxy([] as unknown as ReturnType<typeof getConditionFields>, {
   get(_target, prop) { const d = getConditionFields(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'some') return d.some.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any

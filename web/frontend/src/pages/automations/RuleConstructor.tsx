@@ -45,7 +45,10 @@ import {
   categoryLabel,
   categoryColor,
   triggerTypeLabel,
+  conditionFieldsFor,
+  messageVarsFor,
 } from './helpers'
+import { timeZoneLabel, useDisplayTimeZone } from '@/lib/timezone'
 import { CronBuilder } from './CronBuilder'
 import { IntervalPicker } from './IntervalPicker'
 
@@ -117,9 +120,11 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [thresholdOperator, setThresholdOperator] = useState('>=')
   const [thresholdValue, setThresholdValue] = useState('')
   const [thresholdNodeUuid, setThresholdNodeUuid] = useState('')
+  const displayTimeZone = useDisplayTimeZone()
 
   // Conditions
   const [conditions, setConditions] = useState<Condition[]>([])
+  const fieldsForTrigger = conditionFieldsFor(triggerType, eventType, thresholdMetric)
 
   // Action config
   const [notifyChannel, setNotifyChannel] = useState('telegram')
@@ -600,7 +605,12 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 </div>
 
                 {scheduleMode === 'cron' && (
-                  <CronBuilder value={cronExpr} onChange={(v) => { setCronExpr(v); setIntervalMinutes('') }} />
+                  <>
+                    <CronBuilder value={cronExpr} onChange={(v) => { setCronExpr(v); setIntervalMinutes('') }} />
+                    <p className="text-[11px] text-dark-400 mt-1.5">
+                      {t('automations.constructor.cronZone', { zone: timeZoneLabel(displayTimeZone) })}
+                    </p>
+                  </>
                 )}
 
                 {scheduleMode === 'interval' && (
@@ -775,14 +785,14 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         <SelectValue placeholder={t('automations.constructor.selectField')} />
                       </SelectTrigger>
                       <SelectContent>
-                        {CONDITION_FIELDS.map((f) => (
+                        {fieldsForTrigger.map((f) => (
                           <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
                         ))}
                         <SelectItem value="_custom">{t('automations.constructor.otherField')}</SelectItem>
                       </SelectContent>
                     </Select>
                     {/* Show custom input if field is not from preset */}
-                    {!CONDITION_FIELDS.some((f) => f.value === cond.field) && (
+                    {!fieldsForTrigger.some((f) => f.value === cond.field) && (
                       <Input
                         value={cond.field}
                         onChange={(e) => updateCondition(idx, 'field', e.target.value)}
@@ -926,7 +936,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       {t('automations.constructor.availableVars')}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {['{user}', '{user_code}', '{node}', '{node_code}', '{traffic_gb}', '{traffic}', '{over_gb}', '{over}', '{percent}', '{over_percent}', '{threshold}', '{rule_name}', '{timestamp}'].map((v) => (
+                      {messageVarsFor(triggerType, eventType, thresholdMetric).map((v) => (
                         <button
                           key={v}
                           type="button"

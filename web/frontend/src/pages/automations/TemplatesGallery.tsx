@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import type { TFunction } from 'i18next'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   ShieldAlert,
   Server,
@@ -35,10 +37,14 @@ export function TemplatesGallery({ canCreate }: TemplatesGalleryProps) {
   const queryClient = useQueryClient()
   const [activatingId, setActivatingId] = useState<string | null>(null)
 
+  const [confirmTemplate, setConfirmTemplate] = useState<AutomationTemplate | null>(null)
+
   const activateMutation = useMutation({
     mutationFn: automationsApi.activateTemplate,
     onSuccess: (rule) => {
-      toast.success(t('automations.templatesGallery.templateActivated', { name: rule.name }))
+      toast.success(rule.is_enabled
+        ? t('automations.templatesGallery.templateActivated', { name: rule.name })
+        : t('automations.templatesGallery.templateCreatedDisabled', { name: rule.name }))
       queryClient.invalidateQueries({ queryKey: ['automations'] })
       setActivatingId(null)
     },
@@ -57,6 +63,7 @@ export function TemplatesGallery({ canCreate }: TemplatesGalleryProps) {
     setActivatingId(templateId)
     activateMutation.mutate(templateId)
   }
+  const destructive = !!confirmTemplate && DESTRUCTIVE_ACTIONS.has(confirmTemplate.action_type)
 
   if (isLoading) {
     return (
@@ -77,18 +84,40 @@ export function TemplatesGallery({ canCreate }: TemplatesGalleryProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {templates.map((template) => (
-        <TemplateCard
-          key={template.id}
-          template={template}
-          canCreate={canCreate}
-          onActivate={() => handleActivate(template.id)}
-          isActivating={activatingId === template.id}
-        />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {templates.map((template) => (
+          <TemplateCard
+            key={template.id}
+            template={template}
+            canCreate={canCreate}
+            onActivate={() => setConfirmTemplate(template)}
+            isActivating={activatingId === template.id}
+          />
+        ))}
+      </div>
+      <ConfirmDialog
+        open={!!confirmTemplate}
+        onOpenChange={(open) => { if (!open) setConfirmTemplate(null) }}
+        title={t('automations.templatesGallery.confirmTitle', { name: confirmTemplate ? templateName(confirmTemplate, t) : '' })}
+        description={destructive
+          ? t('automations.templatesGallery.confirmDestructive')
+          : t('automations.templatesGallery.confirmNotify')}
+        confirmLabel={t('automations.templatesGallery.activate')}
+        onConfirm={() => {
+          if (confirmTemplate) handleActivate(confirmTemplate.id)
+          setConfirmTemplate(null)
+        }}
+      />
+    </>
   )
+}
+
+// Меняют юзеров или ноды — такие шаблоны создаются выключенными
+const DESTRUCTIVE_ACTIONS = new Set(['disable_user', 'block_user', 'cleanup_expired', 'restart_node', 'disable_node', 'reset_traffic'])
+
+function templateName(template: AutomationTemplate, t: TFunction): string {
+  return template.name_key ? t(template.name_key, { defaultValue: template.name }) : template.name
 }
 
 function TemplateCard({
@@ -114,7 +143,7 @@ function TemplateCard({
             <Icon className="w-5 h-5 text-primary-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-medium text-white">{template.name}</h3>
+            <h3 className="text-sm font-medium text-white">{templateName(template, t)}</h3>
             <p className="text-xs text-dark-400 mt-1">
               {template.description_key ? t(template.description_key, { defaultValue: template.description }) : template.description}
             </p>

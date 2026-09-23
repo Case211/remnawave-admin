@@ -21,6 +21,7 @@ AUTOMATION_TEMPLATES = [
     {
         "id": "auto_block_sharing",
         "name": "Auto-block Sharing",
+        "name_key": "automations.templates.auto_block_sharing.name",
         "description": "Автоматическая блокировка пользователей с score нарушения > 80",
         "description_key": "automations.templates.auto_block_sharing.description",
         "category": "violations",
@@ -33,6 +34,7 @@ AUTOMATION_TEMPLATES = [
     {
         "id": "node_monitoring",
         "name": "Node Monitoring",
+        "name_key": "automations.templates.node_monitoring.name",
         "description": "Telegram-уведомление когда нода офлайн > 5 минут",
         "description_key": "automations.templates.node_monitoring.description",
         "category": "nodes",
@@ -45,18 +47,20 @@ AUTOMATION_TEMPLATES = [
     {
         "id": "cleanup_expired",
         "name": "Cleanup Expired Users",
+        "name_key": "automations.templates.cleanup_expired.name",
         "description": "Ежедневная очистка пользователей с истёкшей подпиской > 30 дней",
         "description_key": "automations.templates.cleanup_expired.description",
         "category": "system",
         "trigger_type": "schedule",
         "trigger_config": {"cron": "0 3 * * *"},
-        "conditions": [{"field": "expired_days", "operator": ">=", "value": 30}],
+        "conditions": [],
         "action_type": "cleanup_expired",
         "action_config": {"older_than_days": 30},
     },
     {
         "id": "traffic_notification",
         "name": "Traffic Notification",
+        "name_key": "automations.templates.traffic_notification.name",
         "description": "Уведомление администратора когда трафик пользователя > 90%",
         "description_key": "automations.templates.traffic_notification.description",
         "category": "users",
@@ -69,6 +73,7 @@ AUTOMATION_TEMPLATES = [
     {
         "id": "auto_restart_node",
         "name": "Auto-restart Node",
+        "name_key": "automations.templates.auto_restart_node.name",
         "description": "Автоматический перезапуск ноды офлайн > 15 минут",
         "description_key": "automations.templates.auto_restart_node.description",
         "category": "nodes",
@@ -81,6 +86,7 @@ AUTOMATION_TEMPLATES = [
     {
         "id": "node_traffic_alert",
         "name": "Node Traffic Alert",
+        "name_key": "automations.templates.node_traffic_alert.name",
         "description": "Telegram-уведомление когда пользователь использует > N ГБ на ноде",
         "description_key": "automations.templates.node_traffic_alert.description",
         "category": "users",
@@ -96,7 +102,8 @@ AUTOMATION_TEMPLATES = [
     {
         "id": "daily_report",
         "name": "Daily Report",
-        "description": "Ежедневная Telegram-сводка в 00:00 UTC за прошедшие сутки",
+        "name_key": "automations.templates.daily_report.name",
+        "description": "Ежедневная Telegram-сводка в полночь по часам панели за прошедшие сутки",
         "description_key": "automations.templates.daily_report.description",
         "category": "system",
         "trigger_type": "schedule",
@@ -124,6 +131,7 @@ AUTOMATION_TEMPLATES = [
     {
         "id": "auto_block_torrent",
         "name": "Auto-block Torrent",
+        "name_key": "automations.templates.auto_block_torrent.name",
         "description": "Автоматическая блокировка при обнаружении торрент-трафика",
         "description_key": "automations.templates.auto_block_torrent.description",
         "category": "violations",
@@ -194,9 +202,10 @@ async def get_automation_rules_stats() -> dict:
             row = await conn.fetchrow(
                 select_sql(AUTOMATION_RULES_TABLE,
                     "COALESCE(SUM(CASE WHEN is_enabled THEN 1 ELSE 0 END), 0) AS total_active, "
-                    "COALESCE(SUM(trigger_count), 0) AS total_triggers")
+                    "COALESCE(SUM(trigger_count), 0) AS total_triggers, "
+                    "MAX(last_triggered_at) AS last_triggered_at")
             )
-            return dict(row) if row else {"total_active": 0, "total_triggers": 0}
+            return dict(row) if row else {"total_active": 0, "total_triggers": 0, "last_triggered_at": None}
     except Exception as e:
         logger.error("Failed to get automation stats: %s", e)
         return {"total_active": 0, "total_triggers": 0}
@@ -259,7 +268,8 @@ async def update_automation_rule(rule_id: int, **fields) -> Optional[dict]:
 
         json_fields = {"trigger_config", "conditions", "action_config"}
         for key, value in fields.items():
-            if value is None:
+            # Описание можно очистить; у остальных полей None — «не менять»
+            if value is None and key != "description":
                 continue
             if key in json_fields:
                 value = json.dumps(value)
@@ -330,30 +340,85 @@ async def increment_trigger_count(rule_id: int) -> None:
         logger.error("Failed to increment trigger count for rule %d: %s", rule_id, e)
 
 
-async def try_acquire_trigger(rule_id: int, min_interval_seconds: int = 60) -> bool:
-    """Atomically attempt to acquire a trigger lock for a rule.
+async def try_acquire_target(rule_id: int, target: str, min_interval_seconds: int) -> bool:
+    """Замок срабатывания на пару «правило + цель».
 
-    Returns True if the rule was successfully claimed (i.e. enough time
-    has passed since last_triggered_at). This prevents double-triggering.
+    Замок на правило целиком терял события: два нарушения в пределах
+    интервала — второе молча пропадало. Успешный захват сразу засчитывается
+    в статистику правила.
     """
     try:
         from shared.database import db_service
         async with db_service.acquire() as conn:
-            row = await conn.fetchrow(
-                update_sql(AUTOMATION_RULES_TABLE,
-                    "trigger_count = trigger_count + 1, last_triggered_at = NOW()",
-                    "id = $1 AND is_enabled = true AND (last_triggered_at IS NULL"
-                    " OR last_triggered_at < NOW() - INTERVAL '1 second' * $2)",
-                    returning="id"),
-                rule_id, min_interval_seconds,
-            )
-            return row is not None
+            async with conn.transaction():
+                claimed = await conn.fetchval(
+                    """
+                    INSERT INTO automation_trigger_locks (rule_id, target, last_triggered_at)
+                    VALUES ($1, $2, NOW())
+                    ON CONFLICT (rule_id, target) DO UPDATE SET last_triggered_at = NOW()
+                    WHERE automation_trigger_locks.last_triggered_at
+                          < NOW() - INTERVAL '1 second' * $3
+                    RETURNING rule_id
+                    """,
+                    rule_id, target, min_interval_seconds,
+                )
+                if claimed is None:
+                    return False
+                updated = await conn.fetchval(
+                    update_sql(AUTOMATION_RULES_TABLE,
+                        "trigger_count = trigger_count + 1, last_triggered_at = NOW()",
+                        "id = $1 AND is_enabled = true", returning="id"),
+                    rule_id,
+                )
+                return updated is not None
     except Exception as e:
-        logger.error("Failed to acquire trigger for rule %d: %s", rule_id, e)
+        logger.error("Failed to acquire trigger for rule %d / %s: %s", rule_id, target, e)
         return False
 
 
-# ── Automation log ───────────────────────────────────────────
+async def users_over_traffic(min_percent: float) -> List[dict]:
+    """Активные юзеры, израсходовавшие не меньше min_percent лимита — из своей
+    базы, а не полным списком из панели каждые пару минут."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT uuid::text AS uuid, username, used_traffic_bytes, traffic_limit_bytes
+            FROM users
+            WHERE traffic_limit_bytes > 0 AND LOWER(status) = 'active'
+              AND used_traffic_bytes >= traffic_limit_bytes * ($1::float8 / 100)
+            """,
+            float(min_percent),
+        )
+    return [dict(r) for r in rows]
+
+
+async def expired_users_to_disable(cutoff) -> List[str]:
+    """uuid юзеров, у которых подписка истекла раньше cutoff и которые ещё не отключены."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT uuid::text AS uuid FROM users "
+            "WHERE expire_at IS NOT NULL AND expire_at < $1 AND UPPER(COALESCE(status, '')) <> 'DISABLED'",
+            cutoff,
+        )
+    return [r["uuid"] for r in rows]
+
+
+async def cleanup_automation_history(keep_days: int = 90) -> int:
+    """Журнал и замки старше keep_days — прочь: иначе растут без предела."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        result = await conn.execute(
+            f"DELETE FROM {AUTOMATION_LOG_TABLE} WHERE triggered_at < NOW() - INTERVAL '1 day' * $1",
+            keep_days,
+        )
+        await conn.execute(
+            "DELETE FROM automation_trigger_locks WHERE last_triggered_at < NOW() - INTERVAL '1 day' * $1",
+            keep_days,
+        )
+    return int(result.split()[-1]) if result else 0
+
 
 async def write_automation_log(
     rule_id: int,

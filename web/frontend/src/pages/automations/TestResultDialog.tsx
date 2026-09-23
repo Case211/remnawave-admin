@@ -2,7 +2,9 @@ import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, AlertTriangle, Info, Zap, Clock } from '@/components/brand/icons'
-import type { AutomationTestResult } from '../../api/automations'
+import type { TFunction } from 'i18next'
+import type { AutomationTestResult, AutomationTestSummary } from '../../api/automations'
+import { describeAction, describeTrigger } from './helpers'
 
 interface TestResultDialogProps {
   open: boolean
@@ -10,30 +12,29 @@ interface TestResultDialogProps {
   result: AutomationTestResult | null
 }
 
-/** Split backend "details" string into structured parts for display */
-function parseDetails(details: string): { icon: 'trigger' | 'action' | 'info'; text: string }[] {
-  if (!details) return []
-  return details.split('; ').map((part) => {
-    const lower = part.toLowerCase()
-    if (
-      lower.startsWith('cron:') ||
-      lower.startsWith('интервал:') ||
-      lower.startsWith('interval:') ||
-      lower.startsWith('триггер') ||
-      lower.startsWith('event trigger') ||
-      lower.startsWith('порог:') ||
-      lower.startsWith('threshold:')
-    ) {
-      return { icon: 'trigger' as const, text: part }
-    }
-    if (
-      lower.startsWith('действие:') ||
-      lower.startsWith('action:')
-    ) {
-      return { icon: 'action' as const, text: part }
-    }
-    return { icon: 'info' as const, text: part }
-  })
+type DetailPart = { icon: 'trigger' | 'action' | 'info'; text: string }
+
+/** Строки прогона из его данных: текст — на языке админа, теми же словами,
+ *  что описание правила в карточке. */
+function describeSummary(summary: AutomationTestSummary, t: TFunction): DetailPart[] {
+  if (summary.error === 'not_found') return [{ icon: 'info', text: t('automations.testResult.notFound') }]
+  if (!summary.trigger_type) return []
+  const parts: DetailPart[] = []
+  const triggerConfig: Record<string, unknown> = {}
+  for (const key of ['event', 'cron', 'interval_minutes', 'metric', 'operator', 'value'] as const) {
+    if (summary[key] !== undefined) triggerConfig[key] = summary[key]
+  }
+  parts.push({ icon: 'trigger', text: describeTrigger({ trigger_type: summary.trigger_type, trigger_config: triggerConfig }) })
+  if (summary.cron_matches_now !== undefined) {
+    parts.push({ icon: 'info', text: t(summary.cron_matches_now ? 'automations.testResult.cronNow' : 'automations.testResult.cronNotNow') })
+  }
+  if (summary.trigger_type === 'event') {
+    parts.push({ icon: 'info', text: t('automations.testResult.eventHint') })
+  }
+  if (summary.action_type) {
+    parts.push({ icon: 'action', text: describeAction({ action_type: summary.action_type, action_config: {} }) })
+  }
+  return parts
 }
 
 const DETAIL_ICONS = {
@@ -46,7 +47,7 @@ export function TestResultDialog({ open, onOpenChange, result }: TestResultDialo
   const { t } = useTranslation()
   if (!result) return null
 
-  const detailParts = parseDetails(result.details)
+  const detailParts = describeSummary(result.summary || {}, t)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

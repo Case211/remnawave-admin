@@ -12,6 +12,8 @@ import {
   Bell,
   Terminal,
   CalendarClock,
+  Sparkles,
+  History,
 } from '@/components/brand/icons'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -35,9 +37,11 @@ import { CATEGORIES } from './helpers'
 import { useFormatters } from '@/lib/useFormatters'
 import { useTabParam } from '@/lib/useTabParam'
 import { AlertRulesTab } from '@/pages/Notifications'
+import { QueryError } from '@/components/QueryError'
 import { NodeScriptsPanel, SchedulesPanel } from './HubLinkCards'
 
-const HUB_SECTIONS = ['rules', 'alerts', 'scripts', 'schedules'] as const
+// Одна строка вкладок: раньше «Правила» были и снаружи, и внутри
+const HUB_SECTIONS = ['rules', 'templates', 'logs', 'alerts', 'scripts', 'schedules'] as const
 
 export default function Automations() {
   const { t } = useTranslation()
@@ -69,7 +73,7 @@ export default function Automations() {
   const [testResult, setTestResult] = useState<AutomationTestResult | null>(null)
 
   // Queries
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['automations', page, categoryFilter, triggerFilter, enabledFilter],
     queryFn: () =>
       automationsApi.list({
@@ -135,11 +139,8 @@ export default function Automations() {
   const totalRules = data?.total ?? 0
   const activeRules = data?.total_active ?? 0
   const totalTriggers = data?.total_triggers ?? 0
-  const lastTriggered = data?.items
-    ?.filter((r) => r.last_triggered_at)
-    ?.sort((a, b) =>
-      new Date(b.last_triggered_at!).getTime() - new Date(a.last_triggered_at!).getTime()
-    )?.[0]?.last_triggered_at ?? null
+  // По всем правилам — с сервера, а не по текущей странице
+  const lastTriggered = data?.last_triggered_at ?? null
 
   return (
     <div className="space-y-6">
@@ -167,6 +168,14 @@ export default function Automations() {
           <TabsTrigger value="rules" className="gap-1.5">
             <Zap className="w-3.5 h-3.5" />
             {t('automations.hub.sections.rules', { defaultValue: '\u041f\u0440\u0430\u0432\u0438\u043b\u0430' })}
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            {t('automations.tabs.templates')}
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="gap-1.5">
+            <History className="w-3.5 h-3.5" />
+            {t('automations.tabs.logs')}
           </TabsTrigger>
           <TabsTrigger value="alerts" className="gap-1.5">
             <Bell className="w-3.5 h-3.5" />
@@ -201,16 +210,6 @@ export default function Automations() {
             />
           </div>
 
-          {/* Inner tabs: rules / templates / logs */}
-      <Tabs defaultValue="rules" className="space-y-4">
-        <TabsList className="bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-          <TabsTrigger value="rules">{t('automations.tabs.rules')}</TabsTrigger>
-          <TabsTrigger value="templates">{t('automations.tabs.templates')}</TabsTrigger>
-          <TabsTrigger value="logs">{t('automations.tabs.logs')}</TabsTrigger>
-        </TabsList>
-
-        {/* Rules tab */}
-        <TabsContent value="rules" className="space-y-4">
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-3">
             <Select
@@ -259,7 +258,9 @@ export default function Automations() {
           </div>
 
           {/* Rules grid */}
-          {isLoading ? (
+          {isError ? (
+            <QueryError onRetry={refetch} />
+          ) : isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-48 bg-[var(--glass-bg)]" />
@@ -332,16 +333,12 @@ export default function Automations() {
           )}
         </TabsContent>
 
-        {/* Templates tab */}
         <TabsContent value="templates">
           <TemplatesGallery canCreate={canCreate} />
         </TabsContent>
 
-        {/* Logs tab */}
         <TabsContent value="logs">
           <LogsTimeline />
-        </TabsContent>
-      </Tabs>
         </TabsContent>
 
         {/* ── Section: Alerts ─────────────────────────────────── */}

@@ -2928,28 +2928,36 @@
     "test": "Test",
     "templates": {
       "auto_block_sharing": {
-        "description": "Automatically block users with violation score > 80"
+        "description": "Automatically block users with violation score > 80",
+        "name": "Block account sharing"
       },
       "node_monitoring": {
-        "description": "Telegram notification when a node is offline for > 5 minutes"
+        "description": "Telegram notification when a node is offline for > 5 minutes",
+        "name": "Node offline"
       },
       "cleanup_expired": {
-        "description": "Daily cleanup of users with subscriptions expired > 30 days"
+        "description": "Daily cleanup of users with subscriptions expired > 30 days",
+        "name": "Disable expired users"
       },
       "traffic_notification": {
-        "description": "Notify admin when user traffic exceeds 90%"
+        "description": "Notify admin when user traffic exceeds 90%",
+        "name": "Traffic running out"
       },
       "auto_restart_node": {
-        "description": "Automatically restart a node offline for > 15 minutes"
+        "description": "Automatically restart a node offline for > 15 minutes",
+        "name": "Restart a fallen node"
       },
       "node_traffic_alert": {
-        "description": "Telegram notification when user uses > N GB on a node"
+        "description": "Telegram notification when user uses > N GB on a node",
+        "name": "Heavy traffic on a node"
       },
       "daily_report": {
-        "description": "Daily Telegram summary at 00:00 UTC for the previous day"
+        "description": "Daily Telegram summary at midnight on the panel clock for the previous day",
+        "name": "Daily summary"
       },
       "auto_block_torrent": {
-        "description": "Automatically block users when torrent traffic is detected"
+        "description": "Automatically block users when torrent traffic is detected",
+        "name": "Block torrent users"
       }
     },
     "enabled": "enabled",
@@ -3022,8 +3030,6 @@
       "users_onlineDesc": "Current number of active connections across all nodes",
       "traffic_today": "Traffic today (GB)",
       "traffic_todayDesc": "Total traffic volume for today (in gigabytes)",
-      "node_uptime_percent": "Node uptime (%)",
-      "node_uptime_percentDesc": "Node availability percentage over the last 24 hours",
       "user_traffic_percent": "Traffic usage (%)",
       "user_traffic_percentDesc": "Percentage of traffic used from the limit",
       "user_node_traffic_gb": "Node traffic — total (GB)",
@@ -3042,12 +3048,18 @@
       "not_contains": "does not contain"
     },
     "conditionFields": {
-      "score": "Score",
-      "percent": "Percent (%)",
-      "traffic_gb": "Traffic (GB)",
-      "uptime": "Uptime (%)",
-      "online_count": "Online count",
-      "days_expired": "Days expired"
+      "score": "Violation score",
+      "percent": "Used, %",
+      "traffic_gb": "Traffic, GB",
+      "offline_minutes": "Minutes offline",
+      "event_count": "Torrent events",
+      "users_online": "Users online",
+      "traffic_today_gb": "Traffic today, GB",
+      "over_percent": "Over threshold, %",
+      "over_gb": "Over threshold, GB",
+      "users_total": "Total users",
+      "nodes_online": "Nodes online",
+      "violations_today": "Violations today"
     },
     "actionTypes": {
       "disable_user": "Disable user",
@@ -3272,9 +3284,13 @@
       "when": "When:",
       "then": "Then:",
       "activating": "Activating...",
-      "activate": "Activate",
+      "activate": "Create rule",
       "templateActivated": "Template \"{{name}}\" activated",
-      "activateError": "Failed to activate template"
+      "activateError": "Failed to activate template",
+      "templateCreatedDisabled": "Rule \"{{name}}\" was created disabled — review and enable it",
+      "confirmTitle": "Create rule \"{{name}}\"?",
+      "confirmDestructive": "The rule changes users or nodes, so it is created disabled. Review its settings and enable it yourself.",
+      "confirmNotify": "The rule only sends notifications and is enabled right away."
     },
     "constructor": {
       "editTitle": "Edit rule",
@@ -3414,7 +3430,8 @@
       "topicService": "Service",
       "topicType": "Type",
       "topicUsers": "Users",
-      "topicViolations": "Violations"
+      "topicViolations": "Violations",
+      "cronZone": "Time follows the panel clock ({{zone}})"
     },
     "testResult": {
       "title": "Test result",
@@ -3425,7 +3442,11 @@
       "details": "Details",
       "matchingTargets": "Matching targets",
       "expectedActions": "Expected actions",
-      "matchingTargetsMax": "Matching targets (max 50)"
+      "matchingTargetsMax": "Matching targets (max 50)",
+      "notFound": "Rule not found",
+      "cronNow": "The schedule matches the current minute",
+      "cronNotNow": "The schedule does not fire right now",
+      "eventHint": "Fires on the next matching event"
     },
     "deleteRuleDescription": "This rule will stop running immediately. Already-queued actions will be cancelled.",
     "deleteRuleTitle": "Delete automation rule?"

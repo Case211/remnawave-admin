@@ -61,6 +61,7 @@ export interface AutomationTemplate {
   name: string
   description: string
   description_key?: string
+  name_key?: string
   category: string
   trigger_type: string
   trigger_config: Record<string, unknown>
@@ -69,12 +70,28 @@ export interface AutomationTemplate {
   action_config: Record<string, unknown>
 }
 
+/** Данные тестового прогона; текст собирает фронт. */
+export interface AutomationTestSummary {
+  error?: 'not_found'
+  trigger_type?: string
+  action_type?: string
+  event?: string
+  cron?: string
+  cron_matches_now?: boolean
+  interval_minutes?: number
+  metric?: string
+  operator?: string
+  value?: number
+  targets?: number
+}
+
 export interface AutomationTestResult {
   rule_id: number
   would_trigger: boolean
   matching_targets: Record<string, unknown>[]
   estimated_actions: number
   details: string
+  summary?: AutomationTestSummary
 }
 
 export interface PaginatedRules {
@@ -85,6 +102,8 @@ export interface PaginatedRules {
   pages: number
   total_active: number
   total_triggers: number
+  /** По всем правилам, а не по текущей странице */
+  last_triggered_at?: string | null
 }
 
 export interface PaginatedLogs {

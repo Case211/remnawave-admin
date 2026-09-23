@@ -33,6 +33,15 @@ _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
     "reset_traffic": {"target_status"},
     "force_sync": {"node_uuid"},
 }
+# Что реально присылает движок: неизвестное событие или метрика = правило,
+# которое никогда не сработает
+EVENT_TYPES = {"violation.detected", "node.went_offline", "user.traffic_exceeded", "torrent.detected"}
+THRESHOLD_METRICS = {
+    "users_online", "traffic_today", "user_traffic_percent",
+    "user_node_traffic_gb", "user_node_traffic_today_gb",
+}
+# Действия, которые меняют юзеров и ноды: шаблоны с ними создаются выключенными
+DESTRUCTIVE_ACTIONS = {"disable_user", "block_user", "cleanup_expired", "restart_node", "disable_node", "reset_traffic"}
 _MAX_CONFIG_DEPTH = 2
 _MAX_CONFIG_STR_LEN = 1000
 
@@ -66,6 +75,10 @@ class AutomationRuleCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_configs(self) -> "AutomationRuleCreate":
+        if self.trigger_type == "event" and self.trigger_config.get("event") not in EVENT_TYPES:
+            raise ValueError(f"Unknown event: {self.trigger_config.get('event')!r}")
+        if self.trigger_type == "threshold" and self.trigger_config.get("metric") not in THRESHOLD_METRICS:
+            raise ValueError(f"Unknown metric: {self.trigger_config.get('metric')!r}")
         allowed_t = _ALLOWED_TRIGGER_KEYS.get(self.trigger_type)
         if allowed_t:
             bad = set(self.trigger_config.keys()) - allowed_t
@@ -122,6 +135,8 @@ class AutomationRuleListResponse(BaseModel):
     pages: int
     total_active: int = 0
     total_triggers: int = 0
+    # По всем правилам, а не по текущей странице
+    last_triggered_at: Optional[datetime] = None
 
 
 class AutomationLogEntry(BaseModel):
@@ -147,6 +162,7 @@ class AutomationLogResponse(BaseModel):
 class AutomationTemplate(BaseModel):
     id: str
     name: str
+    name_key: Optional[str] = None
     description: str
     description_key: Optional[str] = None
     category: str
@@ -162,4 +178,7 @@ class AutomationTestResult(BaseModel):
     would_trigger: bool
     matching_targets: list
     estimated_actions: int
-    details: str
+    details: str = ""
+    # Данные прогона: trigger_type, event/cron/metric…, action_type, targets —
+    # текст собирает фронт на языке админа
+    summary: dict = Field(default_factory=dict)
