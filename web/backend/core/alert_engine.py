@@ -32,6 +32,19 @@ _SMOOTHABLE_METRICS = {"cpu_usage_percent", "ram_usage_percent", "disk_usage_per
 _MAX_SAMPLES = 60
 
 
+# Сколько держать уведомления и журнал алертов
+_HISTORY_KEEP_DAYS = 90
+
+
+def _parse_ts(value) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 class _SafeDict(dict):
     """Dict that returns '{key}' for missing keys, so str.format_map never raises."""
 
@@ -49,6 +62,7 @@ class AlertEngine:
         self._running = False
         # Ring buffer: metric_name -> deque of (timestamp, value)
         self._history: Dict[str, Deque[Tuple[float, float]]] = {}
+        self._last_cleanup: Optional[str] = None
 
     async def start(self):
         """Start the alert monitoring loop."""
@@ -76,6 +90,7 @@ class AlertEngine:
             try:
                 await asyncio.sleep(self.CHECK_INTERVAL)
                 await self._check_rules()
+                await self._cleanup_daily()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -117,6 +132,29 @@ class AlertEngine:
         except Exception as e:
             logger.error("Rule check failed: %s", e)
 
+    async def _cleanup_daily(self) -> None:
+        """Раз в сутки — уведомления и журнал алертов старше _HISTORY_KEEP_DAYS
+        прочь: чистки не было, таблицы росли без предела."""
+        today = timefmt.now().strftime("%Y-%m-%d")
+        if self._last_cleanup == today:
+            return
+        try:
+            from shared.database import db_service
+            if not db_service.is_connected:
+                return
+            async with db_service.acquire() as conn:
+                notes = await conn.execute(
+                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1", _HISTORY_KEEP_DAYS,
+                )
+                logs = await conn.execute(
+                    f"DELETE FROM {ALERT_RULE_LOG_TABLE} WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                    _HISTORY_KEEP_DAYS,
+                )
+            self._last_cleanup = today
+            logger.info("Notifications cleanup: %s, alert log: %s", notes, logs)
+        except Exception as e:
+            logger.warning("Notifications cleanup failed: %s", e)
+
     async def _collect_metrics(self) -> Dict[str, Any]:
         """Collect current system metrics for rule evaluation.
 
@@ -134,7 +172,8 @@ class AlertEngine:
                     select_sql(NODES_TABLE,
                         "uuid, name, address, is_connected, is_disabled, "
                         "cpu_usage, memory_usage, disk_usage, "
-                        "traffic_used_bytes, metrics_updated_at",
+                        "traffic_used_bytes, metrics_updated_at, "
+                        "raw_data::jsonb->>'lastStatusChange' AS last_status_change",
                         "WHERE is_disabled = false")
                 )
 
@@ -155,24 +194,29 @@ class AlertEngine:
                     ram = node.get("memory_usage") or 0
                     disk = node.get("disk_usage") or 0
 
-                    if cpu > max_cpu:
-                        max_cpu = cpu
-                        max_cpu_node = node_name
-                    if ram > max_ram:
-                        max_ram = ram
-                        max_ram_node = node_name
-                    if disk > max_disk:
-                        max_disk = disk
-                        max_disk_node = node_name
+                    # Нагрузку берём только у нод на связи: у упавшей в базе
+                    # остаются последние цифры, и они давали ложные алерты
+                    if node.get("is_connected", True):
+                        if cpu > max_cpu:
+                            max_cpu = cpu
+                            max_cpu_node = node_name
+                        if ram > max_ram:
+                            max_ram = ram
+                            max_ram_node = node_name
+                        if disk > max_disk:
+                            max_disk = disk
+                            max_disk_node = node_name
 
                     if not node.get("is_connected", True):
-                        last_update = node.get("metrics_updated_at")
+                        # С какого момента нода лежит: смена статуса в панели,
+                        # иначе — последние метрики агента. У нод без агента
+                        # метрик нет, и алерт «нода офлайн» по ним не срабатывал.
                         offline_min = 0
-                        if last_update:
-                            if last_update.tzinfo is None:
-                                last_update = last_update.replace(tzinfo=timezone.utc)
-                            delta = datetime.now(timezone.utc) - last_update
-                            offline_min = delta.total_seconds() / 60
+                        since = _parse_ts(node.get("last_status_change")) or node.get("metrics_updated_at")
+                        if since:
+                            if since.tzinfo is None:
+                                since = since.replace(tzinfo=timezone.utc)
+                            offline_min = max(0.0, (datetime.now(timezone.utc) - since).total_seconds() / 60)
                         offline_nodes.append({
                             "uuid": str(node["uuid"]),
                             "name": node["name"],

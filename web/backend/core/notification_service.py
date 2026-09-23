@@ -35,6 +35,49 @@ logger = logging.getLogger(__name__)
 _TAG_RE = re.compile(r"</?[a-zA-Z][^<>]*>")
 
 
+# Тип уведомления → раздел, право на просмотр которого нужно получателю.
+# Общее уведомление о нарушении не должно уходить админу, которому нарушения
+# не видны: ни в колокольчик, ни в Telegram, ни на почту. Типы без раздела
+# (служебные, системные) видят все.
+_TYPE_RESOURCE = {
+    "violation": "violations",
+    "torrent": "violations",
+    "traffic_rate": "violations",
+    "shaper": "violations",
+    "alert": "nodes",
+    "nodes": "nodes",
+    "finance": "finance",
+    "automation": "automation",
+    "plugin": "plugins",
+}
+
+
+def notification_resource(notification_type: Optional[str]) -> Optional[str]:
+    return _TYPE_RESOURCE.get(notification_type or "")
+
+
+async def _recipient_admin_ids(conn, notification_type: Optional[str]) -> List[int]:
+    """Активные админы, которым положено это уведомление.
+
+    Суперадмин и админ без роли (легаси, полный доступ) — всегда; остальные —
+    если у роли есть право на просмотр раздела уведомления.
+    """
+    resource = notification_resource(notification_type)
+    rows = await conn.fetch(
+        f"""
+        SELECT a.id FROM {ADMIN_TABLE} a
+        LEFT JOIN admin_roles r ON r.id = a.role_id
+        WHERE a.is_active = true
+          AND ($1::text IS NULL OR r.id IS NULL OR r.name = 'superadmin' OR EXISTS (
+                SELECT 1 FROM admin_permissions p
+                WHERE p.role_id = a.role_id AND p.resource = $1 AND p.action = 'view'))
+        ORDER BY a.id
+        """,
+        resource,
+    )
+    return [r["id"] for r in rows]
+
+
 def _plain_text(markup: str) -> str:
     """Телеграм-HTML → текст: карточке, пушу и WebSocket разметка не нужна."""
     return html.unescape(_TAG_RE.sub("", markup))
@@ -468,15 +511,8 @@ async def create_notification(
             # Broadcast to all admins
             all_deduplicated = True
             async with db_service.acquire() as conn:
-                admin_ids = await conn.fetch(
-                    select_sql(
-                        ADMIN_TABLE,
-                        "id",
-                        "WHERE is_active = true",
-                    ),
-                )
-                for row in admin_ids:
-                    aid = row["id"]
+                admin_ids = await _recipient_admin_ids(conn, type)
+                for aid in admin_ids:
 
                     # Deduplication: skip if same group_key exists within last 15 min
                     if group_key:
@@ -509,7 +545,7 @@ async def create_notification(
         # Broadcast via WebSocket
         try:
             from web.backend.api.v2.websocket import manager
-            await manager.broadcast({
+            ws_message = {
                 "type": "notification",
                 "data": {
                     "id": notification_id,
@@ -521,7 +557,12 @@ async def create_notification(
                     "link": link,
                 },
                 "timestamp": datetime.utcnow().isoformat(),
-            })
+            }
+            if admin_id is not None:
+                await manager.send_to_account(admin_id, ws_message)
+            else:
+                resource = notification_resource(type)
+                await manager.broadcast(ws_message, permission=(resource, "view") if resource else None)
         except Exception as e:
             logger.warning("WebSocket broadcast failed: %s", e)
 
@@ -539,21 +580,15 @@ async def create_notification(
             # For broadcasts, dispatch to all admins' external channels
             try:
                 async with db_service.acquire() as conn:
-                    admin_ids_rows = await conn.fetch(
-                        select_sql(
-                            ADMIN_TABLE,
-                            "id",
-                            "WHERE is_active = true",
-                        ),
-                    )
+                    recipient_ids = await _recipient_admin_ids(conn, type)
 
-                if admin_ids_rows:
-                    logger.debug("Broadcasting external channels to %d admin accounts", len(admin_ids_rows))
-                    for row in admin_ids_rows:
-                        aid_chat_ids = await _collect_telegram_chat_ids(row["id"])
+                if recipient_ids:
+                    logger.debug("Broadcasting external channels to %d admin accounts", len(recipient_ids))
+                    for recipient_id in recipient_ids:
+                        aid_chat_ids = await _collect_telegram_chat_ids(recipient_id)
                         per_admin_tg_chat_ids.update(aid_chat_ids)
                         asyncio.create_task(
-                            _dispatch_external(row["id"], title, tg_body, severity, link, channels, reply_markup=reply_markup)
+                            _dispatch_external(recipient_id, title, tg_body, severity, link, channels, reply_markup=reply_markup)
                         )
                 else:
                     logger.debug("No admin_accounts found for external dispatch")

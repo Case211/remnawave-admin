@@ -42,6 +42,19 @@ class ConnectionManager:
             self._admins.pop(websocket, None)
         logger.info(f"WebSocket disconnected. Active: {len(self.active_connections)}")
 
+    async def send_to_account(self, account_id: int, message: Dict[str, Any]) -> None:
+        """Сообщение только вкладкам конкретного админа (адресное уведомление)."""
+        targets = [ws for ws, admin in list(self._admins.items())
+                   if getattr(admin, "account_id", None) == account_id]
+        if not targets:
+            return
+        data = json.dumps(message, default=str)
+        for ws in targets:
+            try:
+                await ws.send_text(data)
+            except Exception:
+                await self.disconnect(ws)
+
     @staticmethod
     def _admin_can(admin: Optional[AdminUser], permission: Optional[Tuple[str, str]]) -> bool:
         """Есть ли у админа право на событие (superadmin/legacy — всегда)."""

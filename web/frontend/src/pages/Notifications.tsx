@@ -8,6 +8,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useTabParam } from '@/lib/useTabParam'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -64,7 +65,7 @@ export default function Notifications() {
   const canCreate = useHasPermission('notifications', 'create')
   const canDelete = useHasPermission('notifications', 'delete')
 
-  const [tab, setTab] = useState('notifications')
+  const [tab, setTab] = useTabParam('notifications', ['notifications', 'alertRules', 'alertLogs', 'channels', 'templates'])
 
   return (
     <div className="space-y-6 animate-fade-in min-w-0 overflow-x-hidden">
