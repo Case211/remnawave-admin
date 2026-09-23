@@ -1,7 +1,7 @@
 """Bedolaga marketing — campaigns (ad campaigns), broadcasts (bulk messages)."""
 import json
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Path, Request
 from pydantic import BaseModel, Field
@@ -18,15 +18,35 @@ router = APIRouter()
 
 # ── Schemas ──
 
+# Поля — как у Bedolaga (CampaignCreateRequest / CampaignUpdateRequest).
+# Раньше схема пропускала только имя, параметр и активность: тип бонуса и его
+# размер отбрасывались, и Bedolaga отклоняла каждое создание кампании (422).
+CampaignBonusType = Literal["balance", "subscription", "none", "tariff"]
+
+
 class CampaignCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    start_parameter: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=255)
+    start_parameter: str = Field(..., min_length=1, max_length=64)
+    bonus_type: CampaignBonusType = "none"
+    balance_bonus_kopeks: int = Field(0, ge=0)
+    subscription_duration_days: Optional[int] = Field(None, ge=0)
+    subscription_traffic_gb: Optional[int] = Field(None, ge=0)
+    subscription_device_limit: Optional[int] = Field(None, ge=0)
+    tariff_id: Optional[int] = Field(None, ge=1)
+    tariff_duration_days: Optional[int] = Field(None, ge=1)
     is_active: bool = True
 
 
 class CampaignUpdateRequest(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    start_parameter: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    start_parameter: Optional[str] = Field(None, max_length=64)
+    bonus_type: Optional[CampaignBonusType] = None
+    balance_bonus_kopeks: Optional[int] = Field(None, ge=0)
+    subscription_duration_days: Optional[int] = Field(None, ge=0)
+    subscription_traffic_gb: Optional[int] = Field(None, ge=0)
+    subscription_device_limit: Optional[int] = Field(None, ge=0)
+    tariff_id: Optional[int] = Field(None, ge=1)
+    tariff_duration_days: Optional[int] = Field(None, ge=1)
     is_active: Optional[bool] = None
 
 

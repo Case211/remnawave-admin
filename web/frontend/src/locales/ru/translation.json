@@ -6298,7 +6298,8 @@
           "cabinet_action": "Действие в кабинете",
           "miniapp_action": "Действие в мини-аппе"
         }
-      }
+      },
+      "devicesResetAmbiguous": "Не удалось однозначно найти юзера панели по Telegram ID — сбросьте устройства на странице юзера"
     },
     "trial": "Пробных",
     "conversions": "Конверсий",
@@ -6392,7 +6393,8 @@
       "typeBalance": "Бонус баланса",
       "typeSubscription": "Подписка",
       "typeMixed": "Смешанный",
-      "balanceBonus": "Бонус (копейки)"
+      "balanceBonus": "Бонус (копейки)",
+      "typeTrial": "Пробная подписка"
     },
     "marketing": {
       "title": "Маркетинг",

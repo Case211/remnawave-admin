@@ -17,18 +17,34 @@ from web.backend.api.v2.bedolaga import ensure_configured, proxy_request
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Полная выгрузка клиентов для локальной сортировки/фильтра: (время, список)
+_list_cache: dict = {}
+_LIST_CACHE_TTL = 60
+
 
 # ── Schemas ──
 
 class BalanceModifyRequest(BaseModel):
-    amount_kopeks: int = Field(..., description="Amount in kopeks (positive=add, negative=subtract)")
+    # Пределы — как у Bedolaga (BalanceUpdateRequest)
+    amount_kopeks: int = Field(..., ge=-100_000_000, le=100_000_000,
+                               description="Amount in kopeks (positive=add, negative=subtract)")
     reason: Optional[str] = Field(None, max_length=500)
 
 
+class UserUpdateRequest(BaseModel):
+    """Что админка правит у клиента. Остальные поля Bedolaga (статус, промо-
+    группа, флаги оплат) через этот вызов не меняются: раньше тело уходило как
+    есть, и можно было переписать что угодно в обход аудита."""
+    first_name: Optional[str] = Field(None, max_length=255)
+    last_name: Optional[str] = Field(None, max_length=255)
+    username: Optional[str] = Field(None, max_length=255)
+
+
 class SubscriptionCreateRequest(BaseModel):
-    duration_days: int = Field(..., ge=1)
-    traffic_limit_gb: Optional[float] = None
-    device_limit: Optional[int] = None
+    # Типы и пределы — как у Bedolaga (UserSubscriptionCreateRequest)
+    duration_days: int = Field(..., ge=1, le=36500)
+    traffic_limit_gb: Optional[int] = Field(None, ge=0, le=1_000_000)
+    device_limit: Optional[int] = Field(None, ge=1, le=10_000)
     is_trial: bool = False
 
 
@@ -37,11 +53,11 @@ class SubscriptionExtendRequest(BaseModel):
 
 
 class TrafficAddRequest(BaseModel):
-    traffic_gb: float = Field(..., gt=0)
+    traffic_gb: int = Field(..., ge=1, le=1_000_000)
 
 
 class DevicesAddRequest(BaseModel):
-    count: int = Field(..., ge=1)
+    count: int = Field(..., ge=1, le=10_000)
 
 
 # ══════════════════════════════════════════════════════
@@ -77,20 +93,30 @@ async def list_users(
         ))
 
     # Bedolaga API не поддерживает subscription_status и некоторые sort поля —
-    # забираем всех юзеров и обрабатываем на бэкенде
-    all_items: list = []
-    batch_size = 200
-    batch_offset = 0
-    while True:
-        resp = await proxy_request(lambda o=batch_offset: bedolaga_client.list_users(
-            limit=batch_size, offset=o, status=status, search=search,
-            promo_group_id=promo_group_id,
-        ))
-        items = resp.get("items", []) if isinstance(resp, dict) else []
-        all_items.extend(items)
-        if len(items) < batch_size:
-            break
-        batch_offset += batch_size
+    # забираем всех юзеров и обрабатываем на бэкенде. Выгрузка тяжёлая (по 200
+    # за запрос), поэтому держим её минуту: листание и смена сортировки не
+    # выгружают всех заново.
+    cache_key = (status, search, promo_group_id)
+    cached = _list_cache.get(cache_key)
+    if cached and time.time() - cached[0] < _LIST_CACHE_TTL:
+        all_items = list(cached[1])
+    else:
+        all_items = []
+        batch_size = 200
+        batch_offset = 0
+        while True:
+            resp = await proxy_request(lambda o=batch_offset: bedolaga_client.list_users(
+                limit=batch_size, offset=o, status=status, search=search,
+                promo_group_id=promo_group_id,
+            ))
+            items = resp.get("items", []) if isinstance(resp, dict) else []
+            all_items.extend(items)
+            if len(items) < batch_size:
+                break
+            batch_offset += batch_size
+        if len(_list_cache) > 20:
+            _list_cache.clear()
+        _list_cache[cache_key] = (time.time(), list(all_items))
 
     # Фильтрация по subscription status
     if subscription_status:
@@ -195,7 +221,8 @@ async def add_traffic(
     admin: AdminUser = Depends(require_permission("bedolaga_customers", "edit")),
 ):
     """Добавить трафик к подписке."""
-    result = await proxy_request(lambda: bedolaga_client.add_traffic(sub_id, data.model_dump()))
+    # Bedolaga ждёт {"gb": N}: с {"traffic_gb"} запрос всегда получал 422
+    result = await proxy_request(lambda: bedolaga_client.add_traffic(sub_id, {"gb": data.traffic_gb}))
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.traffic", resource="bedolaga_customers",
@@ -213,7 +240,8 @@ async def add_devices(
     admin: AdminUser = Depends(require_permission("bedolaga_customers", "edit")),
 ):
     """Увеличить лимит устройств подписки."""
-    result = await proxy_request(lambda: bedolaga_client.add_devices(sub_id, data.model_dump()))
+    # Bedolaga ждёт {"devices": N}: с {"count"} запрос всегда получал 422
+    result = await proxy_request(lambda: bedolaga_client.add_devices(sub_id, {"devices": data.count}))
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.devices", resource="bedolaga_customers",
@@ -229,8 +257,33 @@ async def reset_devices(
     sub_id: int = Path(...),
     admin: AdminUser = Depends(require_permission("bedolaga_customers", "edit")),
 ):
-    """Сбросить устройства подписки."""
-    result = await proxy_request(lambda: bedolaga_client.reset_devices(sub_id))
+    """Сбросить устройства подписки — в панели.
+
+    У Bedolaga такого эндпоинта нет (запрос всегда получал 404). Устройства
+    хранит панель, поэтому сбрасываем там: юзера панели находим по Telegram ID
+    владельца подписки. Если у него несколько подписок — какую сбрасывать,
+    не угадать, и мы честно отказываем.
+    """
+    sub = await proxy_request(lambda: bedolaga_client.get_subscription(sub_id))
+    owner_id = (sub or {}).get("user_id")
+    owner = await proxy_request(lambda: bedolaga_client.get_user(owner_id)) if owner_id else {}
+    telegram_id = (owner or {}).get("telegram_id")
+    if not telegram_id:
+        raise HTTPException(status_code=409, detail="Subscription owner has no Telegram ID")
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        panel_users = await conn.fetch(
+            "SELECT uuid::text AS uuid, id FROM users WHERE telegram_id = $1", int(telegram_id),
+        )
+    if len(panel_users) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Telegram ID {telegram_id} has {len(panel_users)} panel users — reset devices on the user's page",
+        )
+    from shared.api_client import api_client
+    from shared.data_access import resolve_panel_user_id
+    panel_id = await resolve_panel_user_id(panel_users[0]["uuid"])
+    result = await api_client.delete_all_user_hwid_devices(panel_id)
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.reset_devices", resource="bedolaga_customers",
@@ -273,10 +326,13 @@ async def get_user(
 async def update_user(
     request: Request,
     user_id: int = Path(...),
+    data: UserUpdateRequest = ...,
     admin: AdminUser = Depends(require_permission("bedolaga_customers", "edit")),
 ):
-    """Обновить данные клиента."""
-    body = await request.json()
+    """Обновить данные клиента: имя, фамилия, логин."""
+    body = data.model_dump(exclude_unset=True)
+    if not body:
+        raise HTTPException(status_code=400, detail="Nothing to update")
     result = await proxy_request(lambda: bedolaga_client.update_user(user_id, body))
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
@@ -297,7 +353,12 @@ async def modify_balance(
     admin: AdminUser = Depends(require_permission("bedolaga_customers", "edit")),
 ):
     """Изменить баланс клиента."""
-    result = await proxy_request(lambda: bedolaga_client.modify_balance(user_id, data.model_dump()))
+    # Bedolaga ждёт причину в «description»: с «reason» она терялась, и в
+    # транзакции оставалось «Корректировка через веб-API»
+    payload = {"amount_kopeks": data.amount_kopeks}
+    if data.reason:
+        payload["description"] = data.reason
+    result = await proxy_request(lambda: bedolaga_client.modify_balance(user_id, payload))
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.user.balance", resource="bedolaga_customers",
@@ -392,7 +453,9 @@ async def user_activity(
             _activity_support.update({"supported": False, "checked_at": now})
             return _activity_unavailable(limit, offset)
         logger.warning("Bedolaga activity error: %s %s", e.response.status_code, e.response.text[:200])
-        raise HTTPException(status_code=e.response.status_code, detail=f"Bedolaga API error: {e.response.status_code}")
+        from web.backend.api.v2.bedolaga import upstream_status
+        raise HTTPException(status_code=upstream_status(e.response.status_code),
+                            detail=f"Bedolaga API error: {e.response.status_code}")
     except (ConnectError, TimeoutException) as e:
         logger.warning("Bedolaga activity connection error: %s", e)
         raise HTTPException(status_code=502, detail="Cannot connect to Bedolaga API")

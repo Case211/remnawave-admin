@@ -389,8 +389,9 @@ export default function BedolagaPromo() {
                 className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
               >
                 <option value="balance">{t('bedolaga.promo.typeBalance')}</option>
-                <option value="subscription">{t('bedolaga.promo.typeSubscription')}</option>
-                <option value="mixed">{t('bedolaga.promo.typeMixed')}</option>
+                <option value="subscription_days">{t('bedolaga.promo.typeSubscription')}</option>
+                <option value="balance_and_days">{t('bedolaga.promo.typeMixed')}</option>
+                <option value="trial_subscription">{t('bedolaga.promo.typeTrial')}</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">

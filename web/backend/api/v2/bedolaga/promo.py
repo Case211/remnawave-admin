@@ -1,7 +1,7 @@
 """Bedolaga promo codes — CRUD, stats."""
 import json
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Path, Request
 from pydantic import BaseModel, Field
@@ -18,11 +18,17 @@ router = APIRouter()
 
 # ── Schemas ──
 
+# Типы промокодов Bedolaga (PromoCodeType). Фронт предлагал «subscription» и
+# «mixed», которых у Bedolaga нет, — такие промокоды не создавались (422).
+PromoType = Literal["balance", "subscription_days", "balance_and_days", "trial_subscription"]
+
+
 class PromoCreateRequest(BaseModel):
     code: str = Field(..., min_length=1, max_length=50)
-    type: str = "balance"
-    balance_bonus_kopeks: int = 0
-    subscription_days: int = 0
+    type: PromoType = "balance"
+    balance_bonus_kopeks: int = Field(0, ge=0)
+    subscription_days: int = Field(0, ge=0)
+    traffic_gb: int = Field(0, ge=0)
     max_uses: int = Field(default=1, ge=0)
     valid_from: Optional[str] = None
     valid_until: Optional[str] = None
@@ -31,9 +37,10 @@ class PromoCreateRequest(BaseModel):
 
 class PromoUpdateRequest(BaseModel):
     code: Optional[str] = Field(None, min_length=1, max_length=50)
-    type: Optional[str] = None
-    balance_bonus_kopeks: Optional[int] = None
-    subscription_days: Optional[int] = None
+    type: Optional[PromoType] = None
+    balance_bonus_kopeks: Optional[int] = Field(None, ge=0)
+    subscription_days: Optional[int] = Field(None, ge=0)
+    traffic_gb: Optional[int] = Field(None, ge=0)
     max_uses: Optional[int] = Field(None, ge=0)
     valid_from: Optional[str] = None
     valid_until: Optional[str] = None

@@ -6300,7 +6300,8 @@
           "cabinet_action": "Cabinet action",
           "miniapp_action": "Mini app action"
         }
-      }
+      },
+      "devicesResetAmbiguous": "Could not match exactly one panel user by Telegram ID — reset devices on the user page"
     },
     "trial": "Trial",
     "conversions": "Conversions",
@@ -6394,7 +6395,8 @@
       "typeBalance": "Balance bonus",
       "typeSubscription": "Subscription",
       "typeMixed": "Mixed",
-      "balanceBonus": "Bonus (kopeks)"
+      "balanceBonus": "Bonus (kopeks)",
+      "typeTrial": "Trial subscription"
     },
     "marketing": {
       "title": "Marketing",

@@ -23,6 +23,16 @@ def ensure_configured():
     bedolaga_client.configure(settings.bedolaga_api_url, settings.bedolaga_api_token)
 
 
+def upstream_status(code: int) -> int:
+    """Код ответа Бедолаги → код нашего ответа.
+
+    401/403 от Бедолаги — это отказ её токену, а не сессии админа. Отдать их
+    как есть значило разлогинить админа: фронт принимает 401 за истёкшую
+    сессию. Такие ответы превращаются в 502 «внешний сервис отказал».
+    """
+    return 502 if code in (401, 403) else code
+
+
 async def proxy_request(coro_fn):
     """Execute a Bedolaga API request with error handling."""
     ensure_configured()
@@ -30,7 +40,8 @@ async def proxy_request(coro_fn):
         return await coro_fn()
     except HTTPStatusError as e:
         logger.warning("Bedolaga API error: %s %s", e.response.status_code, e.response.text[:200])
-        raise HTTPException(status_code=e.response.status_code, detail=f"Bedolaga API error: {e.response.status_code}")
+        raise HTTPException(status_code=upstream_status(e.response.status_code),
+                            detail=f"Bedolaga API error: {e.response.status_code}")
     except (ConnectError, TimeoutException) as e:
         logger.warning("Bedolaga API connection error: %s", e)
         raise HTTPException(status_code=502, detail="Cannot connect to Bedolaga API")

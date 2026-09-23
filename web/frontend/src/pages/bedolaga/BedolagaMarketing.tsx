@@ -418,7 +418,6 @@ export default function BedolagaMarketing() {
                 <option value="none">—</option>
                 <option value="balance">{t('bedolaga.promo.typeBalance')}</option>
                 <option value="subscription">{t('bedolaga.promo.typeSubscription')}</option>
-                <option value="tariff">{t('bedolaga.marketing.tariff')}</option>
               </select>
             </div>
             {campaignForm.bonus_type === 'balance' && (

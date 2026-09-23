@@ -244,7 +244,10 @@ export default function BedolagaCustomerDetail() {
       queryClient.invalidateQueries({ queryKey: ['bedolaga-customer', id] })
       toast.success(t('bedolaga.customerDetail.devicesReset'))
     },
-    onError: () => toast.error(t('common.error')),
+    onError: (err: { response?: { status?: number } }) =>
+      toast.error(err.response?.status === 409
+        ? t('bedolaga.customerDetail.devicesResetAmbiguous')
+        : t('common.error')),
   })
 
   const updateMutation = useMutation({

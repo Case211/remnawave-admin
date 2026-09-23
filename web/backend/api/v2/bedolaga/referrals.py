@@ -45,6 +45,35 @@ async def _load_all_users(force: bool = False) -> list[dict]:
     return all_users
 
 
+_partners_cache: list[dict] = []
+_partners_cache_ts: float = 0.0
+
+
+async def _load_all_partners(force: bool = False) -> list[dict]:
+    """Все партнёры Bedolaga, страницами по 200 (больше она не отдаёт).
+
+    Раньше бралась одна страница «limit + offset»: поиск и сортировка по
+    заработку видели только первые 200, а на дальних страницах запрос
+    превышал предел Bedolaga и падал с 422.
+    """
+    global _partners_cache, _partners_cache_ts
+    now = time.time()
+    if not force and _partners_cache and (now - _partners_cache_ts) < _USERS_CACHE_TTL:
+        return _partners_cache
+    items: list[dict] = []
+    offset, page = 0, 200
+    while True:
+        data = await proxy_request(lambda o=offset: bedolaga_client.list_partners(limit=page, offset=o))
+        chunk = data.get("items") or []
+        items.extend(chunk)
+        total = int(data.get("total") or 0)
+        if len(chunk) < page or (total and len(items) >= total):
+            break
+        offset += page
+    _partners_cache, _partners_cache_ts = items, now
+    return items
+
+
 @router.get("/referrers")
 async def list_referrers(
     admin: AdminUser = Depends(require_permission("bedolaga", "view")),
@@ -59,11 +88,8 @@ async def list_referrers(
     offset: int = Query(0, ge=0),
 ):
     """List referrers with their aggregates (uses Bedolaga partners endpoint)."""
-    # Pull a generous page from Bedolaga so we can filter/sort server-side.
-    fetch_limit = max(limit + offset, 200)
-    data = await proxy_request(lambda: bedolaga_client.list_partners(limit=fetch_limit, offset=0))
-    partners = data.get("items") or []
-    total_from_api = int(data.get("total") or len(partners))
+    partners = list(await _load_all_partners())
+    total_from_api = len(partners)
 
     if search:
         needle = search.strip().lower()
