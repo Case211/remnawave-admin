@@ -24,6 +24,22 @@ from src.services.violation_reports import ReportType, violation_report_service
 from shared.logger import logger
 
 
+def _as_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_time(value, default: str) -> str:
+    """«9:00» → «09:00», чтобы строки времени сравнивались правильно."""
+    try:
+        hours, minutes = str(value or default).strip().split(":")[:2]
+        return f"{int(hours):02d}:{int(minutes):02d}"
+    except (TypeError, ValueError):
+        return default
+
+
 class ReportScheduler:
     """
     Планировщик автоматических отчётов по нарушениям.
@@ -119,21 +135,10 @@ class ReportScheduler:
 
     async def _check_daily_report(self, current_time: str, current_date: str) -> None:
         """Проверяет и отправляет ежедневный отчёт."""
-        if not config_service.get("reports_daily_enabled", True):
-            return
-
-        if self._last_daily_date == current_date:
-            return  # Уже отправили сегодня
-
-        report_time = config_service.get("reports_daily_time", "09:00")
-
-        if current_time == report_time:
-            logger.info("📊 Sending daily violation report...")
-            try:
-                await self._send_report(ReportType.DAILY)
-                self._last_daily_date = current_date
-            except Exception as e:
-                logger.error("Failed to send daily report: %s", e, exc_info=True)
+        await self._check_report(
+            ReportType.DAILY, "reports_daily_enabled", "reports_daily_time", "09:00",
+            True, current_time, current_date, "_last_daily_date",
+        )
 
     async def _check_weekly_report(
         self,
@@ -141,23 +146,12 @@ class ReportScheduler:
         current_date: str,
         current_weekday: int
     ) -> None:
-        """Проверяет и отправляет еженедельный отчёт."""
-        if not config_service.get("reports_weekly_enabled", True):
-            return
-
-        if self._last_weekly_date == current_date:
-            return  # Уже отправили сегодня
-
-        report_day = config_service.get("reports_weekly_day", 0)  # 0 = Monday
-        report_time = config_service.get("reports_weekly_time", "10:00")
-
-        if current_weekday == report_day and current_time == report_time:
-            logger.info("📊 Sending weekly violation report...")
-            try:
-                await self._send_report(ReportType.WEEKLY)
-                self._last_weekly_date = current_date
-            except Exception as e:
-                logger.error("Failed to send weekly report: %s", e, exc_info=True)
+        """Проверяет и отправляет еженедельный отчёт (0 = понедельник)."""
+        await self._check_report(
+            ReportType.WEEKLY, "reports_weekly_enabled", "reports_weekly_time", "10:00",
+            current_weekday == _as_int(config_service.get("reports_weekly_day", 0), 0),
+            current_time, current_date, "_last_weekly_date",
+        )
 
     async def _check_monthly_report(
         self,
@@ -166,22 +160,54 @@ class ReportScheduler:
         current_day: int
     ) -> None:
         """Проверяет и отправляет ежемесячный отчёт."""
-        if not config_service.get("reports_monthly_enabled", True):
+        await self._check_report(
+            ReportType.MONTHLY, "reports_monthly_enabled", "reports_monthly_time", "10:00",
+            current_day == _as_int(config_service.get("reports_monthly_day", 1), 1),
+            current_time, current_date, "_last_monthly_date",
+        )
+
+    async def _check_report(
+        self,
+        report_type: ReportType,
+        enabled_key: str,
+        time_key: str,
+        default_time: str,
+        is_report_day: bool,
+        current_time: str,
+        current_date: str,
+        last_attr: str,
+    ) -> None:
+        """Отправить отчёт, если его время наступило или уже прошло сегодня.
+
+        Раньше время сравнивалось на равенство: цикл «раз в минуту» понемногу
+        уползает, и нужная минута могла проскочить — отчёт за день не уходил.
+        Уже отправленный отчёт за период узнаём по базе, а не по памяти,
+        поэтому перезапуск бота не даёт ни дубля, ни пропуска.
+        """
+        if not config_service.get(enabled_key, True) or not is_report_day:
+            return
+        if getattr(self, last_attr) == current_date:
+            return
+        if current_time < _normalize_time(config_service.get(time_key, default_time), default_time):
             return
 
-        if self._last_monthly_date == current_date:
-            return  # Уже отправили сегодня
+        start, end = violation_report_service._get_period_bounds(report_type)
+        existing = await db_service.get_report_for_period(report_type.value, start, end)
+        if existing and (existing.get("sent_at") or not self._worth_sending(existing)):
+            setattr(self, last_attr, current_date)
+            return
 
-        report_day = config_service.get("reports_monthly_day", 1)
-        report_time = config_service.get("reports_monthly_time", "10:00")
+        logger.info("📊 Sending %s violation report...", report_type.value)
+        try:
+            await self._send_report(report_type)
+            setattr(self, last_attr, current_date)
+        except Exception as e:
+            logger.error("Failed to send %s report: %s", report_type.value, e, exc_info=True)
 
-        if current_day == report_day and current_time == report_time:
-            logger.info("📊 Sending monthly violation report...")
-            try:
-                await self._send_report(ReportType.MONTHLY)
-                self._last_monthly_date = current_date
-            except Exception as e:
-                logger.error("Failed to send monthly report: %s", e, exc_info=True)
+    @staticmethod
+    def _worth_sending(report: dict) -> bool:
+        """Пустой отчёт шлём, только если это включено настройкой."""
+        return bool(report.get("total_violations")) or bool(config_service.get("reports_send_empty", False))
 
     async def _send_report(self, report_type: ReportType) -> None:
         """
@@ -208,12 +234,7 @@ class ReportScheduler:
                 general_fallback=settings.notifications_topic_id,
             )
 
-        # Настраиваем параметры генерации
-        min_score = config_service.get("reports_min_score", 30.0)
-        top_count = config_service.get("reports_top_violators_count", 10)
-
-        violation_report_service.set_min_score(min_score)
-        violation_report_service.set_top_violators_limit(top_count)
+        violation_report_service.configure_from_settings()
 
         # Генерируем отчёт
         report = await violation_report_service.generate_report(report_type, save_to_db=True)
@@ -232,10 +253,8 @@ class ReportScheduler:
                 message_thread_id=topic_id,
             )
 
-            # Отмечаем отчёт как отправленный
-            last_report = await db_service.get_last_report(report_type.value)
-            if last_report:
-                await db_service.mark_report_sent(last_report['id'])
+            if report.id:
+                await db_service.mark_report_sent(report.id)
 
             logger.info(
                 "📊 Sent %s report: %d violations, %d users",
@@ -263,12 +282,7 @@ class ReportScheduler:
         Returns:
             Текст отчёта
         """
-        # Настраиваем параметры
-        min_score = config_service.get("reports_min_score", 30.0)
-        top_count = config_service.get("reports_top_violators_count", 10)
-
-        violation_report_service.set_min_score(min_score)
-        violation_report_service.set_top_violators_limit(top_count)
+        violation_report_service.configure_from_settings()
 
         # Генерируем отчёт
         report = await violation_report_service.generate_report(report_type, save_to_db=True)

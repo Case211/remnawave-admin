@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { useFormatters } from '@/lib/useFormatters'
 import { timeZoneLabel, useDisplayTimeZone } from '@/lib/timezone'
+import { settingsOf } from '@/api/settings'
 import client from '../api/client'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -73,13 +74,9 @@ function AutoBackupScheduleCard() {
 
   const { data: s } = useQuery({
     queryKey: ['settings'],
-    queryFn: async () => {
-      const { data } = await client.get('/settings')
-      const result: Record<string, string> = {}
-      const cat = (data?.categories || {})['backup'] || []
-      for (const item of cat) result[item.key] = item.value ?? item.default_value ?? ''
-      return result
-    },
+    // полный ответ в общем кэше, свой кусок — через select
+    queryFn: async () => (await client.get('/settings')).data,
+    select: (data) => settingsOf(data, 'backup'),
   })
 
   const updateMutation = useMutation({

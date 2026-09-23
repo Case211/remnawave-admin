@@ -1,8 +1,18 @@
 import client from './client'
 
+export interface ReportViolator {
+  user_uuid: string
+  username: string | null
+  email?: string | null
+  violations_count: number
+  max_score: number | null
+  avg_score?: number | null
+}
+
 export interface ViolationReport {
   id: number
   report_type: string
+  /** Начало периода (включительно) и конец (не включительно), ISO с поясом */
   period_start: string
   period_end: string
   total_violations: number
@@ -12,36 +22,15 @@ export interface ViolationReport {
   unique_users: number
   prev_total_violations: number | null
   trend_percent: number | null
-  top_violators: Array<{
-    username: string
-    uuid: string
-    score: number
-    violations_count: number
-    country: string
-  }> | null
+  top_violators: ReportViolator[] | null
   by_country: Record<string, number> | null
   by_action: Record<string, number> | null
   by_asn_type: Record<string, number> | null
   message_text: string | null
   generated_at: string
   sent_at: string | null
-}
-
-export interface ASNRecord {
-  asn: number
-  org_name: string
-  org_name_en: string | null
-  provider_type: string | null
-  region: string | null
-  city: string | null
-  country_code: string
-  description: string | null
-  is_active: boolean
-}
-
-export interface ASNStats {
-  total: number
-  by_type: Record<string, number>
+  /** Ограниченный админ: в топе только его юзеры, общие цифры — по всем */
+  scoped?: boolean
 }
 
 export const reportsApi = {
@@ -58,7 +47,7 @@ export const reportsApi = {
     return data
   },
 
-  generateReport: async (reportType: string, startDate?: string, endDate?: string) => {
+  generateReport: async (reportType: string, startDate?: string, endDate?: string): Promise<{ id: number | null }> => {
     const { data } = await client.post('/reports/generate', {
       report_type: reportType,
       start_date: startDate,
@@ -66,31 +55,15 @@ export const reportsApi = {
     })
     return data
   },
-}
 
-export const asnApi = {
-  search: async (orgName: string): Promise<ASNRecord[]> => {
-    const { data } = await client.get(`/asn/search?org_name=${encodeURIComponent(orgName)}`)
-    return data.items
-  },
-
-  getByType: async (providerType: string): Promise<ASNRecord[]> => {
-    const { data } = await client.get(`/asn/by-type/${providerType}`)
-    return data.items
-  },
-
-  getStats: async (): Promise<ASNStats> => {
-    const { data } = await client.get('/asn/stats')
+  /** Отправить отчёт в Telegram — туда же, куда шлёт расписание. */
+  sendReport: async (id: number) => {
+    const { data } = await client.post(`/reports/${id}/send`)
     return data
   },
 
-  getAsn: async (asn: number): Promise<ASNRecord> => {
-    const { data } = await client.get(`/asn/${asn}`)
-    return data
-  },
-
-  sync: async (limit?: number) => {
-    const { data } = await client.post('/asn/sync', { limit })
+  deleteReport: async (id: number) => {
+    const { data } = await client.delete(`/reports/${id}`)
     return data
   },
 }

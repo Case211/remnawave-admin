@@ -1836,9 +1836,9 @@
       "pending": "Pending",
       "topViolators": "Top violators",
       "hwids": "Shared HWIDs",
-      "reports": "Reports & ASN",
       "tuning": "Tuning",
-      "notices": "Warnings"
+      "notices": "Warnings",
+      "asn": "ASN database"
     },
     "sharedHwids": {
       "title": "Shared HWID Devices",
@@ -5670,11 +5670,10 @@
   },
   "reports": {
     "title": "Reports",
-    "subtitle": "Violation reports and ASN database management",
+    "subtitle": "Daily, weekly and monthly violation summaries",
     "tabs": {
       "reports": "Violation Reports",
-      "schedule": "Schedule",
-      "asn": "ASN Database"
+      "schedule": "Schedule"
     },
     "schedule": {
       "globalEnabled": "Report scheduling enabled",
@@ -5691,44 +5690,55 @@
       "thursday": "Thursday",
       "friday": "Friday",
       "saturday": "Saturday",
-      "sunday": "Sunday"
+      "sunday": "Sunday",
+      "noPermission": "The schedule lives in settings — the \"Settings: view\" permission is required."
     },
     "filterAll": "All types",
-    "filterDaily": "Daily",
-    "filterWeekly": "Weekly",
-    "filterMonthly": "Monthly",
     "generate": "Generate",
     "generating": "Generating...",
     "generated": "Report generated successfully",
     "generateError": "Failed to generate report",
     "generateTitle": "Generate Report",
-    "generateDescription": "Generate a new violation report for the selected period",
+    "generateDescription": "A report for an existing period is recalculated — no duplicate is created.",
     "reportType": "Report Type",
     "empty": "No reports yet",
     "uniqueUsers": "Unique users",
     "topViolators": "Top Violators",
-    "score": "Score",
-    "violations": "violations",
     "byCountry": "By Country",
-    "byAsnType": "By ASN Type",
-    "asn": {
-      "description": "Russian ASN database synced from RIPE",
-      "sync": "Sync from RIPE",
-      "syncing": "Syncing...",
-      "syncSuccess": "Synced {{count}} ASN records",
-      "syncError": "Failed to sync ASN database",
-      "totalRecords": "Total Records",
-      "searchPlaceholder": "Search by organization name...",
-      "filterByType": "Filter by type",
-      "allTypes": "All types",
-      "searchHint": "Search by organization name or filter by provider type",
-      "noResults": "No ASN records found",
-      "orgName": "Organization",
-      "type": "Type",
-      "region": "Region",
-      "showingOf": "Showing {{shown}} of {{total}} records",
-      "header": "ASN"
-    }
+    "byAsnType": "By provider type",
+    "types": {
+      "daily": "Day",
+      "weekly": "Week",
+      "monthly": "Month"
+    },
+    "generatePeriod": {
+      "daily": "Yesterday",
+      "weekly": "Last week",
+      "monthly": "Last month"
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warnings",
+      "monitor": "Monitor"
+    },
+    "violationsTotal": "violations",
+    "trendHint": "Previous period: {{prev}}",
+    "trendFromZero": "up from zero",
+    "noViolators": "No violators",
+    "violationsCount_one": "{{count}} violation",
+    "violationsCount_other": "{{count}} violations",
+    "maxScore": "Maximum score",
+    "byAction": "By recommended action",
+    "messageText": "Report text",
+    "sentAt": "Sent to Telegram {{time}}",
+    "notSent": "Not sent to Telegram",
+    "send": "Send to Telegram",
+    "sendAgain": "Send again",
+    "sent": "Report sent",
+    "sendError": "Failed to send the report",
+    "deleteTitle": "Delete report?",
+    "deleteDescription": "The report disappears from history. Violations stay; the report can be generated again.",
+    "scopedHint": "The top lists only your users; overall report figures cover everyone."
   },
   "errors": {
     "INVALID_AUTH_HEADER": "Invalid authorization header",
@@ -5771,6 +5781,8 @@
     "HOST_ENABLE_FAILED": "Failed to enable host",
     "HOST_DISABLE_FAILED": "Failed to disable host",
     "VIOLATION_NOT_FOUND": "Violation not found",
+    "REPORT_NOT_FOUND": "Report not found",
+    "TELEGRAM_NOT_CONFIGURED": "Telegram notifications are not configured: set the bot token and chat",
     "VIOLATION_UPDATE_FAILED": "Failed to update violation",
     "WHITELIST_ADD_FAILED": "Failed to add to whitelist",
     "WHITELIST_USER_NOT_FOUND": "Whitelisted user not found",
@@ -5802,7 +5814,6 @@
     "NO_OUTBOUND_DOMAIN": "No outbound mail domain configured",
     "QUEUE_ITEM_NOT_FOUND": "Mail queue item not found",
     "MESSAGE_NOT_FOUND": "Mail message not found",
-    "REPORT_NOT_FOUND": "Report not found",
     "ASN_NOT_FOUND": "ASN record not found",
     "BACKUP_NOT_FOUND": "Backup file not found",
     "BACKUP_CREATE_FAILED": "Failed to create backup",
@@ -7256,5 +7267,36 @@
     "snoozeLabel": "Snooze",
     "snoozeHint": "Take it out of the queue and bring it back in {{time}}",
     "snoozedUntil": "Snoozed until {{time}}"
+  },
+  "asn": {
+    "types": {
+      "mobile": "Mobile carrier",
+      "mobile_isp": "Mobile ISP",
+      "fixed": "Fixed line",
+      "isp": "ISP",
+      "regional_isp": "Regional ISP",
+      "hosting": "Hosting",
+      "datacenter": "Datacenter",
+      "vpn": "VPN",
+      "business": "Business",
+      "infrastructure": "Infrastructure",
+      "residential": "Residential",
+      "edu": "Education",
+      "unknown": "Unknown"
+    },
+    "directory": {
+      "description": "Directory of Russian ASNs from RIPE: the detector uses it to tell mobile networks, hosting and VPN apart. Updated in",
+      "syncLink": "Settings → Sync",
+      "totalRecords": "Total records",
+      "searchPlaceholder": "Search by organization name…",
+      "filterByType": "Filter by type",
+      "allTypes": "All types",
+      "searchHint": "Find an organization by name or pick a provider type",
+      "noResults": "No records found",
+      "orgName": "Organization",
+      "type": "Type",
+      "region": "Region",
+      "showingOf": "Showing {{shown}} of {{total}}"
+    }
   }
 }

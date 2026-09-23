@@ -97,6 +97,7 @@ class ErrorCode(str, Enum):
 
     # ── Violations ────────────────────────────────────────────
     VIOLATION_NOT_FOUND = "VIOLATION_NOT_FOUND"
+    TELEGRAM_NOT_CONFIGURED = "TELEGRAM_NOT_CONFIGURED"
     VIOLATION_UPDATE_FAILED = "VIOLATION_UPDATE_FAILED"
     WHITELIST_ADD_FAILED = "WHITELIST_ADD_FAILED"
     WHITELIST_USER_NOT_FOUND = "WHITELIST_USER_NOT_FOUND"
@@ -178,6 +179,7 @@ E = ErrorCode
 # Default human-readable messages per code (English fallback)
 _DEFAULT_MESSAGES: dict[str, str] = {
     E.ADMIN_NOT_FOUND: "Admin not found",
+    E.TELEGRAM_NOT_CONFIGURED: "Telegram notifications are not configured: set the bot token and chat.",
     E.WEAK_PASSWORD: "Password does not meet the requirements: 8+ characters, lowercase and uppercase Latin letters, a digit and a special character, no Cyrillic.",
     E.USERNAME_EXISTS: "Username already exists",
     E.ROLE_NOT_FOUND: "Role not found",

@@ -48,7 +48,7 @@ AVAILABLE_RESOURCES = {
     "notifications": ["view", "create", "edit", "delete"],
     "resources": ["view", "create", "edit", "delete"],
     "finance": ["view", "create", "edit", "delete"],
-    "reports": ["view", "create"],
+    "reports": ["view", "create", "delete"],
     "mailserver": ["view", "create", "edit", "delete"],
     "dns": ["view", "edit"],
     "bscheck": ["view", "check"],

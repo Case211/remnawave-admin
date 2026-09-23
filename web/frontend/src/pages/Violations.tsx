@@ -48,6 +48,7 @@ import client from '../api/client'
 import { UserTimelineDialog } from '@/components/violations/UserTimelineDialog'
 import { DetectorTuningTab } from '@/components/violations/DetectorTuningTab'
 import { NoticeTemplatesTab } from '@/components/violations/NoticeTemplatesTab'
+import { AsnDirectory } from '@/components/violations/AsnDirectory'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -60,7 +61,6 @@ import { cn } from '@/lib/utils'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
 import { exportJSON } from '@/lib/export'
-import Reports from './Reports'
 import { SharedHwidsCard } from '@/components/SharedHwidsCard'
 import type {
   Violation,
@@ -1648,7 +1648,7 @@ function ViolationSkeleton() {
 
 // ── Main page component ──────────────────────────────────────────
 
-type Tab = 'all' | 'pending' | 'top' | 'hwids' | 'reports' | 'tuning' | 'notices'
+type Tab = 'all' | 'pending' | 'top' | 'hwids' | 'asn' | 'tuning' | 'notices'
 
 export default function Violations() {
   const { t } = useTranslation()
@@ -1663,9 +1663,14 @@ export default function Violations() {
   const getP = (k: string, d: string) => searchParams.get(k) ?? d
   const getN = (k: string, d: number) => { const v = searchParams.get(k); return v !== null ? (Number(v) || d) : d }
 
-  const validTabs: Tab[] = ['all', 'pending', 'top', 'hwids', 'reports', 'tuning', 'notices']
+  const validTabs: Tab[] = ['all', 'pending', 'top', 'hwids', 'asn', 'tuning', 'notices']
   const rawTab = getP('tab', 'all') as Tab
   const tab = validTabs.includes(rawTab) ? rawTab : 'all'
+
+  // Вкладка «Отчёты» ушла на свою страницу — старые ссылки ведём туда
+  useEffect(() => {
+    if (searchParams.get('tab') === 'reports') navigate('/reports', { replace: true })
+  }, [searchParams, navigate])
   const page = getN('page', 1)
   const perPage = getN('perPage', 20)
   const severity = getP('severity', '')
@@ -2268,7 +2273,7 @@ export default function Violations() {
           { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
           { key: 'top' as Tab, label: t('violations.tabs.topViolators'), count: undefined },
           { key: 'hwids' as Tab, label: t('violations.tabs.hwids'), count: undefined },
-          { key: 'reports' as Tab, label: t('violations.tabs.reports'), count: undefined },
+          { key: 'asn' as Tab, label: t('violations.tabs.asn'), count: undefined },
           { key: 'tuning' as Tab, label: t('violations.tabs.tuning'), count: undefined },
           { key: 'notices' as Tab, label: t('violations.tabs.notices'), count: undefined },
         ]).map((tabItem) => (
@@ -2295,8 +2300,8 @@ export default function Violations() {
         <NoticeTemplatesTab />
       ) : tab === 'tuning' ? (
         <DetectorTuningTab />
-      ) : tab === 'reports' ? (
-        <Reports embedded />
+      ) : tab === 'asn' ? (
+        <AsnDirectory />
       ) : tab === 'hwids' ? (
         <SharedHwidsCard />
       ) : tab === 'top' ? (

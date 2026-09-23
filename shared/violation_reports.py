@@ -60,6 +60,9 @@ class ViolationReportData:
     # Сгенерированный текст
     message_text: str = ""
 
+    # id сохранённого отчёта (None — не сохранялся)
+    id: Optional[int] = None
+
 
 class ViolationReportService:
     """
@@ -104,6 +107,19 @@ class ViolationReportService:
         """Инициализирует сервис отчётов."""
         self._min_score_for_report = 30.0  # Минимальный скор для включения в отчёт
         self._top_violators_limit = 10     # Количество топ нарушителей
+
+    def configure_from_settings(self) -> None:
+        """Мин. скор и размер топа — из настроек: отчёт из веба и из бота
+        за один период должен выйти одинаковым."""
+        from shared.config_service import config_service
+        try:
+            self.set_min_score(float(config_service.get("reports_min_score", 30.0) or 30.0))
+        except (TypeError, ValueError):
+            pass
+        try:
+            self.set_top_violators_limit(int(config_service.get("reports_top_violators_count", 10) or 10))
+        except (TypeError, ValueError):
+            pass
 
     def set_min_score(self, min_score: float) -> None:
         """Установить минимальный скор для включения в отчёт."""
@@ -288,7 +304,7 @@ class ViolationReportService:
 
         # Сохраняем в БД
         if save_to_db:
-            await self._save_report_to_db(report)
+            report.id = await self._save_report_to_db(report)
 
         logger.info(
             "Generated %s report: %d violations, %d users",

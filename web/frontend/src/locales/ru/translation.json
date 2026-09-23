@@ -1834,9 +1834,9 @@
       "pending": "Ожидают",
       "topViolators": "Топ нарушителей",
       "hwids": "Общие HWID",
-      "reports": "Отчёты и ASN",
       "tuning": "Тюнинг",
-      "notices": "Предупреждения"
+      "notices": "Предупреждения",
+      "asn": "База ASN"
     },
     "sharedHwids": {
       "title": "Общие HWID устройства",
@@ -5666,11 +5666,10 @@
   },
   "reports": {
     "title": "Отчёты",
-    "subtitle": "Отчёты по нарушениям и управление базой ASN",
+    "subtitle": "Сводки по нарушениям за день, неделю и месяц",
     "tabs": {
       "reports": "Отчёты по нарушениям",
-      "schedule": "Расписание",
-      "asn": "База ASN"
+      "schedule": "Расписание"
     },
     "schedule": {
       "globalEnabled": "Расписание отчётов включено",
@@ -5687,44 +5686,57 @@
       "thursday": "Четверг",
       "friday": "Пятница",
       "saturday": "Суббота",
-      "sunday": "Воскресенье"
+      "sunday": "Воскресенье",
+      "noPermission": "Расписание хранится в настройках — нужно право «Настройки: просмотр»."
     },
     "filterAll": "Все типы",
-    "filterDaily": "Ежедневный",
-    "filterWeekly": "Еженедельный",
-    "filterMonthly": "Ежемесячный",
     "generate": "Сгенерировать",
     "generating": "Генерация...",
     "generated": "Отчёт успешно сгенерирован",
     "generateError": "Не удалось сгенерировать отчёт",
     "generateTitle": "Сгенерировать отчёт",
-    "generateDescription": "Сгенерировать новый отчёт по нарушениям за выбранный период",
+    "generateDescription": "Отчёт за уже готовый период пересчитается заново — дубля не будет.",
     "reportType": "Тип отчёта",
     "empty": "Нет отчётов",
     "uniqueUsers": "Уникальных пользователей",
     "topViolators": "Топ нарушителей",
-    "score": "Рейтинг",
-    "violations": "нарушений",
     "byCountry": "По странам",
-    "byAsnType": "По типу ASN",
-    "asn": {
-      "description": "База ASN России, синхронизированная из RIPE",
-      "sync": "Синхронизация из RIPE",
-      "syncing": "Синхронизация...",
-      "syncSuccess": "Синхронизировано {{count}} записей ASN",
-      "syncError": "Не удалось синхронизировать базу ASN",
-      "totalRecords": "Всего записей",
-      "searchPlaceholder": "Поиск по названию организации...",
-      "filterByType": "Фильтр по типу",
-      "allTypes": "Все типы",
-      "searchHint": "Поиск по названию организации или фильтр по типу провайдера",
-      "noResults": "Записи ASN не найдены",
-      "orgName": "Организация",
-      "type": "Тип",
-      "region": "Регион",
-      "showingOf": "Показано {{shown}} из {{total}} записей",
-      "header": "ASN"
-    }
+    "byAsnType": "По типам провайдеров",
+    "types": {
+      "daily": "День",
+      "weekly": "Неделя",
+      "monthly": "Месяц"
+    },
+    "generatePeriod": {
+      "daily": "За вчера",
+      "weekly": "За прошлую неделю",
+      "monthly": "За прошлый месяц"
+    },
+    "severity": {
+      "critical": "Критичных",
+      "warning": "Предупреждений",
+      "monitor": "Наблюдать"
+    },
+    "violationsTotal": "нарушений",
+    "trendHint": "В прошлом периоде: {{prev}}",
+    "trendFromZero": "рост с нуля",
+    "noViolators": "Нарушителей нет",
+    "violationsCount_one": "{{count}} нарушение",
+    "violationsCount_few": "{{count}} нарушения",
+    "violationsCount_many": "{{count}} нарушений",
+    "violationsCount_other": "{{count}} нарушения",
+    "maxScore": "Максимальный скор",
+    "byAction": "По рекомендуемым действиям",
+    "messageText": "Текст отчёта",
+    "sentAt": "Отправлен в Telegram {{time}}",
+    "notSent": "В Telegram не отправлялся",
+    "send": "Отправить в Telegram",
+    "sendAgain": "Отправить ещё раз",
+    "sent": "Отчёт отправлен",
+    "sendError": "Не удалось отправить отчёт",
+    "deleteTitle": "Удалить отчёт?",
+    "deleteDescription": "Отчёт пропадёт из истории. Нарушения остаются на месте, отчёт можно сгенерировать заново.",
+    "scopedHint": "В топе — только ваши пользователи; общие цифры отчёта посчитаны по всем."
   },
   "errors": {
     "INVALID_AUTH_HEADER": "Некорректный заголовок авторизации",
@@ -5767,6 +5779,8 @@
     "HOST_ENABLE_FAILED": "Не удалось включить хост",
     "HOST_DISABLE_FAILED": "Не удалось отключить хост",
     "VIOLATION_NOT_FOUND": "Нарушение не найдено",
+    "REPORT_NOT_FOUND": "Отчёт не найден",
+    "TELEGRAM_NOT_CONFIGURED": "Уведомления в Telegram не настроены: укажите токен бота и чат",
     "VIOLATION_UPDATE_FAILED": "Не удалось обновить нарушение",
     "WHITELIST_ADD_FAILED": "Не удалось добавить в белый список",
     "WHITELIST_USER_NOT_FOUND": "Пользователь белого списка не найден",
@@ -5798,7 +5812,6 @@
     "NO_OUTBOUND_DOMAIN": "Исходящий почтовый домен не настроен",
     "QUEUE_ITEM_NOT_FOUND": "Элемент очереди не найден",
     "MESSAGE_NOT_FOUND": "Сообщение не найдено",
-    "REPORT_NOT_FOUND": "Отчёт не найден",
     "ASN_NOT_FOUND": "Запись ASN не найдена",
     "BACKUP_NOT_FOUND": "Файл резервной копии не найден",
     "BACKUP_CREATE_FAILED": "Не удалось создать резервную копию",
@@ -7253,5 +7266,36 @@
     "snoozeLabel": "Отложить",
     "snoozeHint": "Убрать из очереди и вернуть через {{time}}",
     "snoozedUntil": "Отложено до {{time}}"
+  },
+  "asn": {
+    "types": {
+      "mobile": "Мобильный оператор",
+      "mobile_isp": "Мобильный ISP",
+      "fixed": "Проводной",
+      "isp": "Провайдер",
+      "regional_isp": "Региональный провайдер",
+      "hosting": "Хостинг",
+      "datacenter": "Датацентр",
+      "vpn": "VPN",
+      "business": "Корпоративный",
+      "infrastructure": "Инфраструктура",
+      "residential": "Домашний",
+      "edu": "Образование",
+      "unknown": "Не определён"
+    },
+    "directory": {
+      "description": "Справочник российских ASN из RIPE: по нему детектор отличает мобильные сети, хостинг и VPN. Обновляется в",
+      "syncLink": "Настройки → Синхронизация",
+      "totalRecords": "Всего записей",
+      "searchPlaceholder": "Поиск по названию организации…",
+      "filterByType": "Фильтр по типу",
+      "allTypes": "Все типы",
+      "searchHint": "Найдите организацию по названию или выберите тип провайдера",
+      "noResults": "Записи не найдены",
+      "orgName": "Организация",
+      "type": "Тип",
+      "region": "Регион",
+      "showingOf": "Показано {{shown}} из {{total}}"
+    }
   }
 }
