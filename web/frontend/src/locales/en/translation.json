@@ -170,7 +170,7 @@
     "settings": "Settings",
     "administration": "Administration",
     "mailServer": "Mail Server",
-    "resources": "Resources",
+    "resources": "RW Resources",
     "finance": "Finance",
     "reports": "Reports",
     "backups": "Backups",
@@ -1616,8 +1616,6 @@
     }
   },
   "hosts": {
-    "title": "Hosts",
-    "subtitle": "Connection hosts management",
     "totalHosts": "Total",
     "activeHosts": "Active",
     "disabledHosts": "Disabled",
@@ -5015,9 +5013,10 @@
     "en": "English"
   },
   "resources": {
-    "title": "Resources",
-    "subtitle": "Panel configuration: templates, snippets, profiles and squads",
+    "title": "RW Resources",
+    "subtitle": "Panel configuration: hosts, templates, snippets, profiles and squads",
     "tabs": {
+      "hosts": "Hosts",
       "templates": "Templates",
       "snippets": "Snippets",
       "profiles": "Config Profiles",

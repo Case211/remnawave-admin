@@ -207,7 +207,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           </CommandItem>
           <CommandItem
             value="hosts хосты"
-            onSelect={() => runCommand(() => navigate('/hosts'))}
+            onSelect={() => runCommand(() => navigate('/resources?tab=hosts'))}
           >
             <Globe className="mr-2 h-4 w-4" />
             {t('nav.hosts')}

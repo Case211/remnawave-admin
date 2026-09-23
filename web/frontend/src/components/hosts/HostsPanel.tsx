@@ -48,7 +48,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import client from '../api/client'
+import client from '@/api/client'
 import { ViewToggle } from '@/components/ViewToggle'
 import { useViewMode } from '@/lib/useViewMode'
 import { HostsTable } from '@/components/hosts/HostsTable'
@@ -976,7 +976,8 @@ function BulkEditHostsModal({ open, count, onClose, onApply, isPending }: {
   )
 }
 
-export default function Hosts() {
+/** Хосты — вкладка страницы «Ресурсы». */
+export function HostsPanel() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('hosts', 'create')
@@ -1099,32 +1100,25 @@ export default function Hosts() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-header-title">{t('hosts.title')}</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">{t('hosts.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {canCreate && (
-            <Button
-              onClick={() => { setShowCreateModal(true); setCreateError('') }}
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('hosts.actions.add')}</span>
-            </Button>
-          )}
+      <div className="flex items-center justify-end gap-2">
+        {canCreate && (
           <Button
-            variant="secondary"
-            onClick={() => refetch()}
-            disabled={isLoading}
+            onClick={() => { setShowCreateModal(true); setCreateError('') }}
             className="gap-2"
           >
-            <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
-            <span className="hidden sm:inline">{t('hosts.actions.refresh')}</span>
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">{t('hosts.actions.add')}</span>
           </Button>
-        </div>
+        )}
+        <Button
+          variant="secondary"
+          onClick={() => refetch()}
+          disabled={isLoading}
+          className="gap-2"
+        >
+          <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
+          <span className="hidden sm:inline">{t('hosts.actions.refresh')}</span>
+        </Button>
       </div>
 
       {/* Stats */}

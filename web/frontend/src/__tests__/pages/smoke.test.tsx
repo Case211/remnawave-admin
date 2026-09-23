@@ -302,10 +302,13 @@ describe('Page smoke tests', () => {
     expect(fleet.container.querySelector('.page-header-title')).toBeNull()
   })
 
-  it('Hosts renders without errors', async () => {
-    const Hosts = (await import('@/pages/Hosts')).default
-    const { container } = renderPage(<Hosts />)
-    expect(container).toBeTruthy()
+  it('Хосты и сквады встраиваются во вкладки «Ресурсов» без своего заголовка', async () => {
+    const { HostsPanel } = await import('@/components/hosts/HostsPanel')
+    const { SquadsPanel } = await import('@/components/squads/SquadsPanel')
+    const hosts = renderPage(<HostsPanel />)
+    expect(hosts.container.querySelector('.page-header-title')).toBeNull()
+    const squads = renderPage(<SquadsPanel />)
+    expect(squads.container.querySelector('.page-header-title')).toBeNull()
   })
 
   it('Violations renders without errors', async () => {

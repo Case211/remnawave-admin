@@ -26,7 +26,6 @@ import OAuthCallback from './pages/OAuthCallback'
 const Users = lazy(() => import('./pages/Users'))
 const UserDetail = lazy(() => import('./pages/UserDetail'))
 const Servers = lazy(() => import('./pages/Servers'))
-const Hosts = lazy(() => import('./pages/Hosts'))
 const Violations = lazy(() => import('./pages/Violations'))
 const Blocking = lazy(() => import('./pages/Blocking'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -56,7 +55,7 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Plugin UI route registry — see web/frontend/src/plugins/registry.tsx
 import { ToServers } from './components/ToServers'
-import { ToResourcesSquads } from './components/ToResourcesSquads'
+import { ToResources } from './components/ToResources'
 import { PLUGIN_ROUTES } from './plugins/registry'
 import { useActivePlugins } from './lib/plugins'
 
@@ -90,7 +89,7 @@ function ProtectedShell() {
             {/* Старые адреса: закладки, уведомления, ссылки из других разделов */}
             <Route path="/nodes" element={<ToServers tab="nodes" />} />
             <Route path="/fleet" element={<ToServers />} />
-            <Route path="/hosts" element={<Hosts />} />
+            <Route path="/hosts" element={<ToResources tab="hosts" />} />
             <Route path="/violations" element={<Violations />} />
             <Route path="/blocking" element={<Blocking />} />
             <Route path="/automations" element={<Automations />} />
@@ -110,7 +109,7 @@ function ProtectedShell() {
             <Route path="/api-keys" element={<ApiKeys />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/resources" element={<Resources />} />
-            <Route path="/squads" element={<ToResourcesSquads />} />
+            <Route path="/squads" element={<ToResources tab="squads" />} />
             <Route path="/bedolaga" element={<BedolagaDashboard />} />
             <Route path="/bedolaga/customers" element={<BedolagaCustomers />} />
             <Route path="/bedolaga/customers/:id" element={<BedolagaCustomerDetail />} />

@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   Users,
   Server,
-  Globe,
   ShieldAlert,
   Settings,
   UserCog,
@@ -93,17 +92,20 @@ export const navigation: NavigationEntry[] = [
     permission: null,
     anyPermission: [{ resource: 'fleet', action: 'view' }, { resource: 'nodes', action: 'view' }],
   },
-  { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'nav.dns', href: '/dns', icon: Network, permission: { resource: 'dns', action: 'view' } },
   { name: 'nav.bscheck', href: '/bscheck', icon: ShieldCheck, permission: { resource: 'bscheck', action: 'view' } },
   { name: 'nav.finance', href: '/finance', icon: Wallet, permission: { resource: 'finance', action: 'view' } },
-  // «Ресурсы» — конфигурация панели: шаблоны, сниппеты, профили и сквады
+  // «Ресурсы» — конфигурация панели: хосты, шаблоны, сниппеты, профили и сквады
   {
     name: 'nav.resources',
     href: '/resources',
     icon: Boxes,
     permission: null,
-    anyPermission: [{ resource: 'resources', action: 'view' }, { resource: 'users', action: 'view' }],
+    anyPermission: [
+      { resource: 'hosts', action: 'view' },
+      { resource: 'resources', action: 'view' },
+      { resource: 'users', action: 'view' },
+    ],
   },
   // Security — «защищаюсь»
   { type: 'section', name: 'nav.sections.security' },

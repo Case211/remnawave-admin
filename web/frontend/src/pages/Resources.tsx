@@ -11,6 +11,7 @@ import {
   RefreshCw,
   FileJson,
   UsersRound,
+  Globe,
 } from '@/components/brand/icons'
 import { resourcesApi, Template, Snippet, ConfigProfile } from '../api/resources'
 import { ProfileEditorDialog } from '@/components/code/ProfileEditorDialog'
@@ -31,8 +32,12 @@ import { useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
 import { useFormatters } from '@/lib/useFormatters'
 import { SquadsPanel } from '@/components/squads/SquadsPanel'
+import { HostsPanel } from '@/components/hosts/HostsPanel'
 
-type ResourcesTab = 'templates' | 'snippets' | 'profiles' | 'squads'
+type ResourcesTab = 'hosts' | 'templates' | 'snippets' | 'profiles' | 'squads'
+
+// Вкладки конфигурации — их данные грузит сама страница
+const CONFIG_TABS: ResourcesTab[] = ['templates', 'snippets', 'profiles']
 
 // Template type options
 const TEMPLATE_TYPES = [
@@ -59,7 +64,8 @@ export default function Resources() {
   const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
 
-  // Permissions: конфигурация — право resources, сквады — users (как и раньше)
+  // Permissions: у каждой вкладки своё право, как у бывших отдельных страниц
+  const canViewHosts = useHasPermission('hosts', 'view')
   const canViewConfig = useHasPermission('resources', 'view')
   const canViewSquads = useHasPermission('users', 'view')
   const canCreate = useHasPermission('resources', 'create')
@@ -68,6 +74,7 @@ export default function Resources() {
 
   // Tab state — управление API-токенами панели убрано (только в самой Remnawave)
   const tabs: ResourcesTab[] = [
+    ...(canViewHosts ? (['hosts'] as const) : []),
     ...(canViewConfig ? (['templates', 'snippets', 'profiles'] as const) : []),
     ...(canViewSquads ? (['squads'] as const) : []),
   ]
@@ -256,7 +263,7 @@ export default function Resources() {
     )
   }
 
-  if (hasError && activeTab !== 'squads') {
+  if (hasError && CONFIG_TABS.includes(activeTab)) {
     return (
       <div className="space-y-6">
         <div className="page-header">
@@ -282,6 +289,12 @@ export default function Resources() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
+          {canViewHosts && (
+            <TabsTrigger value="hosts">
+              <Globe className="w-4 h-4 mr-2" />
+              {t('resources.tabs.hosts')}
+            </TabsTrigger>
+          )}
           {canViewConfig && (
             <>
               <TabsTrigger value="templates">
@@ -534,6 +547,12 @@ export default function Resources() {
             </div>
           )}
         </TabsContent>
+
+        {canViewHosts && (
+          <TabsContent value="hosts">
+            <HostsPanel />
+          </TabsContent>
+        )}
 
         {canViewSquads && (
           <TabsContent value="squads" className="space-y-4">
