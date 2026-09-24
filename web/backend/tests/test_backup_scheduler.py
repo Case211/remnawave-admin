@@ -178,6 +178,27 @@ class TestDeadman:
             mk_alert.assert_not_called()
 
 
+class TestScheduledBackupLog:
+    """Баг: заглушка _SchedulerAdmin не объявляла account_id, а _log_backup его
+    читает — AttributeError глушился, и плановый бэкап не попадал в backup_log:
+    в истории его нет, а deadman считает, что успешных бэкапов не было."""
+
+    @pytest.mark.asyncio
+    async def test_scheduled_backup_is_logged(self):
+        conn = AsyncMock()
+        svc = MagicMock()
+        svc.is_connected = True
+        svc.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
+        svc.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("shared.database.db_service", svc), \
+                patch("web.backend.core.backup_s3.upload_if_enabled", new_callable=AsyncMock):
+            await bs._log_and_maybe_send("db.sql.gz", "database", 1, send_tg=False)
+        conn.execute.assert_awaited_once()
+        sql, *params = conn.execute.await_args.args
+        assert "INSERT INTO backup_log" in sql
+        assert params[3:5] == [None, "scheduler"]  # created_by_admin_id, created_by_username
+
+
 class TestApiErrorStringCode:
     """Баг: api_error(400, "NO_CHAT_ID") падал AttributeError на str.value —
     осмысленный 400 превращался в 500 Internal Server Error."""
