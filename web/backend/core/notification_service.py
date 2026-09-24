@@ -398,8 +398,8 @@ async def send_webhook(
 ) -> bool:
     """Send notification to a webhook URL (Discord, Slack compatible)."""
     # SSRF-защита: не даём слать на приватные/служебные адреса (метаданные облака и т.п.)
-    from web.backend.core.webhook_security import check_url_safety
-    ok, reason = check_url_safety(url)
+    from web.backend.core.webhook_security import check_url_safety_async
+    ok, reason = await check_url_safety_async(url)
     if not ok:
         logger.warning("send_webhook blocked (SSRF): %s", reason)
         NOTIFICATIONS_FAILED.labels(channel="webhook").inc()

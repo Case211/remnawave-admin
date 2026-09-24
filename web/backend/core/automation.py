@@ -418,6 +418,26 @@ async def expired_users_to_disable(cutoff, squad_uuids: Optional[List[str]] = No
     return [r["uuid"] for r in rows]
 
 
+async def users_expired_between(since, until) -> List[dict]:
+    """Юзеры, у которых подписка истекла в промежутке (since, until]."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT uuid::text AS uuid, username, expire_at,
+                   COALESCE(raw_data::jsonb->>'tag', '') AS tag,
+                   COALESCE((SELECT string_agg(s->>'name', ', ')
+                             FROM jsonb_array_elements(COALESCE(raw_data::jsonb->'activeInternalSquads', '[]'::jsonb)) s), '') AS squads
+            FROM users
+            WHERE expire_at > $1 AND expire_at <= $2
+            ORDER BY expire_at
+            LIMIT 1000
+            """,
+            since, until,
+        )
+    return [dict(r) for r in rows]
+
+
 async def user_traffic_today(min_bytes: int) -> List[dict]:
     """Трафик юзера за сегодня (сутки по часам панели) по всем нодам."""
     from shared.database import db_service

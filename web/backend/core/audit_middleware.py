@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime, timezone
+import time
 from typing import Optional, Tuple
 
 from fastapi import Request, Response
@@ -228,6 +228,25 @@ class AuditMiddleware(BaseHTTPMiddleware):
     """Middleware that automatically logs mutable actions to audit_log."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if not request.url.path.startswith("/api/v3/"):
+            return await self._dispatch_audit(request, call_next)
+        # Публичный API: каждый запрос ключа — в его журнал (метод, путь, код, IP)
+        start = time.perf_counter()
+        response = await self._dispatch_audit(request, call_next)
+        api_key_user = getattr(request.state, "api_key_user", None)
+        if api_key_user is not None:
+            try:
+                from web.backend.api.deps import get_client_ip
+                from web.backend.core.api_key_usage import record_request
+                record_request(
+                    api_key_user.key_id, request.method, request.url.path, response.status_code,
+                    get_client_ip(request), int((time.perf_counter() - start) * 1000),
+                )
+            except Exception as e:
+                logger.debug("API key request log skipped: %s", e)
+        return response
+
+    async def _dispatch_audit(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Only intercept mutable methods
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
             return await call_next(request)

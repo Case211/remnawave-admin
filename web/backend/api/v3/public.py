@@ -265,6 +265,26 @@ _ONLINE_COLUMN = (
 )
 
 
+async def _uuids_in_scope(api_key: ApiKeyUser, uuids: List[str]) -> set:
+    """Какие из uuid юзеров ключу можно трогать; без ограничений — все."""
+    if not api_key.restricts_users:
+        return set(uuids)
+    from shared.database import db_service
+    scope_sql, scope_args = api_key.user_scope_condition(2)
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT uuid::text AS uuid FROM users WHERE uuid::text = ANY($1::text[]) AND {scope_sql}",
+            list(uuids), *scope_args,
+        )
+    return {r["uuid"] for r in rows}
+
+
+async def _ensure_user_in_scope(api_key: ApiKeyUser, uuid: str) -> None:
+    """Юзер вне пределов ключа — 404, как будто его нет."""
+    if api_key.restricts_users and uuid not in await _uuids_in_scope(api_key, [uuid]):
+        raise _not_found("User")
+
+
 @router.get("/users", response_model=List[UserPublic])
 async def list_users(
     limit: int = Query(100, ge=1, le=500),
@@ -294,6 +314,12 @@ async def list_users(
             f"OR uuid::text LIKE ${idx})"
         )
         args.append(f"%{search}%")
+
+    scope_sql, scope_args = api_key.user_scope_condition(idx + 1)
+    if scope_sql:
+        conditions.append(scope_sql)
+        args.extend(scope_args)
+        idx += len(scope_args)
 
     where = " AND ".join(conditions) if conditions else "TRUE"
     idx += 1
@@ -328,12 +354,13 @@ async def get_user(
     if not db_service.is_connected:
         raise _service_unavailable()
 
+    scope_sql, scope_args = api_key.user_scope_condition(2)
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT uuid, username, status, traffic_limit_bytes, "
             f"used_traffic_bytes, expire_at, {_SUB_COLUMNS}, {_ONLINE_COLUMN} "
-            "FROM users WHERE uuid = $1",
-            uuid,
+            f"FROM users WHERE uuid = $1{' AND ' + scope_sql if scope_sql else ''}",
+            uuid, *scope_args,
         )
     if not row:
         raise _not_found("User")
@@ -354,6 +381,16 @@ async def create_user(
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Create a new user via Remnawave Panel API."""
+    if api_key.restricts_users:
+        # Ключ с ограничением создаёт юзеров только в своих сквадах/теге
+        if api_key.user_squads:
+            squads = body.active_internal_squads or []
+            if not squads or not set(squads) <= set(api_key.user_squads):
+                raise HTTPException(status_code=403, detail="Key may only create users in its squads")
+        if api_key.user_tag:
+            if body.tag not in (None, api_key.user_tag):
+                raise HTTPException(status_code=403, detail="Key may only create users with its tag")
+            body.tag = api_key.user_tag
     try:
         api = _get_api_client()
         result = await api.create_user(
@@ -410,6 +447,7 @@ async def enable_user(
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Enable a user."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.enable_user(await _resolve_user_key(uuid))
@@ -424,6 +462,7 @@ async def disable_user(
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Disable a user."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.disable_user(await _resolve_user_key(uuid))
@@ -438,6 +477,7 @@ async def reset_user_traffic(
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Reset user traffic counter."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.reset_user_traffic(await _resolve_user_key(uuid))
@@ -452,6 +492,7 @@ async def delete_user(
     api_key: ApiKeyUser = Depends(require_scope("users:delete")),
 ):
     """Delete a user."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.delete_user(await _resolve_user_key(uuid))
@@ -849,6 +890,12 @@ async def list_violations(
         conditions.append(f"detected_at <= ${idx}::timestamptz")
         args.append(date_to)
 
+    scope_sql, scope_args = api_key.user_scope_condition(idx + 1, column="user_uuid")
+    if scope_sql:
+        conditions.append(scope_sql)
+        args.extend(scope_args)
+        idx += len(scope_args)
+
     where = " AND ".join(conditions) if conditions else "TRUE"
     idx += 1
     args.append(limit)
@@ -901,6 +948,10 @@ async def violations_summary(
     else:
         args.append(telegram_id)
         conditions.append(f"telegram_id = ${len(args)}")
+    scope_sql, scope_args = api_key.user_scope_condition(len(args) + 1, column="user_uuid")
+    if scope_sql:
+        conditions.append(scope_sql)
+        args.extend(scope_args)
 
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
@@ -990,6 +1041,8 @@ async def get_violation(
         )
     if not row:
         raise _not_found("Violation")
+    if api_key.restricts_users and str(row["user_uuid"]) not in await _uuids_in_scope(api_key, [str(row["user_uuid"])]):
+        raise _not_found("Violation")
 
     return ViolationDetailPublic(**_violation_row_to_dict(row))
 
@@ -1006,7 +1059,12 @@ async def bulk_enable_users(
     """Enable multiple users at once."""
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.enable_user(await _resolve_user_key(uuid))
             success += 1
@@ -1024,7 +1082,12 @@ async def bulk_disable_users(
     """Disable multiple users at once."""
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.disable_user(await _resolve_user_key(uuid))
             success += 1
@@ -1045,7 +1108,12 @@ async def bulk_delete_users(
         raise HTTPException(status_code=403, detail="Missing scope: users:delete")
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.delete_user(await _resolve_user_key(uuid))
             success += 1
@@ -1063,7 +1131,12 @@ async def bulk_reset_traffic(
     """Reset traffic for multiple users at once."""
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.reset_user_traffic(await _resolve_user_key(uuid))
             success += 1

@@ -64,6 +64,12 @@ def _ip_is_blocked(addr) -> bool:
     return any(addr in net for net in _PRIVATE_NETWORKS)
 
 
+async def check_url_safety_async(url: str) -> Tuple[bool, Optional[str]]:
+    """То же в потоке: getaddrinfo блокирует, и на медленном DNS внутри
+    асинхронного кода вставал весь воркер."""
+    return await asyncio.to_thread(check_url_safety, url)
+
+
 def check_url_safety(url: str) -> Tuple[bool, Optional[str]]:
     """Validate a webhook URL. Returns (ok, error_message)."""
     if not url:
@@ -135,8 +141,12 @@ async def _log_delivery(
     response_body: Optional[str],
     error: Optional[str],
     duration_ms: int,
+    payload: Optional[dict] = None,
 ) -> None:
-    """Persist a delivery attempt. Best-effort — never raises."""
+    """Persist a delivery attempt. Best-effort — never raises.
+
+    Тело события хранится, чтобы доставку можно было повторить вручную.
+    """
     try:
         from shared.database import db_service
         if not db_service.is_connected:
@@ -144,11 +154,12 @@ async def _log_delivery(
         async with db_service.acquire() as conn:
             await conn.execute(
                 insert_sql(WEBHOOK_DELIVERIES_TABLE,
-                    ["webhook_id", "event", "status_code", "response_body", "error", "duration_ms"]),
+                    ["webhook_id", "event", "status_code", "response_body", "error", "duration_ms", "payload"]),
                 webhook_id, event, status_code,
                 (response_body[:5000] if response_body else None),
                 (error[:500] if error else None),
                 duration_ms,
+                (json.dumps(payload, default=str) if payload is not None else None),
             )
             await conn.execute(
                 f"DELETE FROM {WEBHOOK_DELIVERIES_TABLE} WHERE webhook_id = $1 "
@@ -230,7 +241,7 @@ async def deliver_once(
     """Execute one HTTP attempt. Returns (success, status_code, response_body, error, duration_ms)."""
     # SSRF-ревалидация прямо перед доставкой: ловит DNS-rebind, когда URL был
     # безопасен при создании, а к моменту отправки резолвится в приватный адрес.
-    ok, reason = check_url_safety(url)
+    ok, reason = await asyncio.to_thread(check_url_safety, url)
     if not ok:
         logger.warning("Webhook %s blocked by SSRF re-check: %s", webhook_id, reason)
         return (False, 0, None, f"blocked: {reason}", 0)
@@ -260,6 +271,32 @@ async def deliver_once(
 
 # Держим ссылки на fire-and-forget таски, иначе GC может убить их на лету
 _fire_tasks: set = set()
+
+
+_subscribers_cache: dict = {}
+_SUBSCRIBERS_TTL = 60
+
+
+async def has_subscribers(event: str) -> bool:
+    """Есть ли активная подписка на событие — чтобы не считать его впустую."""
+    import time
+    cached = _subscribers_cache.get(event)
+    if cached and time.monotonic() - cached[0] < _SUBSCRIBERS_TTL:
+        return cached[1]
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return False
+        async with db_service.acquire() as conn:
+            found = bool(await conn.fetchval(
+                f"SELECT 1 FROM {WEBHOOK_SUBSCRIPTIONS_TABLE} WHERE is_active = true AND $1 = ANY(events) LIMIT 1",
+                event,
+            ))
+    except Exception as e:
+        logger.debug("has_subscribers(%s) failed: %s", event, e)
+        return False
+    _subscribers_cache[event] = (time.monotonic(), found)
+    return found
 
 
 def fire_event(event: str, payload: dict) -> None:
@@ -316,7 +353,7 @@ async def _attempt_and_handle(
     ok, status_code, response_body, error, elapsed = await deliver_once(
         webhook_id, url, secret, signature_version, event, payload,
     )
-    await _log_delivery(webhook_id, event, status_code, response_body, error, elapsed)
+    await _log_delivery(webhook_id, event, status_code, response_body, error, elapsed, payload)
     if ok:
         await _mark_success(webhook_id)
         return

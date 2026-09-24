@@ -6178,7 +6178,40 @@
     "autoDisabled": "Авто-отключён после серии неудачных попыток",
     "signatureVersion": "Версия подписи",
     "signatureHint": "HMAC-SHA256 от тела запроса, передаётся в заголовке X-Signature",
-    "webhookDescPlaceholder": "Что делает этот вебхук?"
+    "webhookDescPlaceholder": "Что делает этот вебхук?",
+    "limits": {
+      "title": "Ограничения",
+      "ips": "Разрешённые адреса",
+      "ipsHint": "IP или подсеть, по одному в строке. Пусто — с любого адреса.",
+      "squads": "Только юзеры сквадов",
+      "tag": "Только юзеры с тегом",
+      "usersHint": "Ключ видит и меняет только таких юзеров; новых создаёт только в них. Пусто — все юзеры.",
+      "ipsBadge": "IP: {{count}}",
+      "usersBadge": "Часть юзеров"
+    },
+    "requests": {
+      "title": "Запросы ключа",
+      "empty": "Запросов пока не было",
+      "time": "Время",
+      "request": "Запрос",
+      "status": "Код"
+    },
+    "prevValidUntil": "Старый ключ до {{date}}",
+    "rotateGraceDesc": "Будет выдан новый ключ. Сколько ещё принимать старый — чтобы интеграция успела переключиться?",
+    "rotateNow": "Отключить сразу (утечка)",
+    "rotateGraceHours_one": "Ещё {{count}} час",
+    "rotateGraceHours_few": "Ещё {{count}} часа",
+    "rotateGraceHours_many": "Ещё {{count}} часов",
+    "rotateGraceHours_other": "Ещё {{count}} часа",
+    "allEvents": "Все события",
+    "outcome": {
+      "all": "Все ответы",
+      "ok": "Успешные",
+      "failed": "С ошибкой"
+    },
+    "redeliver": "Повторить",
+    "redelivered": "Доставлено повторно ({{status}})",
+    "redeliverFailed": "Повтор не удался: {{error}}"
   },
   "forcePassword": {
     "title": "Смена пароля обязательна",

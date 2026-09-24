@@ -305,6 +305,18 @@ class ViolationReportService:
         # Сохраняем в БД
         if save_to_db:
             report.id = await self._save_report_to_db(report)
+            if report.id:
+                from shared.webhook_outbox import enqueue_event
+                await enqueue_event("report.generated", {
+                    "report_id": report.id,
+                    "report_type": report.report_type.value,
+                    "period_start": report.period_start,
+                    "period_end": report.period_end,
+                    "total_violations": report.total_violations,
+                    "critical_count": report.critical_count,
+                    "unique_users": report.unique_users,
+                    "trend_percent": report.trend_percent,
+                })
 
         logger.info(
             "Generated %s report: %d violations, %d users",

@@ -6180,7 +6180,38 @@
     "autoDisabled": "Auto-disabled after too many failed attempts",
     "signatureVersion": "Signature version",
     "signatureHint": "HMAC-SHA256 over the request body, included in the X-Signature header",
-    "webhookDescPlaceholder": "What does this webhook do?"
+    "webhookDescPlaceholder": "What does this webhook do?",
+    "limits": {
+      "title": "Restrictions",
+      "ips": "Allowed addresses",
+      "ipsHint": "IP or subnet, one per line. Empty — any address.",
+      "squads": "Only users of squads",
+      "tag": "Only users with tag",
+      "usersHint": "The key sees and changes only these users and creates new ones only there. Empty — all users.",
+      "ipsBadge": "IP: {{count}}",
+      "usersBadge": "Some users"
+    },
+    "requests": {
+      "title": "Key requests",
+      "empty": "No requests yet",
+      "time": "Time",
+      "request": "Request",
+      "status": "Status"
+    },
+    "prevValidUntil": "Old key until {{date}}",
+    "rotateGraceDesc": "A new key will be issued. How long should the old one keep working so the integration can switch over?",
+    "rotateNow": "Disable right away (leak)",
+    "rotateGraceHours_one": "{{count}} more hour",
+    "rotateGraceHours_other": "{{count}} more hours",
+    "allEvents": "All events",
+    "outcome": {
+      "all": "All responses",
+      "ok": "Successful",
+      "failed": "Failed"
+    },
+    "redeliver": "Redeliver",
+    "redelivered": "Redelivered ({{status}})",
+    "redeliverFailed": "Redelivery failed: {{error}}"
   },
   "forcePassword": {
     "title": "Password change required",

@@ -154,6 +154,7 @@ class AutomationEngine:
         # Первый проход после старта только запоминает, кто уже за лимитом:
         # иначе рестарт заново рассылает событие по всем превысившим
         self._traffic_seeded = False
+        self._expired_checked_at: Optional[datetime] = None
         # Dedup for threshold rules: (rule_id, target_id) -> (value, timestamp)
         self._threshold_notified: Dict[tuple, Tuple[float, datetime]] = {}
         # Прошлая проверка расписаний — чтобы не перескакивать минуты
@@ -805,7 +806,7 @@ class AutomationEngine:
     async def _detect_events(self):
         """Single pass of event detection."""
         from web.backend.core.api_helper import fetch_nodes_from_api
-        from web.backend.core.automation import get_enabled_event_rules, users_over_traffic
+        from web.backend.core.automation import get_enabled_event_rules, users_expired_between, users_over_traffic
 
         # ── Detect node offline transitions ───────────────
         try:
@@ -863,7 +864,10 @@ class AutomationEngine:
 
         # ── Detect user traffic exceeded ──────────────────
         try:
-            if await get_enabled_event_rules("user.traffic_exceeded"):
+            from web.backend.core.webhook_security import fire_event, has_subscribers
+            want_rules = bool(await get_enabled_event_rules("user.traffic_exceeded"))
+            want_hook = await has_subscribers("user.traffic_exceeded")
+            if want_rules or want_hook:
                 current_exceeded: set = set()
                 for user in await users_over_traffic(100):
                     uuid = user["uuid"]
@@ -872,7 +876,7 @@ class AutomationEngine:
                         continue
                     limit = user["traffic_limit_bytes"]
                     used = user["used_traffic_bytes"]
-                    await self.handle_event("user.traffic_exceeded", {
+                    payload = {
                         "user_uuid": uuid,
                         "uuid": uuid,
                         "username": user.get("username") or "",
@@ -883,11 +887,43 @@ class AutomationEngine:
                         "days_left": _days_left(user.get("expire_at")),
                         "tag": user.get("tag") or "",
                         "squads": user.get("squads") or "",
-                    })
+                    }
+                    if want_rules:
+                        await self.handle_event("user.traffic_exceeded", payload)
+                    if want_hook:
+                        fire_event("user.traffic_exceeded", payload)
                 self._user_traffic_exceeded = current_exceeded
                 self._traffic_seeded = True
         except Exception as e:
             logger.warning("User traffic event detection error: %s", e)
+
+        # ── Detect subscription expired ───────────────────
+        # Истёкшие с прошлого прохода; первый проход только ставит отметку,
+        # чтобы после рестарта не выстрелить всеми давно истёкшими
+        try:
+            now = datetime.now(timezone.utc)
+            since = self._expired_checked_at
+            self._expired_checked_at = now
+            if since is not None:
+                from web.backend.core.webhook_security import fire_event, has_subscribers
+                want_rules = bool(await get_enabled_event_rules("user.expired"))
+                want_hook = await has_subscribers("user.expired")
+                if want_rules or want_hook:
+                    for user in await users_expired_between(since, now):
+                        payload = {
+                            "user_uuid": user["uuid"],
+                            "uuid": user["uuid"],
+                            "username": user.get("username") or "",
+                            "expire_at": user["expire_at"].isoformat() if user.get("expire_at") else None,
+                            "tag": user.get("tag") or "",
+                            "squads": user.get("squads") or "",
+                        }
+                        if want_rules:
+                            await self.handle_event("user.expired", payload)
+                        if want_hook:
+                            fire_event("user.expired", payload)
+        except Exception as e:
+            logger.warning("User expired event detection error: %s", e)
 
     # ── Condition evaluation ─────────────────────────────────
 

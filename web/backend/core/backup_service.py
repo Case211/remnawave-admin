@@ -62,6 +62,7 @@ async def create_database_backup(database_url: str) -> dict:
 
         if proc.returncode != 0:
             partial.unlink(missing_ok=True)
+            _fire_backup_failed("database", stderr.decode(errors="replace"))
             raise RuntimeError(f"pg_dump failed: {stderr.decode()}")
 
         partial.replace(filepath)
@@ -80,7 +81,13 @@ async def create_database_backup(database_url: str) -> dict:
             "backup_type": "database",
         }
     except FileNotFoundError:
+        _fire_backup_failed("database", "pg_dump not found")
         raise RuntimeError("pg_dump not found. Ensure PostgreSQL client tools are installed.")
+
+
+def _fire_backup_failed(backup_type: str, error: str) -> None:
+    from web.backend.core.webhook_security import fire_event
+    fire_event("backup.failed", {"backup_type": backup_type, "error": (error or "")[:500]})
 
 
 async def restore_database_backup(database_url: str, filename: str) -> None:
@@ -181,6 +188,7 @@ async def export_config() -> dict:
         }
     except Exception as e:
         logger.error("Failed to export config: %s", e, exc_info=True)
+        _fire_backup_failed("config", str(e))
         raise
 
 

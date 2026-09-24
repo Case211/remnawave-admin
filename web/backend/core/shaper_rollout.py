@@ -331,7 +331,17 @@ async def handle_penalties(node_uuid: str, events) -> int:
             f"WHERE created_at < NOW() - INTERVAL '{PENALTY_RETENTION_DAYS} days'"
         )
 
+    from web.backend.core.webhook_security import fire_event
     for row_id, ev, user_list in stored:
+        fire_event("node.shaper_penalty", {
+            "node_uuid": node_uuid,
+            "node_name": node_name,
+            "ip": ev["ip"],
+            "started_at": ev["started_at"],
+            "until": ev["until"],
+            "bytes": ev["bytes"],
+            "users": user_list,
+        })
         try:
             await _notify_penalty(node_uuid, node_name, settings_row, row_id, ev, user_list)
         except Exception as e:

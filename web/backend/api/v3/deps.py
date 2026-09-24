@@ -1,7 +1,7 @@
 """Dependencies for public API v3 — API key authentication and rate limiting."""
 import logging
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional, Tuple
 
 from fastapi import HTTPException, Request, status
 
@@ -14,9 +14,38 @@ class ApiKeyUser:
     key_id: int
     key_name: str
     scopes: List[str] = field(default_factory=list)
+    # Ограничение по юзерам: только эти сквады и/или тег; пусто — все юзеры
+    user_squads: List[str] = field(default_factory=list)
+    user_tag: Optional[str] = None
 
     def has_scope(self, scope: str) -> bool:
         return scope in self.scopes
+
+    @property
+    def restricts_users(self) -> bool:
+        return bool(self.user_squads or self.user_tag)
+
+    def user_scope_condition(self, next_idx: int, column: str = "uuid") -> Tuple[str, list]:
+        """SQL-условие «юзер в пределах ключа» с аргументами, начиная с $next_idx.
+
+        Пустая строка — ключ не ограничен. column — поле с uuid юзера в
+        основном запросе (у нарушений это user_uuid).
+        """
+        if not self.restricts_users:
+            return "", []
+        parts, args = [], []
+        if self.user_squads:
+            parts.append(
+                "EXISTS (SELECT 1 FROM jsonb_array_elements("
+                "COALESCE(su.raw_data::jsonb->'activeInternalSquads', '[]'::jsonb)) s "
+                f"WHERE s->>'uuid' = ANY(${next_idx}::text[]))"
+            )
+            args.append(self.user_squads)
+            next_idx += 1
+        if self.user_tag:
+            parts.append(f"su.raw_data::jsonb->>'tag' = ${next_idx}")
+            args.append(self.user_tag)
+        return f"{column} IN (SELECT su.uuid FROM users su WHERE {' AND '.join(parts)})", args
 
 
 async def require_api_key(request: Request) -> ApiKeyUser:
@@ -29,7 +58,8 @@ async def require_api_key(request: Request) -> ApiKeyUser:
         )
 
     from web.backend.core.api_key_auth import validate_api_key
-    key_data = await validate_api_key(raw_key)
+    from web.backend.api.deps import get_client_ip
+    key_data = await validate_api_key(raw_key, get_client_ip(request))
     if not key_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,6 +70,8 @@ async def require_api_key(request: Request) -> ApiKeyUser:
         key_id=key_data["id"],
         key_name=key_data["name"],
         scopes=key_data["scopes"],
+        user_squads=key_data.get("user_squads") or [],
+        user_tag=key_data.get("user_tag"),
     )
     # Stash on request.state so rate-limit keyfunc can read it without re-auth.
     request.state.api_key_user = user
