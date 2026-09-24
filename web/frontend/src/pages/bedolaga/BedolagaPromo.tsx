@@ -309,13 +309,19 @@ export default function BedolagaPromo() {
                           {promo.is_active ? t('bedolaga.promo.active') : t('bedolaga.promo.inactive')}
                         </Badge>
                       </div>
-                      {promo.type && <p className="text-xs text-dark-400 mt-0.5">{promo.type}</p>}
+                      {promo.type && <p className="text-xs text-dark-400 mt-0.5">{t(`bedolaga.promo.types.${promo.type}`, { defaultValue: promo.type })}</p>}
                     </td>
                     <td className="p-3 hidden sm:table-cell text-xs">
-                      {promo.balance_bonus_kopeks ? formatRubles(promo.balance_bonus_kopeks) : '—'}
+                      {promo.balance_bonus_kopeks
+                        ? promo.type === 'discount' ? `−${promo.balance_bonus_kopeks}%` : formatRubles(promo.balance_bonus_kopeks)
+                        : '—'}
                     </td>
                     <td className="p-3 hidden md:table-cell text-xs">
-                      {promo.subscription_days ? `+${promo.subscription_days} ${t('bedolaga.promo.days')}` : '—'}
+                      {promo.subscription_days
+                        ? promo.type === 'discount'
+                          ? t('bedolaga.promo.discountFor', { hours: promo.subscription_days })
+                          : `+${promo.subscription_days} ${t('bedolaga.promo.days')}`
+                        : '—'}
                     </td>
                     <td className="p-3 text-center hidden lg:table-cell">
                       <span className="font-medium">{promo.current_uses ?? 0}</span>
@@ -392,21 +398,26 @@ export default function BedolagaPromo() {
                 <option value="subscription_days">{t('bedolaga.promo.typeSubscription')}</option>
                 <option value="balance_and_days">{t('bedolaga.promo.typeMixed')}</option>
                 <option value="trial_subscription">{t('bedolaga.promo.typeTrial')}</option>
+                <option value="discount">{t('bedolaga.promo.typeDiscount')}</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.balanceBonus')}</label>
+                <label className="block text-xs text-dark-200 mb-1">
+                  {form.type === 'discount' ? t('bedolaga.promo.discountPercent') : t('bedolaga.promo.balanceBonus')}
+                </label>
                 <input
-                  type="number" min="0"
+                  type="number" min="0" max={form.type === 'discount' ? 100 : undefined}
                   value={form.balance_bonus_kopeks}
                   onChange={(e) => setForm({ ...form, balance_bonus_kopeks: e.target.value })}
-                  placeholder={t('bedolaga.promo.inKopeks')}
+                  placeholder={form.type === 'discount' ? '1–100' : t('bedolaga.promo.inKopeks')}
                   className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
               <div>
-                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.bonusDays')}</label>
+                <label className="block text-xs text-dark-200 mb-1">
+                  {form.type === 'discount' ? t('bedolaga.promo.discountHours') : t('bedolaga.promo.bonusDays')}
+                </label>
                 <input
                   type="number" min="0"
                   value={form.subscription_days}

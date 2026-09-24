@@ -286,9 +286,6 @@ class BedolagaClient:
         params.update({k: v for k, v in filters.items() if v is not None})
         return await self._get("/campaigns", params=params)
 
-    async def get_campaign(self, campaign_id: int) -> dict:
-        return await self._get(f"/campaigns/{campaign_id}")
-
     async def create_campaign(self, data: dict) -> dict:
         return await self._post("/campaigns", json=data)
 

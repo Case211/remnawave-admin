@@ -6342,7 +6342,12 @@
           "miniapp_action": "Mini app action"
         }
       },
-      "devicesResetAmbiguous": "Could not match exactly one panel user by Telegram ID — reset devices on the user page"
+      "devicesResetAmbiguous": "Could not match exactly one panel user by Telegram ID — reset devices on the user page",
+      "addTraffic": "Add traffic",
+      "addDevices": "Add devices",
+      "addAmount": "Amount to add",
+      "trafficAdded": "Traffic added",
+      "devicesAdded": "Device limit increased"
     },
     "trial": "Trial",
     "conversions": "Conversions",
@@ -6403,7 +6408,7 @@
       "inactive": "Inactive",
       "create": "New promo code",
       "edit": "Edit promo code",
-      "discountPercent": "Discount (%)",
+      "discountPercent": "Discount, %",
       "discountAmount": "Discount (fixed)",
       "inKopeks": "in kopeks",
       "bonusDays": "Bonus days",
@@ -6437,7 +6442,18 @@
       "typeSubscription": "Subscription",
       "typeMixed": "Mixed",
       "balanceBonus": "Bonus (kopeks)",
-      "typeTrial": "Trial subscription"
+      "typeTrial": "Trial subscription",
+      "typeDiscount": "Discount",
+      "discountHours": "Valid for, hours",
+      "discountFor": "for {{hours}} h",
+      "types": {
+        "balance": "Balance",
+        "subscription_days": "Subscription days",
+        "balance_and_days": "Balance and days",
+        "trial_subscription": "Trial subscription",
+        "discount": "Discount",
+        "promo_group": "Promo group"
+      }
     },
     "marketing": {
       "title": "Marketing",
@@ -6500,9 +6516,22 @@
       "targetTrial": "Trial",
       "targetNoSub": "No subscription",
       "targetExpired": "Expired",
-      "targetExpiring": "Expiring"
+      "targetExpiring": "Expiring",
+      "startParameter": "Start parameter (deep link)",
+      "tariffId": "Tariff ID",
+      "tariffDays": "Tariff period, days",
+      "tariffIdHint": "ID from the Bedolaga cabinet; suggestions come from other campaigns",
+      "bonusTypes": {
+        "balance": "Balance",
+        "subscription": "Subscription",
+        "tariff": "Tariff",
+        "none": "—"
+      }
     },
-    "tg": "TG"
+    "tg": "TG",
+    "capabilities": {
+      "noActivity": "Bot v{{version}} does not provide the customer activity feed, so that section is hidden in the customer card. It appears after the bot is updated."
+    }
   },
   "notFound": {
     "title": "Page Not Found",
@@ -7394,7 +7423,30 @@
     },
     "snoozeLabel": "Snooze",
     "snoozeHint": "Take it out of the queue and bring it back in {{time}}",
-    "snoozedUntil": "Snoozed until {{time}}"
+    "snoozedUntil": "Snoozed until {{time}}",
+    "macros": {
+      "button": "Templates",
+      "title": "Reply templates",
+      "description": "Insert with “/” in the reply box. Placeholders are filled from the customer card.",
+      "name": "Name",
+      "shortcut": "Shortcut",
+      "body": "Text",
+      "setStatus": "After reply",
+      "keepStatus": "Keep status",
+      "add": "New template",
+      "empty": "No templates yet",
+      "saved": "Template saved",
+      "deleteTitle": "Delete template?",
+      "deleteDescription": "Template “{{title}}” will disappear for all operators.",
+      "placeholders": {
+        "name": "Customer name",
+        "ticket": "Ticket number",
+        "expires": "Subscription end date",
+        "days_left": "Days left",
+        "balance": "Balance",
+        "devices": "Device limit"
+      }
+    }
   },
   "asn": {
     "types": {

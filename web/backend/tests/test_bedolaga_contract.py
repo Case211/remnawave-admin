@@ -123,3 +123,34 @@ def test_campaign_keeps_bonus_fields():
 def test_campaign_requires_start_parameter():
     with pytest.raises(ValidationError):
         marketing.CampaignCreateRequest(name="Осень")
+
+
+@pytest.mark.parametrize("url,expected", [
+    ("https://sub.example.com/AbC123", "AbC123"),
+    ("https://sub.example.com/api/sub/AbC123/", "AbC123"),
+    ("https://sub.example.com/AbC123?client=clash", "AbC123"),
+    (None, None),
+    ("", None),
+])
+def test_short_uuid_from_subscription_url(url, expected):
+    assert customers._short_uuid_from_url(url) == expected
+
+
+def test_tariff_campaign_needs_tariff():
+    with pytest.raises(ValidationError):
+        marketing.CampaignCreateRequest(name="A", start_parameter="a", bonus_type="tariff")
+    ok = marketing.CampaignCreateRequest(name="A", start_parameter="a", bonus_type="tariff", tariff_id=3, tariff_duration_days=30)
+    assert ok.tariff_id == 3
+
+
+def test_discount_promo_percent_bounds():
+    assert promo.PromoCreateRequest(code="X", type="discount", balance_bonus_kopeks=15, subscription_days=24).type == "discount"
+    with pytest.raises(ValidationError):
+        promo.PromoCreateRequest(code="X", type="discount", balance_bonus_kopeks=150)
+
+
+def test_dead_campaign_detail_route_removed():
+    """У Бедолаги нет GET /campaigns/{id} — ручка всегда отвечала 404."""
+    assert not any(
+        route.path == "/campaigns/{campaign_id}" and "GET" in route.methods for route in marketing.router.routes
+    )

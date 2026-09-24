@@ -6340,7 +6340,12 @@
           "miniapp_action": "Действие в мини-аппе"
         }
       },
-      "devicesResetAmbiguous": "Не удалось однозначно найти юзера панели по Telegram ID — сбросьте устройства на странице юзера"
+      "devicesResetAmbiguous": "Не удалось однозначно найти юзера панели по Telegram ID — сбросьте устройства на странице юзера",
+      "addTraffic": "Добавить трафик",
+      "addDevices": "Добавить устройства",
+      "addAmount": "Сколько добавить",
+      "trafficAdded": "Трафик добавлен",
+      "devicesAdded": "Лимит устройств увеличен"
     },
     "trial": "Пробных",
     "conversions": "Конверсий",
@@ -6401,7 +6406,7 @@
       "inactive": "Неактивен",
       "create": "Новый промокод",
       "edit": "Редактировать промокод",
-      "discountPercent": "Скидка (%)",
+      "discountPercent": "Скидка, %",
       "discountAmount": "Скидка (фикс.)",
       "inKopeks": "в копейках",
       "bonusDays": "Бонус дней",
@@ -6435,7 +6440,18 @@
       "typeSubscription": "Подписка",
       "typeMixed": "Смешанный",
       "balanceBonus": "Бонус (копейки)",
-      "typeTrial": "Пробная подписка"
+      "typeTrial": "Пробная подписка",
+      "typeDiscount": "Скидка",
+      "discountHours": "Действует, часов",
+      "discountFor": "на {{hours}} ч",
+      "types": {
+        "balance": "Баланс",
+        "subscription_days": "Дни подписки",
+        "balance_and_days": "Баланс и дни",
+        "trial_subscription": "Пробная подписка",
+        "discount": "Скидка",
+        "promo_group": "Промогруппа"
+      }
     },
     "marketing": {
       "title": "Маркетинг",
@@ -6498,9 +6514,22 @@
       "targetTrial": "Триал",
       "targetNoSub": "Без подписки",
       "targetExpired": "Истёкшие",
-      "targetExpiring": "Истекающие"
+      "targetExpiring": "Истекающие",
+      "startParameter": "Параметр запуска (диплинк)",
+      "tariffId": "ID тарифа",
+      "tariffDays": "Срок тарифа, дней",
+      "tariffIdHint": "ID из кабинета Бедолаги; в подсказках — тарифы из других кампаний",
+      "bonusTypes": {
+        "balance": "Баланс",
+        "subscription": "Подписка",
+        "tariff": "Тариф",
+        "none": "—"
+      }
     },
-    "tg": "TG"
+    "tg": "TG",
+    "capabilities": {
+      "noActivity": "Бот v{{version}} не отдаёт ленту активности клиента — в карточке клиента этот раздел скрыт. Появится после обновления бота."
+    }
   },
   "notFound": {
     "title": "Страница не найдена",
@@ -7393,7 +7422,30 @@
     },
     "snoozeLabel": "Отложить",
     "snoozeHint": "Убрать из очереди и вернуть через {{time}}",
-    "snoozedUntil": "Отложено до {{time}}"
+    "snoozedUntil": "Отложено до {{time}}",
+    "macros": {
+      "button": "Шаблоны",
+      "title": "Шаблоны ответов",
+      "description": "Вставляются по «/» в поле ответа. Подстановки заполняются из карточки клиента.",
+      "name": "Название",
+      "shortcut": "Сокращение",
+      "body": "Текст",
+      "setStatus": "После ответа",
+      "keepStatus": "Статус не менять",
+      "add": "Новый шаблон",
+      "empty": "Шаблонов пока нет",
+      "saved": "Шаблон сохранён",
+      "deleteTitle": "Удалить шаблон?",
+      "deleteDescription": "Шаблон «{{title}}» пропадёт у всех операторов.",
+      "placeholders": {
+        "name": "Имя клиента",
+        "ticket": "Номер обращения",
+        "expires": "Дата окончания подписки",
+        "days_left": "Сколько дней осталось",
+        "balance": "Баланс",
+        "devices": "Лимит устройств"
+      }
+    }
   },
   "asn": {
     "types": {

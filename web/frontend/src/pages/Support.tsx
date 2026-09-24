@@ -36,6 +36,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
+import { MacroManager } from '@/components/support/MacroManager'
 import client from '@/api/client'
 import { getDisplayTimeZone, toZonedDate } from '@/lib/timezone'
 
@@ -182,10 +183,11 @@ function moment(iso: string | null, now: number): string {
 }
 
 export default function Support() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const canReply = useHasPermission('bedolaga_support', 'create')
   const canEdit = useHasPermission('bedolaga_support', 'edit')
+  const [macrosOpen, setMacrosOpen] = useState(false)
 
   // Очередь берём из адреса: так на неё можно сослаться из палитры и из
   // уведомления об SLA.
@@ -642,11 +644,21 @@ export default function Support() {
     replyMutation.mutate({ text, close })
   }
 
-  /** Подстановки шаблона берём из карточки — руками их набирать бессмысленно. */
+  /** Подстановки шаблона берём из карточки — руками их набирать бессмысленно.
+   *  Чего в карточке нет (подписки, баланса), подставляется прочерк. */
   const applyMacro = (macro: SupportMacro) => {
-    const filled = macro.body
-      .replace(/\{\{\s*name\s*\}\}/g, ticket?.customer_name || t('support.client'))
-      .replace(/\{\{\s*ticket\s*\}\}/g, String(ticket?.id ?? ''))
+    const sub = customer?.subscription
+    const endDate = sub?.end_date ? new Date(sub.end_date) : null
+    const daysLeft = endDate ? Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / 86_400_000)) : null
+    const values: Record<string, string> = {
+      name: ticket?.customer_name || t('support.client'),
+      ticket: String(ticket?.id ?? ''),
+      expires: endDate ? endDate.toLocaleDateString(i18n.language, { timeZone: getDisplayTimeZone() }) : '\u2014',
+      days_left: daysLeft != null ? String(daysLeft) : '\u2014',
+      balance: customer?.balance_rubles != null ? `${customer.balance_rubles} \u20bd` : '\u2014',
+      devices: sub?.device_limit != null ? String(sub.device_limit) : '\u2014',
+    }
+    const filled = macro.body.replace(/\{\{\s*(\w+)\s*\}\}/g, (all, key: string) => values[key] ?? all)
     setDraft(filled)
     setPendingMacro(macro)
     draftRef.current?.focus()
@@ -875,6 +887,12 @@ export default function Support() {
               }
             >
               {t('support.notify.enable')}
+            </Button>
+          )}
+
+          {canEdit && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMacrosOpen(true)}>
+              {t('support.macros.button')}
             </Button>
           )}
 
@@ -1838,6 +1856,7 @@ export default function Support() {
           </div>
         </div>
       )}
+      <MacroManager open={macrosOpen} onOpenChange={setMacrosOpen} macros={macros} />
     </PermissionGate>
   )
 }

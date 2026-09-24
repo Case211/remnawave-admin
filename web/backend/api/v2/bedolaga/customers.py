@@ -22,6 +22,19 @@ _list_cache: dict = {}
 _LIST_CACHE_TTL = 60
 
 
+def _invalidate_list() -> None:
+    """После правки клиента список не должен показывать старое до конца TTL."""
+    _list_cache.clear()
+
+
+def _short_uuid_from_url(url: Optional[str]) -> Optional[str]:
+    """Последний сегмент ссылки подписки — short_uuid юзера панели."""
+    if not url:
+        return None
+    tail = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+    return tail or None
+
+
 # ── Schemas ──
 
 class BalanceModifyRequest(BaseModel):
@@ -204,6 +217,7 @@ async def extend_subscription(
 ):
     """Продлить подписку на N дней."""
     result = await proxy_request(lambda: bedolaga_client.extend_subscription(sub_id, data.model_dump()))
+    _invalidate_list()
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.extend", resource="bedolaga_customers",
@@ -223,6 +237,7 @@ async def add_traffic(
     """Добавить трафик к подписке."""
     # Bedolaga ждёт {"gb": N}: с {"traffic_gb"} запрос всегда получал 422
     result = await proxy_request(lambda: bedolaga_client.add_traffic(sub_id, {"gb": data.traffic_gb}))
+    _invalidate_list()
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.traffic", resource="bedolaga_customers",
@@ -242,6 +257,7 @@ async def add_devices(
     """Увеличить лимит устройств подписки."""
     # Bedolaga ждёт {"devices": N}: с {"count"} запрос всегда получал 422
     result = await proxy_request(lambda: bedolaga_client.add_devices(sub_id, {"devices": data.count}))
+    _invalidate_list()
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.devices", resource="bedolaga_customers",
@@ -260,21 +276,32 @@ async def reset_devices(
     """Сбросить устройства подписки — в панели.
 
     У Bedolaga такого эндпоинта нет (запрос всегда получал 404). Устройства
-    хранит панель, поэтому сбрасываем там: юзера панели находим по Telegram ID
-    владельца подписки. Если у него несколько подписок — какую сбрасывать,
-    не угадать, и мы честно отказываем.
+    хранит панель, поэтому сбрасываем там. Юзера панели находим по short_uuid
+    из ссылки подписки, а если её нет — по Telegram ID владельца; когда по
+    Telegram ID находится несколько юзеров, какого сбрасывать — не угадать,
+    и мы честно отказываем.
     """
     sub = await proxy_request(lambda: bedolaga_client.get_subscription(sub_id))
-    owner_id = (sub or {}).get("user_id")
-    owner = await proxy_request(lambda: bedolaga_client.get_user(owner_id)) if owner_id else {}
-    telegram_id = (owner or {}).get("telegram_id")
-    if not telegram_id:
-        raise HTTPException(status_code=409, detail="Subscription owner has no Telegram ID")
     from shared.database import db_service
-    async with db_service.acquire() as conn:
-        panel_users = await conn.fetch(
-            "SELECT uuid::text AS uuid, id FROM users WHERE telegram_id = $1", int(telegram_id),
-        )
+    # Точно — по short_uuid из ссылки подписки; иначе по Telegram ID владельца
+    panel_users = []
+    short_uuid = _short_uuid_from_url((sub or {}).get("subscription_url"))
+    if short_uuid:
+        async with db_service.acquire() as conn:
+            panel_users = await conn.fetch(
+                "SELECT uuid::text AS uuid FROM users WHERE short_uuid = $1", short_uuid,
+            )
+    telegram_id = None
+    if len(panel_users) != 1:
+        owner_id = (sub or {}).get("user_id")
+        owner = await proxy_request(lambda: bedolaga_client.get_user(owner_id)) if owner_id else {}
+        telegram_id = (owner or {}).get("telegram_id")
+        if not telegram_id:
+            raise HTTPException(status_code=409, detail="Subscription owner has no Telegram ID")
+        async with db_service.acquire() as conn:
+            panel_users = await conn.fetch(
+                "SELECT uuid::text AS uuid FROM users WHERE telegram_id = $1", int(telegram_id),
+            )
     if len(panel_users) != 1:
         raise HTTPException(
             status_code=409,
@@ -334,6 +361,7 @@ async def update_user(
     if not body:
         raise HTTPException(status_code=400, detail="Nothing to update")
     result = await proxy_request(lambda: bedolaga_client.update_user(user_id, body))
+    _invalidate_list()
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.user.update", resource="bedolaga_customers",
@@ -359,6 +387,7 @@ async def modify_balance(
     if data.reason:
         payload["description"] = data.reason
     result = await proxy_request(lambda: bedolaga_client.modify_balance(user_id, payload))
+    _invalidate_list()
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.user.balance", resource="bedolaga_customers",
@@ -378,6 +407,7 @@ async def create_subscription(
 ):
     """Создать/заменить подписку клиента."""
     result = await proxy_request(lambda: bedolaga_client.create_subscription(user_id, data.model_dump()))
+    _invalidate_list()
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.create", resource="bedolaga_customers",
@@ -395,6 +425,7 @@ async def deactivate_subscription(
 ):
     """Деактивировать подписку клиента."""
     result = await proxy_request(lambda: bedolaga_client.deactivate_subscription(user_id))
+    _invalidate_list()
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="bedolaga.subscription.deactivate", resource="bedolaga_customers",

@@ -142,6 +142,9 @@ export default function BedolagaCustomerDetail() {
   const [balanceReason, setBalanceReason] = useState('')
   const [extendDialog, setExtendDialog] = useState(false)
   const [extendDays, setExtendDays] = useState('7')
+  // Добавка к подписке: трафик (ГБ) или устройства
+  const [addDialog, setAddDialog] = useState<'traffic' | 'devices' | null>(null)
+  const [addAmount, setAddAmount] = useState('')
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [editDialog, setEditDialog] = useState(false)
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', username: '' })
@@ -236,6 +239,24 @@ export default function BedolagaCustomerDetail() {
     },
     onError: () => toast.error(t('common.error')),
   })
+
+  const addMutation = useMutation({
+    mutationFn: ({ kind, amount }: { kind: 'traffic' | 'devices'; amount: number }) =>
+      kind === 'traffic'
+        ? client.post(`/bedolaga/customers/subscriptions/${user?.subscription?.id}/traffic`, { traffic_gb: amount })
+        : client.post(`/bedolaga/customers/subscriptions/${user?.subscription?.id}/devices`, { count: amount }),
+    onSuccess: (_, { kind }) => {
+      queryClient.invalidateQueries({ queryKey: ['bedolaga-customer', id] })
+      toast.success(t(kind === 'traffic' ? 'bedolaga.customerDetail.trafficAdded' : 'bedolaga.customerDetail.devicesAdded'))
+      setAddDialog(null)
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const openAddDialog = (kind: 'traffic' | 'devices') => {
+    setAddAmount(kind === 'traffic' ? '50' : '1')
+    setAddDialog(kind)
+  }
 
   const resetDevicesMutation = useMutation({
     mutationFn: () =>
@@ -575,7 +596,19 @@ export default function BedolagaCustomerDetail() {
                   <div>
                     <div className="flex items-center justify-between text-sm mb-1.5">
                       <span className="text-dark-300 flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5" />{t('bedolaga.customerDetail.traffic')}</span>
-                      <span>{trafficUsed.toFixed(1)} / {trafficLimit ?? '∞'} GB</span>
+                      <span className="flex items-center gap-1">
+                        {trafficUsed.toFixed(1)} / {trafficLimit ?? '∞'} GB
+                        {trafficLimit != null && (
+                          <Button
+                            variant="ghost" size="icon" className="h-6 w-6"
+                            aria-label={t('bedolaga.customerDetail.addTraffic')}
+                            title={t('bedolaga.customerDetail.addTraffic')}
+                            onClick={() => openAddDialog('traffic')}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </span>
                     </div>
                     {trafficPercent !== null && (
                       <div className="h-2 w-full rounded-full bg-dark-600 overflow-hidden">
@@ -597,6 +630,14 @@ export default function BedolagaCustomerDetail() {
                     <span className="text-dark-300 flex items-center gap-1.5"><Smartphone className="w-3.5 h-3.5" />{t('bedolaga.customerDetail.devices')}</span>
                     <div className="flex items-center gap-2">
                       <span>{sub.device_count ?? 0} / {sub.device_limit ?? '—'}</span>
+                      <Button
+                        variant="ghost" size="icon" className="h-6 w-6"
+                        aria-label={t('bedolaga.customerDetail.addDevices')}
+                        title={t('bedolaga.customerDetail.addDevices')}
+                        onClick={() => openAddDialog('devices')}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </Button>
                       {sub.device_count > 0 && (
                         <Button
                           variant="ghost" size="sm"
@@ -909,6 +950,48 @@ export default function BedolagaCustomerDetail() {
             <Button variant="secondary" onClick={() => setExtendDialog(false)}>{t('common.cancel')}</Button>
             <Button onClick={handleExtendSubmit} disabled={!extendDays || extendMutation.isPending}>
               {extendMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : t('bedolaga.customerDetail.extend')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add traffic / devices dialog ── */}
+      <Dialog open={addDialog != null} onOpenChange={(open) => { if (!open) setAddDialog(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {t(addDialog === 'traffic' ? 'bedolaga.customerDetail.addTraffic' : 'bedolaga.customerDetail.addDevices')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="flex flex-wrap gap-2">
+              {(addDialog === 'traffic' ? [10, 50, 100, 500] : [1, 2, 3, 5]).map((n) => (
+                <Button
+                  key={n}
+                  variant={addAmount === String(n) ? 'default' : 'secondary'}
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setAddAmount(String(n))}
+                >
+                  +{n}{addDialog === 'traffic' ? ' GB' : ''}
+                </Button>
+              ))}
+            </div>
+            <input
+              type="number" min="1"
+              value={addAmount}
+              onChange={(e) => setAddAmount(e.target.value)}
+              aria-label={t('bedolaga.customerDetail.addAmount')}
+              className="w-full h-10 px-3 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setAddDialog(null)}>{t('common.cancel')}</Button>
+            <Button
+              onClick={() => addDialog && addMutation.mutate({ kind: addDialog, amount: parseInt(addAmount) })}
+              disabled={!(parseInt(addAmount) >= 1) || addMutation.isPending}
+            >
+              {addMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : t('common.add')}
             </Button>
           </DialogFooter>
         </DialogContent>

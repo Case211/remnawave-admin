@@ -4,7 +4,7 @@ import logging
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Path, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from web.backend.api.deps import AdminUser, require_permission, get_client_ip
 from web.backend.core.audit import write_audit_log
@@ -35,6 +35,13 @@ class CampaignCreateRequest(BaseModel):
     tariff_id: Optional[int] = Field(None, ge=1)
     tariff_duration_days: Optional[int] = Field(None, ge=1)
     is_active: bool = True
+
+    @model_validator(mode="after")
+    def _tariff_needs_id(self):
+        # Бонус «тариф» без тарифа Бедолага примет, но клиент ничего не получит
+        if self.bonus_type == "tariff" and not (self.tariff_id and self.tariff_duration_days):
+            raise ValueError("tariff bonus needs tariff_id and tariff_duration_days")
+        return self
 
 
 class CampaignUpdateRequest(BaseModel):
@@ -67,15 +74,6 @@ async def list_campaigns(
     return await proxy_request(lambda: bedolaga_client.list_campaigns(
         limit=limit, offset=offset,
     ))
-
-
-@router.get("/campaigns/{campaign_id}")
-async def get_campaign(
-    campaign_id: int = Path(...),
-    admin: AdminUser = Depends(require_permission("bedolaga_marketing", "view")),
-):
-    """Детали кампании."""
-    return await proxy_request(lambda: bedolaga_client.get_campaign(campaign_id))
 
 
 @router.post("/campaigns")

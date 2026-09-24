@@ -181,6 +181,8 @@ export interface SupportMacro {
   sort_order: number
 }
 
+export type MacroInput = Omit<SupportMacro, 'id'>
+
 export interface SupportTag {
   id: number
   name: string
@@ -205,6 +207,20 @@ export const supportExtraApi = {
   listMacros: async (): Promise<{ items: SupportMacro[] }> => {
     const { data } = await client.get('/support/macros')
     return data
+  },
+
+  createMacro: async (data: MacroInput) => {
+    const { data: macro } = await client.post('/support/macros', data)
+    return macro as SupportMacro
+  },
+
+  updateMacro: async (id: number, data: MacroInput) => {
+    const { data: macro } = await client.put(`/support/macros/${id}`, data)
+    return macro as SupportMacro
+  },
+
+  deleteMacro: async (id: number) => {
+    await client.delete(`/support/macros/${id}`)
   },
 
   listTags: async (): Promise<{ items: SupportTag[] }> => {

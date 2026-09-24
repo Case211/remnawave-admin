@@ -4,7 +4,7 @@ import logging
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Path, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from web.backend.api.deps import AdminUser, require_permission, get_client_ip
 from web.backend.core.audit import write_audit_log
@@ -20,7 +20,15 @@ router = APIRouter()
 
 # Типы промокодов Bedolaga (PromoCodeType). Фронт предлагал «subscription» и
 # «mixed», которых у Bedolaga нет, — такие промокоды не создавались (422).
-PromoType = Literal["balance", "subscription_days", "balance_and_days", "trial_subscription"]
+# «discount» — разовая скидка: процент в balance_bonus_kopeks, срок действия в
+# часах — в subscription_days (так их хранит Бедолага). «promo_group» не
+# поддержан: веб-API Бедолаги не принимает promo_group_id, код вышел бы пустым.
+PromoType = Literal["balance", "subscription_days", "balance_and_days", "trial_subscription", "discount"]
+
+
+def _check_discount(data) -> None:
+    if data.type == "discount" and data.balance_bonus_kopeks is not None and not 1 <= data.balance_bonus_kopeks <= 100:
+        raise ValueError("discount percent must be 1..100")
 
 
 class PromoCreateRequest(BaseModel):
@@ -33,6 +41,11 @@ class PromoCreateRequest(BaseModel):
     valid_from: Optional[str] = None
     valid_until: Optional[str] = None
     is_active: bool = True
+
+    @model_validator(mode="after")
+    def _discount(self):
+        _check_discount(self)
+        return self
 
 
 class PromoUpdateRequest(BaseModel):
