@@ -1,6 +1,8 @@
 """Автоматизации: срабатывание по цели и по падению, cron по часам панели,
 условия во всех типах правил, экранирование и проверка правил."""
 import importlib.util
+import sys
+import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,10 +16,19 @@ from web.backend.schemas.automation import AutomationRuleCreate
 
 
 def _load_migration():
+    """Миграция 0117 ради чистой функции _shift_cron.
+
+    CI ставит только web/backend/requirements.txt, без alembic: папка alembic/
+    репозитория видна тогда пустым пакетом, и `from alembic import op` падает.
+    Функции op не нужен — на время загрузки подставляем заглушку.
+    """
     path = Path(__file__).resolve().parents[3] / "alembic" / "versions" / "20260924_0117_automation_fixes.py"
     spec = importlib.util.spec_from_file_location("m0117", path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    stub = types.ModuleType("alembic")
+    stub.op = MagicMock()
+    with patch.dict(sys.modules, {"alembic": stub}):
+        spec.loader.exec_module(module)
     return module
 
 
