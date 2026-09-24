@@ -13,11 +13,18 @@ export interface AutomationRule {
   conditions: Record<string, unknown>[]
   action_type: string
   action_config: Record<string, unknown>
+  extra_actions: ExtraAction[]
   last_triggered_at: string | null
   trigger_count: number
   created_by: number | null
   created_at: string | null
   updated_at: string | null
+}
+
+/** Действие после основного: «уведомить + урезать скорость» */
+export interface ExtraAction {
+  action_type: string
+  action_config: Record<string, unknown>
 }
 
 export interface AutomationRuleCreate {
@@ -30,6 +37,7 @@ export interface AutomationRuleCreate {
   conditions?: Record<string, unknown>[]
   action_type: string
   action_config: Record<string, unknown>
+  extra_actions?: ExtraAction[]
 }
 
 export interface AutomationRuleUpdate {
@@ -42,6 +50,7 @@ export interface AutomationRuleUpdate {
   conditions?: Record<string, unknown>[]
   action_type?: string
   action_config?: Record<string, unknown>
+  extra_actions?: ExtraAction[]
 }
 
 export interface AutomationLogEntry {
@@ -176,6 +185,22 @@ export const automationsApi = {
 
   test: async (id: number): Promise<AutomationTestResult> => {
     const { data } = await client.post(`/automations/${id}/test`)
+    return data
+  },
+
+  /** Правило по расписанию — выполнить сейчас, с настоящим действием */
+  runNow: async (id: number): Promise<{ result: string; details: Record<string, unknown> }> => {
+    const { data } = await client.post(`/automations/${id}/run`)
+    return data
+  },
+
+  exportRules: async (): Promise<{ version: number; rules: Record<string, unknown>[] }> => {
+    const { data } = await client.get('/automations/export')
+    return data
+  },
+
+  importRules: async (rules: Record<string, unknown>[]): Promise<{ created: number; errors: { index: number; name?: string; error: string }[] }> => {
+    const { data } = await client.post('/automations/import', { rules })
     return data
   },
 }

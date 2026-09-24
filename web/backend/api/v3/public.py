@@ -413,10 +413,18 @@ async def create_user(
 
     user = result.get("response", result) if isinstance(result, dict) else {}
     user = user if isinstance(user, dict) else {}
+    user_uuid = await _store_created_user(user)
+    if user_uuid:
+        import asyncio
+        from web.backend.core.automation_engine import engine as automation_engine
+        asyncio.create_task(automation_engine.handle_event("user.created", {
+            "user_uuid": user_uuid, "uuid": user_uuid, "username": body.username,
+            "email": body.email or "", "telegram_id": body.telegram_id, "created_by": f"apikey:{api_key.key_name}",
+        }))
     return UserCreated(
         success=True,
         message=f"User {body.username} created",
-        uuid=await _store_created_user(user),
+        uuid=user_uuid,
         short_uuid=user.get("shortUuid"),
         subscription_url=user.get("subscriptionUrl"),
     )

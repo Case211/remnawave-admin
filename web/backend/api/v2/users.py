@@ -1,4 +1,5 @@
 """Users API endpoints."""
+import asyncio
 import json
 import logging
 import sys
@@ -1142,6 +1143,15 @@ async def create_user(
             "expire_at": expire_at_str,
             "created_by": admin.username,
         })
+        from web.backend.core.automation_engine import engine as automation_engine
+        asyncio.create_task(automation_engine.handle_event("user.created", {
+            "user_uuid": str(user_uuid),
+            "uuid": str(user_uuid),
+            "username": data.username,
+            "email": data.email or "",
+            "telegram_id": data.telegram_id,
+            "created_by": admin.username,
+        }))
 
         return _detail_from_panel(user, user_uuid)
 

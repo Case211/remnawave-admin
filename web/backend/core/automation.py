@@ -236,6 +236,7 @@ async def create_automation_rule(
     action_type: str,
     action_config: dict,
     created_by: Optional[int],
+    extra_actions: Optional[list] = None,
 ) -> Optional[dict]:
     """Create a new automation rule."""
     try:
@@ -244,11 +245,13 @@ async def create_automation_rule(
             row = await conn.fetchrow(
                 insert_sql(AUTOMATION_RULES_TABLE,
                     ["name", "description", "is_enabled", "category", "trigger_type",
-                     "trigger_config", "conditions", "action_type", "action_config", "created_by"],
+                     "trigger_config", "conditions", "action_type", "action_config", "created_by",
+                     "extra_actions"],
                     returning="*"),
                 name, description, is_enabled, category, trigger_type,
                 json.dumps(trigger_config), json.dumps(conditions),
                 action_type, json.dumps(action_config), created_by,
+                json.dumps(extra_actions or []),
             )
             return dict(row) if row else None
     except Exception as e:
@@ -266,7 +269,7 @@ async def update_automation_rule(rule_id: int, **fields) -> Optional[dict]:
         params: list = []
         idx = 1
 
-        json_fields = {"trigger_config", "conditions", "action_config"}
+        json_fields = {"trigger_config", "conditions", "action_config", "extra_actions"}
         for key, value in fields.items():
             # Описание можно очистить; у остальных полей None — «не менять»
             if value is None and key != "description":
@@ -480,13 +483,15 @@ async def count_since(what: str, since) -> int:
         ) or 0)
 
 
-async def schedule_pending_action(rule_id: int, action: str, target: str, run_at) -> None:
+async def schedule_pending_action(rule_id: int, action: str, target: str, run_at,
+                                  payload: Optional[dict] = None) -> None:
     """Отложенное действие: переживает рестарт, выполнит движок."""
     from shared.database import db_service
     async with db_service.acquire() as conn:
         await conn.execute(
-            "INSERT INTO automation_pending_actions (rule_id, action, target, run_at) VALUES ($1, $2, $3, $4)",
-            rule_id, action, target, run_at,
+            "INSERT INTO automation_pending_actions (rule_id, action, target, run_at, payload) "
+            "VALUES ($1, $2, $3, $4, $5::jsonb)",
+            rule_id, action, target, run_at, json.dumps(payload) if payload is not None else None,
         )
 
 
@@ -503,7 +508,7 @@ async def claim_due_actions(limit: int = 50) -> List[dict]:
                 ORDER BY run_at LIMIT $1
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING id, rule_id, action, target
+            RETURNING id, rule_id, action, target, payload
             """,
             limit,
         )

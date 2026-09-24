@@ -341,6 +341,9 @@ export function getEventTypes() {
     { value: 'node.went_offline', label: t('automations.events.node_went_offline'), description: t('automations.events.node_went_offlineDesc') },
     { value: 'user.traffic_exceeded', label: t('automations.events.user_traffic_exceeded'), description: t('automations.events.user_traffic_exceededDesc') },
     { value: 'torrent.detected', label: t('automations.events.torrent_detected'), description: t('automations.events.torrent_detectedDesc') },
+    { value: 'node.online', label: t('automations.events.node_online'), description: t('automations.events.node_onlineDesc') },
+    { value: 'user.created', label: t('automations.events.user_created'), description: t('automations.events.user_createdDesc') },
+    { value: 'user.expired', label: t('automations.events.user_expired'), description: t('automations.events.user_expiredDesc') },
   ] as const
 }
 export const EVENT_TYPES = new Proxy([] as unknown as ReturnType<typeof getEventTypes>, {
@@ -394,6 +397,9 @@ const TRIGGER_FIELDS: Record<string, string[]> = {
   'torrent.detected': ['event_count', 'window_events', 'peers', 'node_name'],
   'node.went_offline': ['offline_minutes', 'users_before', 'country_code', 'node_name'],
   'user.traffic_exceeded': ['percent', 'traffic_gb', 'days_left', 'tag', 'squads'],
+  'node.online': ['downtime_minutes', 'country_code', 'node_name'],
+  'user.created': ['created_by'],
+  'user.expired': ['tag', 'squads'],
   users_online: ['users_online', 'node_name'],
   traffic_today: ['traffic_today_gb', 'node_name'],
   user_traffic_percent: ['percent', 'over_percent', 'days_left', 'tag', 'squads'],
@@ -414,6 +420,9 @@ const TRIGGER_VARS: Record<string, string[]> = {
   'torrent.detected': ['{user}', '{user_code}', '{window_events}', '{peers}', '{node}'],
   'node.went_offline': ['{node}', '{node_code}', '{offline_minutes}', '{users_before}', '{country_code}'],
   'user.traffic_exceeded': ['{user}', '{user_code}', '{percent}', '{traffic_gb}', '{days_left}'],
+  'node.online': ['{node}', '{node_code}', '{downtime_minutes}', '{country_code}'],
+  'user.created': ['{user}', '{user_code}', '{created_by}'],
+  'user.expired': ['{user}', '{user_code}', '{expire_at}', '{tag}'],
   users_online: ['{users_online}', '{node}'],
   traffic_today: ['{traffic_today_gb}', '{node}'],
   user_traffic_today_gb: ['{user}', '{user_code}', '{traffic_gb}', '{over_gb}', '{threshold}'],
@@ -473,6 +482,8 @@ export function getActionTypes() {
     { value: 'cleanup_expired', label: t('automations.actionTypes.cleanup_expired'), category: 'system', description: t('automations.actionTypes.cleanup_expiredDesc') },
     { value: 'reset_traffic', label: t('automations.actionTypes.reset_traffic'), category: 'users', description: t('automations.actionTypes.reset_trafficDesc') },
     { value: 'force_sync', label: t('automations.actionTypes.force_sync'), category: 'system', description: t('automations.actionTypes.force_syncDesc') },
+    { value: 'throttle_user', label: t('automations.actionTypes.throttle_user'), category: 'users', description: t('automations.actionTypes.throttle_userDesc') },
+    { value: 'warn_user', label: t('automations.actionTypes.warn_user'), category: 'violations', description: t('automations.actionTypes.warn_userDesc') },
   ] as const
 }
 export const ACTION_TYPES = new Proxy([] as unknown as ReturnType<typeof getActionTypes>, {

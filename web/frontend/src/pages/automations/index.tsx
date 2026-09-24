@@ -106,6 +106,54 @@ export default function Automations() {
     onError: () => toast.error(t('automations.deleteError')),
   })
 
+  const runNowMutation = useMutation({
+    mutationFn: automationsApi.runNow,
+    onSuccess: (res) => {
+      if (res.result === 'success') toast.success(t('automations.runNowDone'))
+      else if (res.result === 'skipped') toast.info(t('automations.runNowSkipped'))
+      else toast.error(t('automations.runNowFailed'))
+      queryClient.invalidateQueries({ queryKey: ['automations'] })
+      queryClient.invalidateQueries({ queryKey: ['automation-rule-log'] })
+    },
+    onError: () => toast.error(t('automations.runNowFailed')),
+  })
+
+  const handleExport = async () => {
+    try {
+      const data = await automationsApi.exportRules()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'automations.json'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
+
+  const importMutation = useMutation({
+    mutationFn: automationsApi.importRules,
+    onSuccess: (res) => {
+      toast.success(t('automations.importDone', { created: res.created, errors: res.errors.length }))
+      queryClient.invalidateQueries({ queryKey: ['automations'] })
+    },
+    onError: () => toast.error(t('automations.importFailed')),
+  })
+
+  const handleImportFile = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text())
+      const rules = Array.isArray(parsed) ? parsed : parsed?.rules
+      if (!Array.isArray(rules)) throw new Error('no rules')
+      importMutation.mutate(rules)
+    } catch {
+      toast.error(t('automations.importBadFile'))
+    }
+  }
+
   const testMutation = useMutation({
     mutationFn: automationsApi.test,
     onSuccess: (result) => {
@@ -152,14 +200,28 @@ export default function Automations() {
             {t('automations.subtitle')}
           </p>
         </div>
-        <PermissionGate resource="automation" action="create">
-          <Button
-            onClick={handleCreate}
-            className="bg-accent-teal text-white hover:bg-accent-teal/90"
-          >
-            <Plus className="w-4 h-4 mr-2" /> {t('automations.newRule')}
-          </Button>
-        </PermissionGate>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport}>{t('automations.export')}</Button>
+          <PermissionGate resource="automation" action="create">
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={(e) => { handleImportFile(e.target.files?.[0]); e.target.value = '' }}
+              />
+              <span className="inline-flex h-10 cursor-pointer items-center rounded-md border border-[var(--glass-border)] px-4 text-sm hover:bg-[var(--glass-bg-hover)]">
+                {t('automations.import')}
+              </span>
+            </label>
+            <Button
+              onClick={handleCreate}
+              className="bg-accent-teal text-white hover:bg-accent-teal/90"
+            >
+              <Plus className="w-4 h-4 mr-2" /> {t('automations.newRule')}
+            </Button>
+          </PermissionGate>
+        </div>
       </div>
 
       {/* Hub outer tabs */}
@@ -294,6 +356,7 @@ export default function Automations() {
                     onEdit={handleEdit}
                     onDelete={handleDeleteClick}
                     onTest={(id) => testMutation.mutate(id)}
+                    onRunNow={(id) => runNowMutation.mutate(id)}
                     toggleLoading={toggleMutation.isPending}
                   />
                 ))}

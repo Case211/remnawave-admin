@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   MoreVertical,
@@ -19,8 +22,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { AutomationRule } from '../../api/automations'
+import { automationsApi, type AutomationRule } from '../../api/automations'
 import {
+  resultBadgeClass,
+  resultLabel,
+  actionTypeLabel,
   categoryColor,
   categoryLabel,
   describeTrigger,
@@ -44,7 +50,42 @@ interface RuleCardProps {
   onEdit: (rule: AutomationRule) => void
   onDelete: (rule: AutomationRule) => void
   onTest: (id: number) => void
+  onRunNow: (id: number) => void
   toggleLoading: boolean
+}
+
+/** Последние срабатывания правила — прямо в карточке, с переходом к цели */
+function RuleLog({ ruleId }: { ruleId: number }) {
+  const { t } = useTranslation()
+  const { data, isLoading } = useQuery({
+    queryKey: ['automation-rule-log', ruleId],
+    queryFn: () => automationsApi.logs({ rule_id: ruleId, per_page: 10 }),
+    staleTime: 15_000,
+  })
+  const items = data?.items ?? []
+  if (isLoading) return <p className="text-xs text-dark-400 py-2">{t('common.loading')}</p>
+  if (items.length === 0) return <p className="text-xs text-dark-400 py-2">{t('automations.ruleCard.logEmpty')}</p>
+  return (
+    <ul className="mt-2 space-y-1.5">
+      {items.map((entry) => (
+        <li key={entry.id} className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="text-dark-400">{entry.triggered_at ? formatDateTime(entry.triggered_at) : ''}</span>
+          <Badge variant="outline" className={`text-[10px] ${resultBadgeClass(entry.result)}`}>{resultLabel(entry.result)}</Badge>
+          <span className="text-dark-300">{actionTypeLabel(entry.action_taken)}</span>
+          {entry.target_type === 'user' && entry.target_id && (
+            <Link to={`/users/${entry.target_id}`} className="text-primary-400 hover:underline">
+              {t('automations.ruleCard.openUser')}
+            </Link>
+          )}
+          {entry.target_type === 'node' && entry.target_id && (
+            <Link to="/servers?tab=nodes" className="text-primary-400 hover:underline">
+              {t('automations.ruleCard.openNode')}
+            </Link>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export function RuleCard({
@@ -56,9 +97,12 @@ export function RuleCard({
   onEdit,
   onDelete,
   onTest,
+  onRunNow,
   toggleLoading,
 }: RuleCardProps) {
   const { t } = useTranslation()
+  const [showLog, setShowLog] = useState(false)
+  const extraCount = rule.extra_actions?.length ?? 0
   const TriggerIcon = TRIGGER_TYPE_ICONS[rule.trigger_type] || Zap
 
   return (
@@ -110,6 +154,11 @@ export function RuleCard({
                       <Play className="w-4 h-4 mr-2" /> {t('automations.ruleCard.test')}
                     </DropdownMenuItem>
                   )}
+                  {canRun && rule.trigger_type === 'schedule' && (
+                    <DropdownMenuItem onClick={() => onRunNow(rule.id)}>
+                      <Zap className="w-4 h-4 mr-2" /> {t('automations.ruleCard.runNow')}
+                    </DropdownMenuItem>
+                  )}
                   {canDelete && (
                     <DropdownMenuItem
                       onClick={() => onDelete(rule)}
@@ -146,7 +195,10 @@ export function RuleCard({
           <div className="w-full h-px bg-[var(--glass-bg)]" />
           <div className="flex items-center gap-2">
             <ArrowRight className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
-            <span className="text-xs text-primary-400 truncate">{describeAction(rule)}</span>
+            <span className="text-xs text-primary-400 truncate">
+              {describeAction(rule)}
+              {extraCount > 0 && ` ${t('automations.ruleCard.andMore', { count: extraCount })}`}
+            </span>
           </div>
         </div>
 
@@ -162,7 +214,18 @@ export function RuleCard({
               <span>{formatDateTime(rule.last_triggered_at)}</span>
             </div>
           )}
+          {rule.trigger_count > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowLog((v) => !v)}
+              aria-expanded={showLog}
+              className="text-primary-400 hover:underline"
+            >
+              {t('automations.ruleCard.log')}
+            </button>
+          )}
         </div>
+        {showLog && <RuleLog ruleId={rule.id} />}
       </CardContent>
     </Card>
   )

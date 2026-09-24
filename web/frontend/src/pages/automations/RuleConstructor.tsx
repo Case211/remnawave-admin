@@ -30,6 +30,7 @@ import {
   type AutomationRule,
   type AutomationRuleCreate,
   type AutomationRuleUpdate,
+  type ExtraAction,
 } from '../../api/automations'
 import client from '../../api/client'
 import {
@@ -60,7 +61,7 @@ const NODE_METRICS = new Set([
 ])
 // Триггеры, у которых цель — юзер: к уведомлению можно приложить кнопки действий
 const USER_TRIGGERS = new Set([
-  'violation.detected', 'torrent.detected', 'user.traffic_exceeded',
+  'violation.detected', 'torrent.detected', 'user.traffic_exceeded', 'user.created', 'user.expired',
   'user_traffic_percent', 'user_node_traffic_gb', 'user_node_traffic_today_gb', 'user_traffic_today_gb',
 ])
 import { IntervalPicker } from './IntervalPicker'
@@ -92,7 +93,12 @@ const ACTION_CATEGORY_MAP: Record<string, string> = {
   restart_node: 'nodes',
   cleanup_expired: 'system',
   force_sync: 'system',
+  throttle_user: 'users',
+  warn_user: 'violations',
 }
+
+// Что можно добавить вторым шагом: простые действия без выбора цели
+const EXTRA_ACTION_TYPES = ['notify', 'throttle_user', 'warn_user', 'block_user', 'disable_user', 'reset_traffic', 'force_sync']
 
 export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructorProps) {
   const queryClient = useQueryClient()
@@ -155,6 +161,16 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [restartMaxPerHour, setRestartMaxPerHour] = useState('')
   const [cleanupSquads, setCleanupSquads] = useState<string[]>([])
   const [cleanupTag, setCleanupTag] = useState('')
+  // Урезать скорость и предупредить юзера
+  const [throttleRate, setThrottleRate] = useState('')
+  const [throttleHours, setThrottleHours] = useState('')
+  const [warnForce, setWarnForce] = useState(false)
+  // Своя пауза, «И»/«ИЛИ», тихие часы, цепочка действий
+  const [cooldownMinutes, setCooldownMinutes] = useState('')
+  const [conditionsMatch, setConditionsMatch] = useState<'all' | 'any'>('all')
+  const [quietFrom, setQuietFrom] = useState('')
+  const [quietTo, setQuietTo] = useState('')
+  const [extraActions, setExtraActions] = useState<ExtraAction[]>([])
 
   // Target selectors
   const [targetNodeUuid, setTargetNodeUuid] = useState('')  // '' = all nodes
@@ -244,6 +260,14 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setRestartMaxPerHour(ac.max_per_hour?.toString() || '')
         setCleanupSquads(Array.isArray(ac.squad_uuids) ? ac.squad_uuids : [])
         setCleanupTag(ac.tag || '')
+        setThrottleRate(ac.rate_kbit?.toString() || '')
+        setThrottleHours(editRule.action_type === 'throttle_user' ? ac.duration_hours?.toString() || '' : '')
+        setWarnForce(!!ac.force)
+        setCooldownMinutes(tc.cooldown_minutes?.toString() || '')
+        setConditionsMatch(tc.conditions_match === 'any' ? 'any' : 'all')
+        setQuietFrom(ac.quiet_from || '')
+        setQuietTo(ac.quiet_to || '')
+        setExtraActions(Array.isArray(editRule.extra_actions) ? editRule.extra_actions : [])
         // Target selectors
         setTargetNodeUuid(ac.node_uuid?.toString() || '')
 
@@ -278,6 +302,14 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setRestartMaxPerHour('')
         setCleanupSquads([])
         setCleanupTag('')
+        setThrottleRate('')
+        setThrottleHours('')
+        setWarnForce(false)
+        setCooldownMinutes('')
+        setConditionsMatch('all')
+        setQuietFrom('')
+        setQuietTo('')
+        setExtraActions([])
         setTargetNodeUuid('')
         setStep(1)
       }
@@ -291,8 +323,16 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
     }
   }, [actionType, editRule])
 
-  // Build trigger_config
+  // Build trigger_config: основное + общие ключи (пауза, «ИЛИ»)
   const buildTriggerConfig = (): Record<string, unknown> => {
+    const cfg = buildTriggerBase()
+    const cooldown = parseInt(cooldownMinutes)
+    if (triggerType !== 'schedule' && cooldown > 0) cfg.cooldown_minutes = cooldown
+    if (conditionsMatch === 'any') cfg.conditions_match = 'any'
+    return cfg
+  }
+
+  const buildTriggerBase = (): Record<string, unknown> => {
     if (triggerType === 'event') {
       const cfg: Record<string, unknown> = { event: eventType }
       if (minScore) cfg.min_score = parseInt(minScore)
@@ -330,7 +370,20 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         cfg.severity = notifySeverity
         if (notifyButtons) cfg.buttons = true
       }
+      if (quietFrom && quietTo) {
+        cfg.quiet_from = quietFrom
+        cfg.quiet_to = quietTo
+      }
       return cfg
+    }
+    if (actionType === 'throttle_user') {
+      const cfg: Record<string, unknown> = {}
+      if (parseInt(throttleRate) > 0) cfg.rate_kbit = parseInt(throttleRate)
+      if (parseFloat(throttleHours) > 0) cfg.duration_hours = parseFloat(throttleHours)
+      return cfg
+    }
+    if (actionType === 'warn_user') {
+      return warnForce ? { force: true } : {}
     }
     if (actionType === 'block_user') {
       const cfg: Record<string, unknown> = { reason: blockReason || 'Blocked by automation' }
@@ -395,6 +448,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       conditions: validConditions,
       action_type: actionType,
       action_config: buildActionConfig(),
+      extra_actions: extraActions,
     }
 
     if (editRule) {
@@ -891,6 +945,27 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               </div>
             ))}
 
+            {conditions.length > 1 && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-dark-400">{t('automations.constructor.matchLabel')}</span>
+                {(['all', 'any'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={conditionsMatch === m}
+                    onClick={() => setConditionsMatch(m)}
+                    className={`px-2.5 py-1 rounded-full border transition-colors ${
+                      conditionsMatch === m
+                        ? 'bg-primary/20 text-primary-400 border-primary/40'
+                        : 'bg-[var(--glass-bg)] text-dark-300 border-[var(--glass-border)]'
+                    }`}
+                  >
+                    {t(`automations.constructor.match.${m}`)}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <Button
               variant="outline"
               size="sm"
@@ -1232,6 +1307,100 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               </div>
             )}
 
+            {actionType === 'throttle_user' && (
+              <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-3">
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.throttle.title')}</Label>
+                <div className="flex flex-wrap gap-3">
+                  <div>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.throttle.rate')}</Label>
+                    <Input type="number" min={0} value={throttleRate} onChange={(e) => setThrottleRate(e.target.value)}
+                      className="mt-1 w-36 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white" placeholder="1024" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.throttle.hours')}</Label>
+                    <Input type="number" min={0} step="0.5" value={throttleHours} onChange={(e) => setThrottleHours(e.target.value)}
+                      className="mt-1 w-36 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white" placeholder="24" />
+                  </div>
+                </div>
+                <p className="text-[11px] text-dark-400">{t('automations.constructor.throttle.hint')}</p>
+              </div>
+            )}
+
+            {actionType === 'warn_user' && (
+              <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-2">
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.warn.title')}</Label>
+                <p className="text-xs text-dark-400">{t('automations.constructor.warn.hint')}</p>
+                <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                  <Checkbox checked={warnForce} onCheckedChange={(v) => setWarnForce(!!v)} />
+                  {t('automations.constructor.warn.force')}
+                </label>
+              </div>
+            )}
+
+            {/* Пауза между срабатываниями и цепочка действий */}
+            <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-3">
+              {triggerType !== 'schedule' && (
+                <div>
+                  <Label className="text-[11px] text-dark-400">{t('automations.constructor.cooldown')}</Label>
+                  <Input type="number" min={0} max={10080} value={cooldownMinutes} onChange={(e) => setCooldownMinutes(e.target.value)}
+                    className="mt-1 w-32 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white" placeholder="0" />
+                  <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.cooldownHint')}</p>
+                </div>
+              )}
+              <div>
+                <Label className="text-[11px] text-dark-400">{t('automations.constructor.chain.title')}</Label>
+                <div className="mt-1.5 space-y-2">
+                  {extraActions.map((step, idx) => (
+                    <div key={idx} className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={step.action_type}
+                        onValueChange={(v) => setExtraActions((prev) => prev.map((s, i) => (i === idx ? { action_type: v, action_config: {} } : s)))}
+                      >
+                        <SelectTrigger className="w-52 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {EXTRA_ACTION_TYPES.map((a) => (
+                            <SelectItem key={a} value={a}>{t(`automations.actionTypes.${a}`)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {step.action_type === 'notify' && (
+                        <Input
+                          value={String(step.action_config.message ?? '')}
+                          onChange={(e) => setExtraActions((prev) => prev.map((s, i) => (i === idx ? { ...s, action_config: { channel: 'telegram', message: e.target.value } } : s)))}
+                          placeholder={t('automations.constructor.chain.message')}
+                          className="flex-1 min-w-[180px] bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                        />
+                      )}
+                      {(step.action_type === 'throttle_user' || step.action_type === 'block_user' || step.action_type === 'disable_user') && (
+                        <Input
+                          type="number" min={0} step="0.5"
+                          value={String(step.action_config.duration_hours ?? '')}
+                          onChange={(e) => setExtraActions((prev) => prev.map((s, i) => (i === idx
+                            ? { ...s, action_config: parseFloat(e.target.value) > 0 ? { ...s.action_config, duration_hours: parseFloat(e.target.value) } : {} }
+                            : s)))}
+                          placeholder={t('automations.constructor.chain.hours')}
+                          className="w-32 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                        />
+                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('common.delete')}
+                        onClick={() => setExtraActions((prev) => prev.filter((_, i) => i !== idx))}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {extraActions.length < 5 && (
+                    <Button variant="outline" size="sm" className="text-xs border-[var(--glass-border)]"
+                      onClick={() => setExtraActions((prev) => [...prev, { action_type: 'notify', action_config: { channel: 'telegram', message: '' } }])}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> {t('automations.constructor.chain.add')}
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.chain.hint')}</p>
+              </div>
+            </div>
+
             {/* Дополнительные параметры действия */}
             {(['block_user', 'disable_user', 'restart_node', 'cleanup_expired'].includes(actionType)
               || (actionType === 'notify' && notifyChannel === 'telegram')) && (
@@ -1289,6 +1458,19 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         {t('automations.constructor.extra.buttons')}
                       </label>
                     )}
+                    <div>
+                      <Label className="text-[11px] text-dark-400">{t('automations.constructor.quiet.title')}</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input type="time" value={quietFrom} onChange={(e) => setQuietFrom(e.target.value)}
+                          aria-label={t('automations.constructor.quiet.from')}
+                          className="w-28 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white" />
+                        <span className="text-dark-400">{'\u2014'}</span>
+                        <Input type="time" value={quietTo} onChange={(e) => setQuietTo(e.target.value)}
+                          aria-label={t('automations.constructor.quiet.to')}
+                          className="w-28 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white" />
+                      </div>
+                      <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.quiet.hint', { tz: displayTimeZone })}</p>
+                    </div>
                   </>
                 )}
 

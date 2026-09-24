@@ -3056,7 +3056,13 @@
       "user_traffic_exceeded": "Traffic exceeded",
       "user_traffic_exceededDesc": "Triggers when a user exhausts their traffic limit",
       "torrent_detected": "Torrent detected",
-      "torrent_detectedDesc": "Triggers when BitTorrent traffic is detected for a user"
+      "torrent_detectedDesc": "Triggers when BitTorrent traffic is detected for a user",
+      "node_online": "Node back online",
+      "node_onlineDesc": "A node came back after going down",
+      "user_created": "User created",
+      "user_createdDesc": "A new user in the admin or via API",
+      "user_expired": "Subscription expired",
+      "user_expiredDesc": "A user subscription has ended"
     },
     "metrics": {
       "users_online": "Users online",
@@ -3130,7 +3136,9 @@
       "memory": "RAM, %",
       "disk": "Disk, %",
       "violations_last_hour": "Violations in an hour",
-      "users_new_today": "New users"
+      "users_new_today": "New users",
+      "downtime_minutes": "Down for, min",
+      "created_by": "Created by"
     },
     "actionTypes": {
       "disable_user": "Disable user",
@@ -3150,7 +3158,11 @@
       "reset_traffic": "Reset traffic",
       "reset_trafficDesc": "Resets user traffic counters to zero",
       "force_sync": "Sync nodes",
-      "force_syncDesc": "Force-updates configuration on all nodes"
+      "force_syncDesc": "Force-updates configuration on all nodes",
+      "throttle_user": "Limit speed",
+      "throttle_userDesc": "Throttle the user via the shaper — softer than blocking",
+      "warn_user": "Warn user",
+      "warn_userDesc": "Message the customer using a template from Violations → Warnings"
     },
     "actionDescs": {
       "disable_user": "Automatically deactivates user account",
@@ -3256,7 +3268,13 @@
       "edit": "Edit",
       "test": "Test",
       "delete": "Delete",
-      "times": "times"
+      "times": "times",
+      "runNow": "Run now",
+      "log": "Log",
+      "logEmpty": "No triggers yet",
+      "openUser": "open user",
+      "openNode": "open nodes",
+      "andMore": "+ {{count}} more"
     },
     "logsTab": {
       "filters": "Filters:",
@@ -3525,6 +3543,37 @@
         "onlySquads": "Only users from squads",
         "onlySquadsHint": "Nothing selected — all squads.",
         "onlyTag": "Only with tag"
+      },
+      "matchLabel": "Fire when these are met:",
+      "match": {
+        "all": "all conditions",
+        "any": "any condition"
+      },
+      "cooldown": "Pause between triggers, min",
+      "cooldownHint": "Per user or node. 0 — default.",
+      "chain": {
+        "title": "Then also",
+        "add": "Add action",
+        "message": "Notification text",
+        "hours": "Hours",
+        "hint": "Run in order after the main action. Skipped if the main action fails."
+      },
+      "throttle": {
+        "title": "Speed limit",
+        "rate": "Speed, kbit/s",
+        "hours": "For how many hours",
+        "hint": "Empty — speed and period from the violation settings. 0 hours — until removed manually."
+      },
+      "warn": {
+        "title": "Customer warning",
+        "hint": "Works on violation and torrent events: the template is picked by the violation.",
+        "force": "Send even if this violation was already reported"
+      },
+      "quiet": {
+        "title": "Quiet hours",
+        "from": "From",
+        "to": "To",
+        "hint": "During this window notifications pile up and go out as one digest at its end. Critical ones go right away. Time zone: {{tz}}."
       }
     },
     "testResult": {
@@ -3543,7 +3592,15 @@
       "eventHint": "Fires on the next matching event"
     },
     "deleteRuleDescription": "This rule will stop running immediately. Already-queued actions will be cancelled.",
-    "deleteRuleTitle": "Delete automation rule?"
+    "deleteRuleTitle": "Delete automation rule?",
+    "runNowDone": "Rule executed",
+    "runNowSkipped": "Conditions not met — action skipped",
+    "runNowFailed": "Rule failed",
+    "export": "Export",
+    "import": "Import",
+    "importDone": "Imported rules: {{created}}, failed: {{errors}}. New rules are disabled.",
+    "importFailed": "Import failed",
+    "importBadFile": "This is not an automations export file"
   },
   "settings": {
     "title": "Settings",

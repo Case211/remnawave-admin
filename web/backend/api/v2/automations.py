@@ -26,7 +26,7 @@ from web.backend.core.automation import (
     AUTOMATION_TEMPLATES,
 )
 from web.backend.core.automation_engine import engine as automation_engine
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from web.backend.schemas.automation import (
     DESTRUCTIVE_ACTIONS,
@@ -55,6 +55,9 @@ def _rule_to_response(rule: dict) -> AutomationRuleResponse:
     action_config = rule.get("action_config", {})
     if isinstance(action_config, str):
         action_config = json.loads(action_config)
+    extra_actions = rule.get("extra_actions") or []
+    if isinstance(extra_actions, str):
+        extra_actions = json.loads(extra_actions)
 
     return AutomationRuleResponse(
         id=rule["id"],
@@ -67,6 +70,7 @@ def _rule_to_response(rule: dict) -> AutomationRuleResponse:
         conditions=conditions,
         action_type=rule["action_type"],
         action_config=action_config,
+        extra_actions=extra_actions,
         last_triggered_at=rule.get("last_triggered_at"),
         trigger_count=rule.get("trigger_count", 0),
         created_by=rule.get("created_by"),
@@ -146,6 +150,7 @@ async def create_automation(
         action_type=data.action_type,
         action_config=data.action_config,
         created_by=admin.account_id,
+        extra_actions=[a.model_dump() for a in data.extra_actions],
     )
     if not rule:
         raise api_error(500, E.AUTOMATION_CREATE_FAILED)
@@ -216,6 +221,64 @@ async def activate_template(
 
 
 # ── Logs (before /{rule_id} to avoid path conflict) ──────────
+
+_EXPORT_FIELDS = (
+    "name", "description", "category", "trigger_type", "trigger_config", "conditions",
+    "action_type", "action_config", "extra_actions",
+)
+
+
+@router.get("/export")
+async def export_automations(
+    admin: AdminUser = Depends(require_permission("automation", "view")),
+):
+    """Все правила в JSON — перенести на другую панель. Без id, счётчиков и автора."""
+    result = await list_automation_rules(page=1, per_page=1000)
+    items = result[0] if isinstance(result, tuple) else result.get("items", [])
+    rules = []
+    for rule in items:
+        data = _rule_to_response(rule).model_dump()
+        rules.append({k: data[k] for k in _EXPORT_FIELDS})
+    return {"version": 1, "rules": rules}
+
+
+class AutomationImportRequest(BaseModel):
+    rules: List[dict] = Field(..., max_length=500)
+
+
+@router.post("/import")
+async def import_automations(
+    request: Request,
+    data: AutomationImportRequest,
+    admin: AdminUser = Depends(require_permission("automation", "create")),
+):
+    """Загрузить правила из экспорта. Создаются выключенными: чужое правило
+    сначала надо посмотреть, а уже потом включать."""
+    created, errors = 0, []
+    for index, raw in enumerate(data.rules):
+        try:
+            rule = AutomationRuleCreate(**{**{k: raw.get(k) for k in _EXPORT_FIELDS if k in raw}, "is_enabled": False})
+        except ValidationError as e:
+            errors.append({"index": index, "name": raw.get("name"), "error": e.errors()[0].get("msg", "invalid")})
+            continue
+        row = await create_automation_rule(
+            name=rule.name, description=rule.description, is_enabled=False, category=rule.category,
+            trigger_type=rule.trigger_type, trigger_config=rule.trigger_config, conditions=rule.conditions,
+            action_type=rule.action_type, action_config=rule.action_config, created_by=admin.account_id,
+            extra_actions=[a.model_dump() for a in rule.extra_actions],
+        )
+        if row:
+            created += 1
+        else:
+            errors.append({"index": index, "name": rule.name, "error": "create failed"})
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="automation.import", resource="automation", resource_id=None,
+        details=json.dumps({"created": created, "errors": len(errors)}),
+        ip_address=get_client_ip(request),
+    )
+    return {"created": created, "errors": errors}
+
 
 @router.get("/log", response_model=AutomationLogResponse)
 async def get_logs(
@@ -306,12 +369,14 @@ async def update_automation(
         AutomationRuleCreate(**{
             k: fields.get(k, current[k]) for k in (
                 "name", "description", "is_enabled", "category", "trigger_type",
-                "trigger_config", "conditions", "action_type", "action_config",
+                "trigger_config", "conditions", "action_type", "action_config", "extra_actions",
             )
         })
     except ValidationError as e:
         raise api_error(422, E.INVALID_INPUT, e.errors()[0].get("msg", "Invalid rule"))
 
+    if "extra_actions" in fields:
+        fields["extra_actions"] = [dict(a) for a in fields["extra_actions"]]
     rule = await update_automation_rule(rule_id, **fields)
     if not rule:
         raise api_error(500, E.AUTOMATION_UPDATE_FAILED)
@@ -404,3 +469,29 @@ async def test_automation(
 
     result = await automation_engine.dry_run(rule_id)
     return AutomationTestResult(**result)
+
+
+@router.post("/{rule_id}/run")
+async def run_automation_now(
+    rule_id: int,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("automation", "run")),
+):
+    """Запустить правило по расписанию прямо сейчас — с настоящим действием.
+
+    Для событий и порогов не подходит: у них нет «сейчас» без события или
+    превышения. Проверить их без последствий — «Тест».
+    """
+    rule = await get_automation_rule_by_id(rule_id)
+    if not rule:
+        raise api_error(404, E.AUTOMATION_NOT_FOUND)
+    if rule["trigger_type"] != "schedule":
+        raise api_error(400, E.INVALID_ACTION, "Only schedule rules can be run manually")
+    result, details = await automation_engine.run_now(rule)
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="automation.run", resource="automation", resource_id=str(rule_id),
+        details=json.dumps({"result": result}),
+        ip_address=get_client_ip(request),
+    )
+    return {"result": result, "details": details}

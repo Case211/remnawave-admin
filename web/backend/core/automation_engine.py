@@ -138,6 +138,43 @@ _CONDITION_ALIASES = {"online_count": "users_online"}
 _HISTORY_KEEP_DAYS = 90
 
 
+def _cooldown_seconds(trigger_config: dict, default: int) -> int:
+    """Пауза между срабатываниями: своя у правила (минуты) или по умолчанию."""
+    try:
+        minutes = int(trigger_config.get("cooldown_minutes") or 0)
+    except (TypeError, ValueError):
+        minutes = 0
+    return minutes * 60 if minutes > 0 else default
+
+
+def _parse_hhmm(value) -> Optional[Tuple[int, int]]:
+    try:
+        hours, minutes = str(value).strip().split(":")
+        h, m = int(hours), int(minutes)
+    except (ValueError, AttributeError):
+        return None
+    return (h, m) if 0 <= h < 24 and 0 <= m < 60 else None
+
+
+def quiet_window_end(quiet_from, quiet_to, now_local: datetime) -> Optional[datetime]:
+    """Конец тихих часов, если сейчас внутри окна; иначе None.
+
+    Окно может переходить через полночь (23:00–08:00). Время — часы панели.
+    """
+    start, end = _parse_hhmm(quiet_from), _parse_hhmm(quiet_to)
+    if not start or not end or start == end:
+        return None
+    now_min = now_local.hour * 60 + now_local.minute
+    start_min, end_min = start[0] * 60 + start[1], end[0] * 60 + end[1]
+    inside = start_min <= now_min < end_min if start_min < end_min else (now_min >= start_min or now_min < end_min)
+    if not inside:
+        return None
+    end_at = now_local.replace(hour=end[0], minute=end[1], second=0, microsecond=0)
+    if end_at <= now_local:
+        end_at += timedelta(days=1)
+    return end_at
+
+
 class AutomationEngine:
     """Singleton engine that manages event triggers, scheduled tasks, and threshold checks."""
 
@@ -249,7 +286,7 @@ class AutomationEngine:
         if event_type == "node.went_offline" and payload.get("offline_since"):
             lock_key, lock_seconds = f"{target_id}@{payload['offline_since']}", 30 * 86400
         else:
-            lock_key, lock_seconds = target_id or "-", 30
+            lock_key, lock_seconds = target_id or "-", _cooldown_seconds(trigger_config, 30)
         if not await try_acquire_target(rule["id"], lock_key, lock_seconds):
             return
 
@@ -303,7 +340,11 @@ class AutomationEngine:
         except Exception as e:
             logger.warning("Pending automation actions unavailable: %s", e)
             return
+        digests: Dict[Any, list] = {}
         for item in due:
+            if item["action"] == "notify_digest":
+                digests.setdefault(item.get("rule_id"), []).append(item)
+                continue
             result, details = "error", {}
             try:
                 if item["action"] != "enable_user":
@@ -323,6 +364,44 @@ class AutomationEngine:
                     rule_id=item["rule_id"], target_type="user", target_id=item["target"],
                     action_taken="enable_user", result=result, details=details,
                 )
+
+        for rule_id, items in digests.items():
+            await self._send_digest(rule_id, items)
+
+    async def _send_digest(self, rule_id, items: list) -> None:
+        """Сводка придержанных на тихие часы уведомлений правила — одним сообщением."""
+        from web.backend.core.automation import finish_pending_action, write_automation_log
+        payloads = []
+        for item in items:
+            payload = item.get("payload") or {}
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            payloads.append(payload)
+        first = payloads[0] if payloads else {}
+        config = dict(first.get("config") or {})
+        lines = [p.get("message", "") for p in payloads if p.get("message")]
+        shown = lines[:20]
+        body = "\n\n".join(shown)
+        if len(lines) > len(shown):
+            body += f"\n\n… +{len(lines) - len(shown)}"
+        config["message"] = body
+        context = {"rule_id": rule_id, "rule_name": first.get("rule_name") or "Automation",
+                   "category": first.get("category") or "system"}
+        result, details = "error", {}
+        try:
+            details = await self._action_notify(config, "system", None, context)
+            details["digest_count"] = len(lines)
+            result = "success"
+        except Exception as e:
+            details = {"error": str(e)}
+            logger.warning("Automation digest for rule %s failed: %s", rule_id, e)
+        for item in items:
+            await finish_pending_action(item["id"], result)
+        if rule_id:
+            await write_automation_log(
+                rule_id=rule_id, target_type="system", target_id=None,
+                action_taken="notify", result=result, details=details,
+            )
 
     async def _cleanup_history_daily(self) -> None:
         """Раз в сутки — журнал и замки старше _HISTORY_KEEP_DAYS прочь."""
@@ -415,6 +494,35 @@ class AutomationEngine:
                 )
             except Exception as e:
                 logger.error("Error checking schedule rule %d: %s", rule.get("id"), e)
+
+    async def run_now(self, rule: dict) -> Tuple[str, dict]:
+        """Выполнить правило по расписанию вне очереди — с настоящим действием."""
+        from web.backend.core.automation import increment_trigger_count, write_automation_log
+        trigger_config = rule.get("trigger_config", {})
+        if isinstance(trigger_config, str):
+            trigger_config = json.loads(trigger_config)
+        context: Dict[str, Any] = {
+            "trigger": "manual", "cron": trigger_config.get("cron"),
+            "interval_minutes": trigger_config.get("interval_minutes"),
+            "timestamp": timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M"),
+        }
+        if rule["action_type"] == "notify" or rule.get("conditions"):
+            await self._fill_schedule_context(context)
+        if not self._evaluate_conditions(rule, context):
+            result, details = "skipped", {"reason": "conditions_not_met", "manual": True}
+        else:
+            result, details = await self._execute_action(rule, "system", None, context)
+            details = {**(details or {}), "manual": True}
+        await write_automation_log(
+            rule_id=rule["id"], target_type="system", target_id=None,
+            action_taken=rule["action_type"], result=result, details=details,
+        )
+        if result == "success":
+            try:
+                await increment_trigger_count(rule["id"])
+            except Exception as e:
+                logger.debug("trigger count not updated: %s", e)
+        return result, details
 
     async def _fill_schedule_context(self, context: Dict[str, Any]) -> None:
         """Сводка для сообщений по расписанию. Сутки — по часам панели."""
@@ -569,8 +677,8 @@ class AutomationEngine:
                 if not new_targets:
                     continue
 
-                # Acquire trigger lock (5-min minimum between threshold triggers)
-                if not await try_acquire_target(rule["id"], "threshold", 280):
+                # Замок на правило: 5 минут по умолчанию или своя пауза правила
+                if not await try_acquire_target(rule["id"], "threshold", _cooldown_seconds(trigger_config, 280)):
                     logger.info("Threshold rule %d skipped (trigger lock cooldown)", rule["id"])
                     continue
 
@@ -835,6 +943,13 @@ class AutomationEngine:
                             "name": node.get("name", ""),
                             "downtime_minutes": round(downtime.total_seconds() / 60, 1),
                         })
+                        await self.handle_event("node.online", {
+                            "node_uuid": uuid,
+                            "uuid": uuid,
+                            "node_name": node.get("name", ""),
+                            "downtime_minutes": round(downtime.total_seconds() / 60, 1),
+                            "country_code": node.get("country_code") or "",
+                        })
                     continue
 
                 if uuid not in self._node_offline_since:
@@ -928,7 +1043,8 @@ class AutomationEngine:
     # ── Condition evaluation ─────────────────────────────────
 
     def _evaluate_conditions(self, rule: dict, context: dict) -> bool:
-        """Evaluate the conditions array against context. All conditions must pass."""
+        """Условия правила: все («И») или хотя бы одно («ИЛИ») —
+        trigger_config.conditions_match = "all" | "any"."""
         conditions = rule.get("conditions", [])
         if isinstance(conditions, str):
             conditions = json.loads(conditions)
@@ -936,36 +1052,40 @@ class AutomationEngine:
         if not conditions:
             return True
 
-        for cond in conditions:
-            field = _CONDITION_ALIASES.get(cond.get("field", ""), cond.get("field", ""))
-            cond_op = cond.get("operator", "==")
-            cond_value = cond.get("value")
+        trigger_config = rule.get("trigger_config") or {}
+        if isinstance(trigger_config, str):
+            trigger_config = json.loads(trigger_config)
+        check = any if trigger_config.get("conditions_match") == "any" else all
+        return check(self._condition_holds(cond, context) for cond in conditions)
 
-            actual_value = context.get(field)
-            if actual_value is None:
-                return False
+    @staticmethod
+    def _condition_holds(cond: dict, context: dict) -> bool:
+        """Одно условие против контекста события."""
+        field = _CONDITION_ALIASES.get(cond.get("field", ""), cond.get("field", ""))
+        cond_op = cond.get("operator", "==")
+        cond_value = cond.get("value")
 
-            op_fn = _OPERATORS.get(cond_op)
-            if not op_fn:
-                logger.warning("Unknown condition operator: %s", cond_op)
-                return False
+        actual_value = context.get(field)
+        if actual_value is None:
+            return False
 
-            # Флаги (is_vpn и т.п.) в условии пишут строкой: «true» / «false»
-            if isinstance(actual_value, bool) and isinstance(cond_value, str):
-                actual_value = "true" if actual_value else "false"
-                cond_value = cond_value.strip().lower()
-            try:
-                # Try numeric comparison first
-                if isinstance(cond_value, (int, float)) and not isinstance(cond_value, bool) \
-                        and cond_op not in ("in", "not_in"):
-                    actual_value = float(actual_value)
-                if not op_fn(actual_value, cond_value):
-                    return False
-            except (ValueError, TypeError):
-                if not op_fn(str(actual_value), str(cond_value)):
-                    return False
+        op_fn = _OPERATORS.get(cond_op)
+        if not op_fn:
+            logger.warning("Unknown condition operator: %s", cond_op)
+            return False
 
-        return True
+        # Флаги (is_vpn и т.п.) в условии пишут строкой: «true» / «false»
+        if isinstance(actual_value, bool) and isinstance(cond_value, str):
+            actual_value = "true" if actual_value else "false"
+            cond_value = cond_value.strip().lower()
+        try:
+            # Try numeric comparison first
+            if isinstance(cond_value, (int, float)) and not isinstance(cond_value, bool) \
+                    and cond_op not in ("in", "not_in"):
+                actual_value = float(actual_value)
+            return bool(op_fn(actual_value, cond_value))
+        except (ValueError, TypeError):
+            return bool(op_fn(str(actual_value), str(cond_value)))
 
     # ── Action execution ─────────────────────────────────────
 
@@ -976,7 +1096,34 @@ class AutomationEngine:
         target_id: Optional[str],
         context: dict,
     ) -> Tuple[str, dict]:
-        """Execute the action defined in the rule. Returns (result, details)."""
+        """Основное действие правила и за ним — дополнительные (extra_actions).
+
+        Если основное упало, дополнительные не выполняются: «уведомить и
+        урезать» не должно урезать, когда не вышло даже уведомить.
+        """
+        result, details = await self._execute_single(rule, target_type, target_id, context)
+        extras = rule.get("extra_actions") or []
+        if isinstance(extras, str):
+            extras = json.loads(extras)
+        if not extras or result == "error":
+            return result, details
+        steps = []
+        for step in extras:
+            sub_rule = {**rule, "action_type": step.get("action_type"), "action_config": step.get("action_config") or {}}
+            sub_result, sub_details = await self._execute_single(sub_rule, target_type, target_id, context)
+            steps.append({"action": step.get("action_type"), "result": sub_result, "details": sub_details})
+            if sub_result == "error":
+                result = "error"
+        return result, {**(details or {}), "then": steps}
+
+    async def _execute_single(
+        self,
+        rule: dict,
+        target_type: Optional[str],
+        target_id: Optional[str],
+        context: dict,
+    ) -> Tuple[str, dict]:
+        """Execute one action of the rule. Returns (result, details)."""
         action_type = rule["action_type"]
         action_config = rule.get("action_config", {})
         if isinstance(action_config, str):
@@ -999,6 +1146,8 @@ class AutomationEngine:
                 "cleanup_expired": self._action_cleanup_expired,
                 "reset_traffic": self._action_reset_traffic,
                 "force_sync": self._action_force_sync,
+                "throttle_user": self._action_throttle_user,
+                "warn_user": self._action_warn_user,
             }.get(action_type)
 
             if not handler:
@@ -1133,6 +1282,20 @@ class AutomationEngine:
             for key, value in enriched.items():
                 message = message.replace(f"{{{key}}}", str(value))
 
+        # Тихие часы: не срочное придерживаем и отправляем утром одной сводкой
+        severity = config.get("severity") if config.get("severity") in ("info", "warning", "critical") else "info"
+        quiet_end = None
+        if severity != "critical":
+            quiet_end = quiet_window_end(config.get("quiet_from"), config.get("quiet_to"), timefmt.now())
+        if quiet_end is not None:
+            from web.backend.core.automation import schedule_pending_action
+            await schedule_pending_action(
+                context.get("rule_id"), "notify_digest", target_id or "-", quiet_end.astimezone(timezone.utc),
+                payload={"message": message, "config": {k: v for k, v in config.items() if k not in ("quiet_from", "quiet_to")},
+                         "rule_name": context.get("rule_name"), "category": context.get("category")},
+            )
+            return {"action": "notify", "deferred_until": quiet_end.isoformat()}
+
         if channel == "telegram":
             from web.backend.core.notification_service import create_notification
             # Route to the correct Telegram topic:
@@ -1146,7 +1309,6 @@ class AutomationEngine:
 
             # Куда слать: Telegram всегда, плюс колокольчик и почта по выбору
             extra = [c for c in (config.get("channels") or ["in_app"]) if c in ("in_app", "email")]
-            severity = config.get("severity") if config.get("severity") in ("info", "warning", "critical") else "info"
             reply_markup = None
             if config.get("buttons") and target_type == "user" and target_id:
                 from web.backend.core.violation_notifier import _violation_keyboard
@@ -1187,6 +1349,64 @@ class AutomationEngine:
                 return {"action": "notify", "channel": "webhook", "status": resp.status_code}
 
         return {"action": "notify", "error": f"Unknown channel: {channel}"}
+
+    async def _action_throttle_user(
+        self, config: dict, target_type: str, target_id: str, context: dict,
+    ) -> dict:
+        """Урезать скорость юзеру через шейпер — мягче блокировки."""
+        target_id = target_id or context.get("user_uuid")
+        if not target_id or target_type not in (None, "user"):
+            raise ValueError("throttle_user needs a user target")
+        from shared.throttle import apply_throttle, default_rate_kbit
+        try:
+            rate_kbit = int(config.get("rate_kbit") or 0) or default_rate_kbit()
+        except (TypeError, ValueError):
+            rate_kbit = default_rate_kbit()
+        if not rate_kbit:
+            return {"action": "throttle_user", "skipped": True, "reason": "no_rate"}
+        try:
+            hours = float(config.get("duration_hours") or 0)
+        except (TypeError, ValueError):
+            hours = 0
+        until = datetime.utcnow() + timedelta(hours=hours) if hours > 0 else None
+        success, error, moved = await apply_throttle(
+            user_uuid=target_id,
+            rate_kbit=rate_kbit,
+            reason=config.get("reason") or f"automation: {context.get('rule_name', '')}",
+            admin_id=None,
+            admin_username="automation",
+            until=until,
+        )
+        if not success:
+            raise RuntimeError(error or "throttle failed")
+        try:
+            from web.backend.core.throttle_sync import push_throttles
+            await push_throttles()
+        except Exception as e:
+            logger.warning("Throttle applied but push failed: %s", e)
+        return {"action": "throttle_user", "user_uuid": target_id, "rate_kbit": rate_kbit,
+                "until": until.isoformat() if until else None, "moved_to_squad": moved}
+
+    async def _action_warn_user(
+        self, config: dict, target_type: str, target_id: str, context: dict,
+    ) -> dict:
+        """Предупредить клиента по шаблону «Нарушения → Предупреждения».
+
+        Шаблон подбирается по нарушению, поэтому действие работает только на
+        событиях нарушения и торрента."""
+        violation_id = context.get("violation_id")
+        if not violation_id:
+            return {"action": "warn_user", "skipped": True, "reason": "no_violation"}
+        from shared.database import db_service
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM violations WHERE id = $1", int(violation_id))
+        if not row:
+            return {"action": "warn_user", "skipped": True, "reason": "violation_not_found"}
+        from web.backend.core.violation_notices import send_notice
+        result = await send_notice(dict(row), sent_by="automation", force=bool(config.get("force")), auto=True)
+        if not result.get("sent"):
+            return {"action": "warn_user", "skipped": True, "reason": result.get("reason") or "not_sent"}
+        return {"action": "warn_user", "violation_id": int(violation_id), "sent": True}
 
     async def _action_restart_node(
         self, config: dict, target_type: str, target_id: str, context: dict,

@@ -1025,6 +1025,7 @@ async def _process_torrent_violations(
                         "window_events": recent,
                         "peers": peers,
                         "score": 100.0,
+                        "violation_id": violation_id,
                     })
                 except Exception as e:
                     logger.warning("Automation event failed: %s", e)
@@ -1490,6 +1491,7 @@ async def _handle_violation(
             await broadcast_violation({
                 "user_uuid": user_uuid,
                 "username": username,
+                "violation_id": violation_id,
                 "score": violation_score.total,
                 "recommended_action": violation_score.recommended_action.value,
                 "reasons": violation_score.reasons[:5],
