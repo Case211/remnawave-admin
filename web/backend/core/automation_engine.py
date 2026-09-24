@@ -175,6 +175,12 @@ def quiet_window_end(quiet_from, quiet_to, now_local: datetime) -> Optional[date
     return end_at
 
 
+# Пороги по юзерам — выборки по всей базе; проверяются раз в 5 минут
+_HEAVY_METRICS = {
+    "user_traffic_percent", "user_node_traffic_gb", "user_node_traffic_today_gb", "user_traffic_today_gb",
+}
+
+
 class AutomationEngine:
     """Singleton engine that manages event triggers, scheduled tasks, and threshold checks."""
 
@@ -192,6 +198,9 @@ class AutomationEngine:
         # иначе рестарт заново рассылает событие по всем превысившим
         self._traffic_seeded = False
         self._expired_checked_at: Optional[datetime] = None
+        # С какого момента цель за порогом: (rule_id, target_id) -> время
+        self._threshold_since: Dict[tuple, datetime] = {}
+        self._threshold_tick = 0
         # Dedup for threshold rules: (rule_id, target_id) -> (value, timestamp)
         self._threshold_notified: Dict[tuple, Tuple[float, datetime]] = {}
         # Прошлая проверка расписаний — чтобы не перескакивать минуты
@@ -416,6 +425,9 @@ class AutomationEngine:
             self._last_history_cleanup = today
         except Exception as e:
             logger.warning("Automation history cleanup failed: %s", e)
+        # Уведомления, журнал алертов и аудит — по срокам хранения из настроек
+        from web.backend.core.retention import run_daily
+        await run_daily()
 
     async def _check_scheduled_rules(self):
         """Evaluate all enabled schedule-type rules."""
@@ -597,19 +609,21 @@ class AutomationEngine:
     # ── Threshold loop ───────────────────────────────────────
 
     async def _threshold_loop(self):
-        """Check threshold-type rules every 5 minutes."""
+        """Пороги нод и системы — раз в минуту (как у алертов, которые сюда
+        переехали); пороги по юзерам — раз в 5 минут: это выборки по всей базе."""
         while self._running:
             try:
-                await asyncio.sleep(300)
+                await asyncio.sleep(60)
                 if not self._running:
                     break
-                await self._check_threshold_rules()
+                self._threshold_tick += 1
+                await self._check_threshold_rules(include_heavy=self._threshold_tick % 5 == 0)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Threshold loop error: %s", e)
 
-    async def _check_threshold_rules(self):
+    async def _check_threshold_rules(self, include_heavy: bool = True):
         """Evaluate all enabled threshold-type rules."""
         from web.backend.core.automation import (
             get_enabled_rules_by_trigger_type,
@@ -630,10 +644,14 @@ class AutomationEngine:
                 if isinstance(trigger_config, str):
                     trigger_config = json.loads(trigger_config)
 
+                if not include_heavy and trigger_config.get("metric") in _HEAVY_METRICS:
+                    continue
+
                 targets = await self._threshold_targets(trigger_config, cache)
 
                 # Условия правила — к каждой цели отдельно
                 targets = [tt for tt in targets if self._evaluate_conditions(rule, tt[2])]
+                targets = self._sustained(rule["id"], trigger_config, targets)
 
                 if not targets:
                     # No targets exceeded threshold — clear stale entries (>1h) for this rule
@@ -698,6 +716,30 @@ class AutomationEngine:
 
             except Exception as e:
                 logger.error("Error checking threshold rule %d: %s", rule.get("id"), e)
+
+    def _sustained(self, rule_id: int, trigger_config: dict, targets: list) -> list:
+        """Оставить цели, которые за порогом не меньше for_minutes подряд.
+
+        Разовый всплеск CPU не повод будить админа — ждём, пока значение
+        продержится. Цель, вернувшаяся ниже порога, начинает отсчёт заново.
+        """
+        now = datetime.now(timezone.utc)
+        current = {(rule_id, t[1]) for t in targets}
+        self._threshold_since = {
+            k: v for k, v in self._threshold_since.items() if k[0] != rule_id or k in current
+        }
+        try:
+            for_minutes = int(trigger_config.get("for_minutes") or 0)
+        except (TypeError, ValueError):
+            for_minutes = 0
+        if for_minutes <= 0:
+            return targets
+        sustained = []
+        for target in targets:
+            since = self._threshold_since.setdefault((rule_id, target[1]), now)
+            if (now - since).total_seconds() >= for_minutes * 60:
+                sustained.append(target)
+        return sustained
 
     async def _threshold_targets(self, trigger_config: dict, cache: dict) -> list:
         """Цели порогового правила: (тип, id, контекст). ``cache`` — общие для
@@ -1307,8 +1349,13 @@ class AutomationEngine:
                 category = context.get("category", target_type or "service")
                 topic_type = category if category != "system" else "service"
 
-            # Куда слать: Telegram всегда, плюс колокольчик и почта по выбору
-            extra = [c for c in (config.get("channels") or ["in_app"]) if c in ("in_app", "email")]
+            # Куда слать: Telegram (можно выключить), плюс колокольчик и почта по выбору
+            # Пустой список — только Telegram; без ключа — как раньше, ещё и колокольчик
+            chosen = config["channels"] if isinstance(config.get("channels"), list) else ["in_app"]
+            extra = [c for c in chosen if c in ("in_app", "email")]
+            channels = (["telegram"] if config.get("telegram", True) else []) + extra
+            if not channels:
+                channels = ["in_app"]
             reply_markup = None
             if config.get("buttons") and target_type == "user" and target_id:
                 from web.backend.core.violation_notifier import _violation_keyboard
@@ -1321,7 +1368,7 @@ class AutomationEngine:
                 source="automation",
                 source_id=str(context.get("rule_id", "")),
                 group_key=f"automation:{context.get('rule_id', '')}:{target_id}",
-                channels=["telegram", *extra],
+                channels=channels,
                 topic_type=topic_type,
                 telegram_body=message,
                 link="/automations",

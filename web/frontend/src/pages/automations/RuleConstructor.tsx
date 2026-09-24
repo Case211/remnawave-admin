@@ -138,6 +138,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [thresholdMetric, setThresholdMetric] = useState('users_online')
   const [thresholdOperator, setThresholdOperator] = useState('>=')
   const [thresholdValue, setThresholdValue] = useState('')
+  const [forMinutes, setForMinutes] = useState('')
+  const [notifyTelegram, setNotifyTelegram] = useState(true)
   const [thresholdNodeUuid, setThresholdNodeUuid] = useState('')
   const displayTimeZone = useDisplayTimeZone()
 
@@ -228,6 +230,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
           setThresholdMetric(tc.metric || 'users_online')
           setThresholdOperator(tc.operator || '>=')
           setThresholdValue(tc.value?.toString() || '')
+          setForMinutes(tc.for_minutes?.toString() || '')
           setThresholdNodeUuid(tc.node_uuid?.toString() || '__all__')
         }
 
@@ -257,6 +260,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setNotifyExtra(Array.isArray(ac.channels) ? ac.channels : ['in_app'])
         setNotifySeverity(ac.severity || 'info')
         setNotifyButtons(!!ac.buttons)
+        setNotifyTelegram(ac.telegram !== false)
         setRestartMaxPerHour(ac.max_per_hour?.toString() || '')
         setCleanupSquads(Array.isArray(ac.squad_uuids) ? ac.squad_uuids : [])
         setCleanupTag(ac.tag || '')
@@ -288,6 +292,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setThresholdMetric('users_online')
         setThresholdOperator('>=')
         setThresholdValue('')
+        setForMinutes('')
+        setNotifyTelegram(true)
         setThresholdNodeUuid('__all__')
         setConditions([])
         setNotifyChannel('telegram')
@@ -353,6 +359,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       if (NODE_METRICS.has(thresholdMetric) && thresholdNodeUuid && thresholdNodeUuid !== '__all__') {
         cfg.node_uuid = thresholdNodeUuid
       }
+      if (parseInt(forMinutes) > 0) cfg.for_minutes = parseInt(forMinutes)
       return cfg
     }
     return {}
@@ -369,6 +376,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         cfg.channels = notifyExtra
         cfg.severity = notifySeverity
         if (notifyButtons) cfg.buttons = true
+        if (!notifyTelegram) cfg.telegram = false
       }
       if (quietFrom && quietTo) {
         cfg.quiet_from = quietFrom
@@ -822,6 +830,18 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         placeholder="90"
                       />
                     </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.forMinutes')}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={forMinutes}
+                      onChange={(e) => setForMinutes(e.target.value)}
+                      className="mt-1 w-32 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                      placeholder="0"
+                    />
+                    <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.forMinutesHint')}</p>
                   </div>
                   {thresholdValue && (
                     <div className="flex items-center gap-2 p-2.5 rounded-md bg-yellow-500/5 border border-yellow-500/20">
@@ -1428,6 +1448,10 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     <div>
                       <Label className="text-[11px] text-dark-400">{t('automations.constructor.extra.alsoSend')}</Label>
                       <div className="flex flex-wrap gap-4 mt-1.5">
+                        <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                          <Checkbox checked={notifyTelegram} onCheckedChange={(v) => setNotifyTelegram(!!v)} />
+                          {t('automations.constructor.extra.telegram')}
+                        </label>
                         {(['in_app', 'email'] as const).map((ch) => (
                           <label key={ch} className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
                             <Checkbox

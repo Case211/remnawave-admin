@@ -2991,6 +2991,18 @@
       "auto_block_torrent": {
         "description": "Automatically block users when torrent traffic is detected",
         "name": "Block torrent users"
+      },
+      "node_cpu_high": {
+        "name": "Node CPU high",
+        "description": "Node CPU above 90% for more than 5 minutes"
+      },
+      "node_memory_high": {
+        "name": "Node memory almost full",
+        "description": "Node memory above 90% for more than 5 minutes"
+      },
+      "node_disk_high": {
+        "name": "Node disk almost full",
+        "description": "Node disk more than 90% full"
       }
     },
     "enabled": "enabled",
@@ -3542,7 +3554,8 @@
         "maxPerHourHint": "0 — no limit. Keeps a node that won't come up from being restarted in a loop.",
         "onlySquads": "Only users from squads",
         "onlySquadsHint": "Nothing selected — all squads.",
-        "onlyTag": "Only with tag"
+        "onlyTag": "Only with tag",
+        "telegram": "Telegram"
       },
       "matchLabel": "Fire when these are met:",
       "match": {
@@ -3574,7 +3587,9 @@
         "from": "From",
         "to": "To",
         "hint": "During this window notifications pile up and go out as one digest at its end. Critical ones go right away. Time zone: {{tz}}."
-      }
+      },
+      "forMinutes": "Holds for at least, min",
+      "forMinutesHint": "A single spike is not worth waking anyone — fires only if the value holds this long."
     },
     "testResult": {
       "title": "Test result",
@@ -5027,7 +5042,9 @@
       "activateError": "Failed to activate template",
       "active": "Active",
       "description": "Description"
-    }
+    },
+    "alertsMoved": "Threshold alerts (CPU, memory, disk, node offline) are now automation rules.",
+    "alertsMovedLink": "Open automations"
   },
   "mailServer": {
     "title": "Mail Server",

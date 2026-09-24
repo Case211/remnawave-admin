@@ -93,3 +93,34 @@ def test_schema_accepts_new_fields():
 def test_schema_rejects_bad_extensions(patch):
     with pytest.raises(ValidationError):
         AutomationRuleCreate(**{**BASE, **patch})
+
+
+def test_sustained_waits_for_minutes():
+    from datetime import timedelta
+
+    engine = AutomationEngine()
+    targets = [("node", "n1", {"value": 95})]
+    cfg = {"for_minutes": 2}
+    assert engine._sustained(1, cfg, targets) == []
+    # отсчёт идёт с первого превышения; через 2 минуты цель проходит
+    engine._threshold_since[(1, "n1")] -= timedelta(minutes=2)
+    assert engine._sustained(1, cfg, targets) == targets
+    # вернулась ниже порога — отсчёт сбрасывается
+    engine._sustained(1, cfg, [])
+    assert (1, "n1") not in engine._threshold_since
+    assert engine._sustained(1, {}, targets) == targets
+
+
+@pytest.mark.asyncio
+async def test_notify_can_skip_telegram(monkeypatch):
+    sent = {}
+
+    async def fake_create_notification(**kwargs):
+        sent.update(kwargs)
+
+    monkeypatch.setattr("web.backend.core.notification_service.create_notification", fake_create_notification)
+    engine = AutomationEngine()
+    await engine._action_notify({"message": "x", "telegram": False, "channels": ["in_app"]}, "system", None, {})
+    assert sent["channels"] == ["in_app"]
+    await engine._action_notify({"message": "x", "channels": []}, "system", None, {})
+    assert sent["channels"] == ["telegram"]

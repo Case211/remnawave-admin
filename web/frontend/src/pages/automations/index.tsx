@@ -9,7 +9,6 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Bell,
   Terminal,
   CalendarClock,
   Sparkles,
@@ -36,12 +35,11 @@ import { TestResultDialog } from './TestResultDialog'
 import { CATEGORIES } from './helpers'
 import { useFormatters } from '@/lib/useFormatters'
 import { useTabParam } from '@/lib/useTabParam'
-import { AlertRulesTab } from '@/pages/Notifications'
 import { QueryError } from '@/components/QueryError'
 import { NodeScriptsPanel, SchedulesPanel } from './HubLinkCards'
 
 // Одна строка вкладок: раньше «Правила» были и снаружи, и внутри
-const HUB_SECTIONS = ['rules', 'templates', 'logs', 'alerts', 'scripts', 'schedules'] as const
+const HUB_SECTIONS = ['rules', 'templates', 'logs', 'scripts', 'schedules'] as const
 
 export default function Automations() {
   const { t } = useTranslation()
@@ -51,9 +49,6 @@ export default function Automations() {
   const canEdit = useHasPermission('automation', 'edit')
   const canDelete = useHasPermission('automation', 'delete')
   const canRun = useHasPermission('automation', 'run')
-  const canNotificationsCreate = useHasPermission('notifications', 'create')
-  const canNotificationsEdit = useHasPermission('notifications', 'edit')
-  const canNotificationsDelete = useHasPermission('notifications', 'delete')
 
   const [section, setSection] = useTabParam('rules', [...HUB_SECTIONS])
 
@@ -239,10 +234,6 @@ export default function Automations() {
             <History className="w-3.5 h-3.5" />
             {t('automations.tabs.logs')}
           </TabsTrigger>
-          <TabsTrigger value="alerts" className="gap-1.5">
-            <Bell className="w-3.5 h-3.5" />
-            {t('automations.hub.sections.alerts', { defaultValue: '\u0410\u043b\u0435\u0440\u0442\u044b' })}
-          </TabsTrigger>
           <TabsTrigger value="scripts" className="gap-1.5">
             <Terminal className="w-3.5 h-3.5" />
             {t('automations.hub.sections.scripts', { defaultValue: '\u0421\u043a\u0440\u0438\u043f\u0442\u044b \u043d\u043e\u0434' })}
@@ -402,15 +393,6 @@ export default function Automations() {
 
         <TabsContent value="logs">
           <LogsTimeline />
-        </TabsContent>
-
-        {/* ── Section: Alerts ─────────────────────────────────── */}
-        <TabsContent value="alerts" className="space-y-4">
-          <AlertRulesTab
-            canEdit={canNotificationsEdit}
-            canCreate={canNotificationsCreate}
-            canDelete={canNotificationsDelete}
-          />
         </TabsContent>
 
         {/* ── Section: Node scripts ───────────────────────────── */}

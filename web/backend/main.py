@@ -586,10 +586,6 @@ async def lifespan(app: FastAPI):
                     await automation_engine.start()
                     _svc_names.append("automation")
 
-                    from web.backend.core.alert_engine import alert_engine
-                    await alert_engine.start()
-                    _svc_names.append("alerts")
-
                     try:
                         from web.backend.core.mail.mail_service import mail_service
                         await mail_service.start()
@@ -950,11 +946,6 @@ async def lifespan(app: FastAPI):
     try:
         from web.backend.core.mail.mail_service import mail_service
         await mail_service.stop()
-    except Exception:
-        pass
-    try:
-        from web.backend.core.alert_engine import alert_engine
-        await alert_engine.stop()
     except Exception:
         pass
     try:

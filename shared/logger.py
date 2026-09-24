@@ -26,7 +26,6 @@ _LOGGER_NAME_MAP = {
     "shared.connection_monitor": "monitor",
     "shared.geoip": "geoip",
     # Web backend core
-    "web.backend.core.alert_engine": "alert",
     "web.backend.core.automation_engine": "auto",
     "web.backend.core.notification_service": "notify",
     "web.backend.core.violation_notifier": "violat",

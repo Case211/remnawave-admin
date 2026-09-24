@@ -22,13 +22,14 @@ _COMMON_TRIGGER_KEYS = {"cooldown_minutes", "conditions_match"}
 _ALLOWED_TRIGGER_KEYS: dict[str, set[str]] = {
     "event": {"event", "min_score", "offline_minutes"} | _COMMON_TRIGGER_KEYS,
     "schedule": {"cron", "interval_minutes"} | _COMMON_TRIGGER_KEYS,
-    "threshold": {"metric", "operator", "value", "node_uuid"} | _COMMON_TRIGGER_KEYS,
+    # for_minutes — порог должен держаться столько минут подряд (как «длительность» у алертов)
+    "threshold": {"metric", "operator", "value", "node_uuid", "for_minutes"} | _COMMON_TRIGGER_KEYS,
 }
 _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
     "disable_user": {"reason", "duration_hours"},
     "block_user": {"reason", "duration_hours"},
     "notify": {"channel", "webhook_url", "message", "topic_type", "channels", "severity", "buttons",
-               "quiet_from", "quiet_to"},
+               "quiet_from", "quiet_to", "telegram"},
     "restart_node": {"node_uuid", "max_per_hour"},
     "enable_node": {"node_uuid"},
     "disable_node": {"node_uuid"},
