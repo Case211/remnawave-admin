@@ -5,6 +5,7 @@ from aiogram.utils.i18n import gettext as _
 
 from src.keyboards.navigation import NavTarget, nav_row
 from src.utils.auth import BotAdmin
+from shared import timefmt
 
 
 def reports_menu_keyboard(admin: BotAdmin | None = None) -> InlineKeyboardMarkup:
@@ -50,7 +51,7 @@ def reports_history_keyboard(
         total = report.get("total_violations", 0)
 
         if period_start:
-            date_str = period_start.strftime("%d.%m.%Y")
+            date_str = timefmt.fmt_date(period_start)
         else:
             date_str = "?"
 

@@ -47,3 +47,19 @@ async def test_node_line_present_when_known():
 async def test_no_node_line_when_unknown():
     body = await _send()
     assert "Нода:" not in body
+
+
+@pytest.mark.asyncio
+async def test_window_counts_and_thresholds_shown():
+    body = await _send(window={"minutes": 30, "events": 382, "peers": 20, "min_events": 5, "min_peers": 20})
+    assert "За 30 мин: <b>382</b> событий, <b>20</b> разных адресов (пороги 5 / 20)" in body
+    # в списке один адрес, остальные 19 — строкой «и ещё»
+    assert "и ещё 19" in body
+
+
+@pytest.mark.asyncio
+async def test_action_reflects_setting_not_hardcoded_block():
+    assert "только уведомление" in await _send()
+    assert "Жёсткая блокировка" not in await _send()
+    assert "отключён автоматически" in await _send(action="blocked")
+    assert "автоблокировка не удалась" in await _send(action="block_failed")

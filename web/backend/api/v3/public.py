@@ -43,6 +43,8 @@ class UserPublic(_PublicBase):
     used_traffic_bytes: Optional[int] = None
     expire_at: Optional[str] = None
     online: Optional[bool] = None
+    short_uuid: Optional[str] = None
+    subscription_url: Optional[str] = None
 
 
 class UserCreate(BaseModel):
@@ -137,6 +139,46 @@ class ViolationPublic(_PublicBase):
     ip_addresses: Optional[List[str]] = None
     countries: Optional[List[str]] = None
     detected_at: Optional[str] = None
+    notified_at: Optional[str] = Field(
+        default=None, description="When the customer was warned about this violation"
+    )
+
+
+class AbuseSummaryPublic(_PublicBase):
+    """Короткий вердикт по клиенту для внешней интеграции.
+
+    Интеграции нужен не список нарушений, а ответ на один вопрос: можно ли
+    доверять этому человеку. Поэтому здесь нет разбора по анализаторам —
+    подробности остаются в панели, наружу уходит уровень и пара чисел.
+    """
+
+    user_uuid: Optional[str] = None
+    telegram_id: Optional[int] = None
+    window_days: int
+    level: str = Field(description="clean | warned | limited")
+    violations: int = 0
+    max_score: Optional[float] = None
+    last_detected_at: Optional[str] = None
+    last_action: Optional[str] = None
+    whitelisted: bool = False
+    notice: Optional["AbuseNoticePublic"] = Field(
+        default=None,
+        description="Last warning the customer actually received, if any",
+    )
+
+
+class AbuseNoticePublic(_PublicBase):
+    """Предупреждение, которое клиент получил.
+
+    Текст — снимок на момент отправки: шаблон потом правят, а показывать
+    человеку надо ровно то, что ему присылали.
+    """
+
+    violation_id: int
+    kind: str
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    sent_at: Optional[str] = None
 
 
 class ViolationDetailPublic(ViolationPublic):
@@ -178,6 +220,13 @@ class SuccessResult(BaseModel):
     message: str = ""
 
 
+class UserCreated(SuccessResult):
+    """Ответ на создание: сразу с тем, что нужно, чтобы выдать клиенту подписку."""
+    uuid: Optional[str] = None
+    short_uuid: Optional[str] = None
+    subscription_url: Optional[str] = None
+
+
 # ── Helpers ──────────────────────────────────────────────────────
 
 def _service_unavailable():
@@ -206,6 +255,35 @@ async def _resolve_user_key(user_uuid: str) -> str | int:
 # ══════════════════════════════════════════════════════════════════
 # Users — Read
 # ══════════════════════════════════════════════════════════════════
+
+#: Ссылка подписки — как её отдала панель при синке (raw_data)
+_SUB_COLUMNS = "short_uuid, raw_data->>'subscriptionUrl' AS subscription_url"
+#: Онлайн — активность за последние 5 минут по onlineAt из последнего синка
+_ONLINE_COLUMN = (
+    "COALESCE(immutable_tstz(raw_data->'userTraffic'->>'onlineAt') "
+    "> NOW() - INTERVAL '5 minutes', FALSE) AS online"
+)
+
+
+async def _uuids_in_scope(api_key: ApiKeyUser, uuids: List[str]) -> set:
+    """Какие из uuid юзеров ключу можно трогать; без ограничений — все."""
+    if not api_key.restricts_users:
+        return set(uuids)
+    from shared.database import db_service
+    scope_sql, scope_args = api_key.user_scope_condition(2)
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT uuid::text AS uuid FROM users WHERE uuid::text = ANY($1::text[]) AND {scope_sql}",
+            list(uuids), *scope_args,
+        )
+    return {r["uuid"] for r in rows}
+
+
+async def _ensure_user_in_scope(api_key: ApiKeyUser, uuid: str) -> None:
+    """Юзер вне пределов ключа — 404, как будто его нет."""
+    if api_key.restricts_users and uuid not in await _uuids_in_scope(api_key, [uuid]):
+        raise _not_found("User")
+
 
 @router.get("/users", response_model=List[UserPublic])
 async def list_users(
@@ -237,6 +315,12 @@ async def list_users(
         )
         args.append(f"%{search}%")
 
+    scope_sql, scope_args = api_key.user_scope_condition(idx + 1)
+    if scope_sql:
+        conditions.append(scope_sql)
+        args.extend(scope_args)
+        idx += len(scope_args)
+
     where = " AND ".join(conditions) if conditions else "TRUE"
     idx += 1
     args.append(limit)
@@ -246,7 +330,7 @@ async def list_users(
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             f"SELECT uuid, username, status, traffic_limit_bytes, "
-            f"used_traffic_bytes, expire_at "
+            f"used_traffic_bytes, expire_at, {_SUB_COLUMNS}, {_ONLINE_COLUMN} "
             f"FROM users WHERE {where} ORDER BY username LIMIT ${idx - 1} OFFSET ${idx}",
             *args,
         )
@@ -270,12 +354,13 @@ async def get_user(
     if not db_service.is_connected:
         raise _service_unavailable()
 
+    scope_sql, scope_args = api_key.user_scope_condition(2)
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT uuid, username, status, traffic_limit_bytes, "
-            "used_traffic_bytes, expire_at "
-            "FROM users WHERE uuid = $1",
-            uuid,
+            f"used_traffic_bytes, expire_at, {_SUB_COLUMNS}, {_ONLINE_COLUMN} "
+            f"FROM users WHERE uuid = $1{' AND ' + scope_sql if scope_sql else ''}",
+            uuid, *scope_args,
         )
     if not row:
         raise _not_found("User")
@@ -290,15 +375,25 @@ async def get_user(
 # Users — Write
 # ══════════════════════════════════════════════════════════════════
 
-@router.post("/users", response_model=SuccessResult, status_code=201)
+@router.post("/users", response_model=UserCreated, status_code=201)
 async def create_user(
     body: UserCreate,
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Create a new user via Remnawave Panel API."""
+    if api_key.restricts_users:
+        # Ключ с ограничением создаёт юзеров только в своих сквадах/теге
+        if api_key.user_squads:
+            squads = body.active_internal_squads or []
+            if not squads or not set(squads) <= set(api_key.user_squads):
+                raise HTTPException(status_code=403, detail="Key may only create users in its squads")
+        if api_key.user_tag:
+            if body.tag not in (None, api_key.user_tag):
+                raise HTTPException(status_code=403, detail="Key may only create users with its tag")
+            body.tag = api_key.user_tag
     try:
         api = _get_api_client()
-        await api.create_user(
+        result = await api.create_user(
             username=body.username,
             expire_at=body.expire_at,
             traffic_limit_bytes=body.traffic_limit_bytes,
@@ -312,10 +407,46 @@ async def create_user(
             external_squad_uuid=body.external_squad_uuid,
             active_internal_squads=body.active_internal_squads,
         )
-        return SuccessResult(success=True, message=f"User {body.username} created")
     except Exception as e:
         logger.error("v3 create_user failed: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
+
+    user = result.get("response", result) if isinstance(result, dict) else {}
+    user = user if isinstance(user, dict) else {}
+    user_uuid = await _store_created_user(user)
+    if user_uuid:
+        import asyncio
+        from web.backend.core.automation_engine import engine as automation_engine
+        asyncio.create_task(automation_engine.handle_event("user.created", {
+            "user_uuid": user_uuid, "uuid": user_uuid, "username": body.username,
+            "email": body.email or "", "telegram_id": body.telegram_id, "created_by": f"apikey:{api_key.key_name}",
+        }))
+    return UserCreated(
+        success=True,
+        message=f"User {body.username} created",
+        uuid=user_uuid,
+        short_uuid=user.get("shortUuid"),
+        subscription_url=user.get("subscriptionUrl"),
+    )
+
+
+async def _store_created_user(user: dict) -> Optional[str]:
+    """Записать нового юзера в локальную БД, не дожидаясь синка, и вернуть его uuid.
+
+    Без этого GET /users/{uuid} сразу после создания отвечал бы 404. Панель
+    3.x отвечает числовым id без uuid — тогда uuid берём из строки после upsert.
+    """
+    user_uuid = user.get("uuid") or None
+    panel_id = user.get("id")
+    try:
+        from shared.database import db_service
+        if db_service.is_connected and (user_uuid or panel_id is not None):
+            await db_service.upsert_user(user)
+            if not user_uuid and panel_id is not None:
+                user_uuid = await db_service.get_user_uuid_by_panel_id(int(panel_id))
+    except Exception as e:
+        logger.error("v3 create_user: not stored locally, visible after next sync: %s", e)
+    return str(user_uuid) if user_uuid else None
 
 
 @router.post("/users/{uuid}/enable", response_model=SuccessResult)
@@ -324,6 +455,7 @@ async def enable_user(
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Enable a user."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.enable_user(await _resolve_user_key(uuid))
@@ -338,6 +470,7 @@ async def disable_user(
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Disable a user."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.disable_user(await _resolve_user_key(uuid))
@@ -352,6 +485,7 @@ async def reset_user_traffic(
     api_key: ApiKeyUser = Depends(require_scope("users:write")),
 ):
     """Reset user traffic counter."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.reset_user_traffic(await _resolve_user_key(uuid))
@@ -366,6 +500,7 @@ async def delete_user(
     api_key: ApiKeyUser = Depends(require_scope("users:delete")),
 ):
     """Delete a user."""
+    await _ensure_user_in_scope(api_key, uuid)
     try:
         api = _get_api_client()
         await api.delete_user(await _resolve_user_key(uuid))
@@ -702,7 +837,7 @@ _VIOLATION_LIST_COLUMNS = (
 
 def _violation_row_to_dict(row) -> dict:
     d = dict(row)
-    for ts_field in ("detected_at", "action_taken_at"):
+    for ts_field in ("detected_at", "action_taken_at", "notified_at"):
         if d.get(ts_field):
             d[ts_field] = d[ts_field].isoformat()
     for arr_field in ("reasons", "ip_addresses", "countries", "cities",
@@ -717,6 +852,7 @@ async def list_violations(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user_uuid: Optional[str] = Query(None, description="Filter by user UUID"),
+    telegram_id: Optional[int] = Query(None, description="Filter by Telegram id"),
     min_score: Optional[float] = Query(None, ge=0, description="Minimum violation score"),
     recommended_action: Optional[str] = Query(None, description="e.g. hard_block, monitor"),
     resolved: Optional[bool] = Query(None, description="true = action taken, false = open"),
@@ -737,6 +873,10 @@ async def list_violations(
         idx += 1
         conditions.append(f"user_uuid = ${idx}::uuid")
         args.append(user_uuid)
+    if telegram_id is not None:
+        idx += 1
+        conditions.append(f"telegram_id = ${idx}")
+        args.append(telegram_id)
     if min_score is not None:
         idx += 1
         conditions.append(f"score >= ${idx}")
@@ -758,6 +898,12 @@ async def list_violations(
         conditions.append(f"detected_at <= ${idx}::timestamptz")
         args.append(date_to)
 
+    scope_sql, scope_args = api_key.user_scope_condition(idx + 1, column="user_uuid")
+    if scope_sql:
+        conditions.append(scope_sql)
+        args.extend(scope_args)
+        idx += len(scope_args)
+
     where = " AND ".join(conditions) if conditions else "TRUE"
     idx += 1
     args.append(limit)
@@ -766,12 +912,117 @@ async def list_violations(
 
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT {_VIOLATION_LIST_COLUMNS} FROM violations WHERE {where} "
+            f"SELECT {_VIOLATION_LIST_COLUMNS}, "
+            "(SELECT n.sent_at FROM violation_notices n WHERE n.violation_id = violations.id) AS notified_at "
+            f"FROM violations WHERE {where} "
             f"ORDER BY detected_at DESC LIMIT ${idx - 1} OFFSET ${idx}",
             *args,
         )
 
     return [ViolationPublic(**_violation_row_to_dict(r)) for r in rows]
+
+
+# Меры, после которых человек уже ограничен, а не просто замечен.
+_LIMITING_ACTIONS = ("hard_block", "block", "blocked", "disable", "disabled", "throttle")
+
+
+@router.get("/violations/summary", response_model=AbuseSummaryPublic)
+async def violations_summary(
+    telegram_id: Optional[int] = Query(None, description="Telegram id клиента"),
+    user_uuid: Optional[str] = Query(None, description="UUID пользователя панели"),
+    window_days: int = Query(30, ge=1, le=365, description="Окно, за которое считаем"),
+    api_key: ApiKeyUser = Depends(require_scope("violations:read")),
+):
+    """Вердикт по клиенту: чист, замечен или ограничен.
+
+    Сделано для интеграций, которые принимают решение (выдавать ли триал,
+    промокод, продление) и которым незачем разбирать список нарушений.
+    Аннулированные не считаются: детектор ошибся, и человек тут ни при чём.
+    Белый список перебивает всё — на то он и белый список.
+    """
+    if telegram_id is None and not user_uuid:
+        raise HTTPException(status_code=422, detail="Pass telegram_id or user_uuid")
+
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise _service_unavailable()
+
+    conditions = ["detected_at >= NOW() - ($1 || ' days')::interval",
+                  "(action_taken IS NULL OR action_taken <> 'annulled')"]
+    args: List[Any] = [str(window_days)]
+    if user_uuid:
+        args.append(user_uuid)
+        conditions.append(f"user_uuid = ${len(args)}::uuid")
+    else:
+        args.append(telegram_id)
+        conditions.append(f"telegram_id = ${len(args)}")
+    scope_sql, scope_args = api_key.user_scope_condition(len(args) + 1, column="user_uuid")
+    if scope_sql:
+        conditions.append(scope_sql)
+        args.extend(scope_args)
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT COUNT(*) AS violations,
+                   MAX(score) AS max_score,
+                   MAX(detected_at) AS last_detected_at,
+                   MAX(user_uuid::text) AS user_uuid,
+                   MAX(telegram_id) AS telegram_id,
+                   (ARRAY_REMOVE(ARRAY_AGG(action_taken ORDER BY detected_at DESC), NULL))[1] AS last_action
+            FROM violations
+            WHERE {' AND '.join(conditions)}
+            """,
+            *args,
+        )
+        resolved_uuid = (row or {}).get("user_uuid") or user_uuid
+        whitelisted = False
+        if resolved_uuid:
+            whitelisted = bool(await conn.fetchval(
+                "SELECT 1 FROM violation_whitelist WHERE user_uuid = $1::uuid "
+                "AND (expires_at IS NULL OR expires_at > NOW())",
+                resolved_uuid,
+            ))
+
+    data = dict(row) if row else {}
+    count = int(data.get("violations") or 0)
+    last_action = (data.get("last_action") or "").lower()
+
+    if whitelisted or count == 0:
+        level = "clean"
+    elif last_action in _LIMITING_ACTIONS:
+        level = "limited"
+    else:
+        level = "warned"
+
+    notice = None
+    if not whitelisted and (data.get("telegram_id") or telegram_id):
+        from web.backend.core.violation_notices import last_notice_for_user
+
+        raw_notice = await last_notice_for_user(int(data.get("telegram_id") or telegram_id or 0))
+        if raw_notice:
+            sent_at = raw_notice.get("sent_at")
+            notice = AbuseNoticePublic(
+                violation_id=int(raw_notice["violation_id"]),
+                kind=str(raw_notice.get("kind") or "default"),
+                subject=raw_notice.get("subject"),
+                body=raw_notice.get("body"),
+                sent_at=sent_at.isoformat() if sent_at else None,
+            )
+
+    detected = data.get("last_detected_at")
+    return AbuseSummaryPublic(
+        user_uuid=resolved_uuid,
+        telegram_id=data.get("telegram_id") or telegram_id,
+        window_days=window_days,
+        level=level,
+        violations=0 if whitelisted else count,
+        max_score=data.get("max_score"),
+        last_detected_at=detected.isoformat() if detected else None,
+        last_action=data.get("last_action"),
+        whitelisted=whitelisted,
+        notice=notice,
+    )
 
 
 @router.get("/violations/{violation_id}", response_model=ViolationDetailPublic)
@@ -798,6 +1049,8 @@ async def get_violation(
         )
     if not row:
         raise _not_found("Violation")
+    if api_key.restricts_users and str(row["user_uuid"]) not in await _uuids_in_scope(api_key, [str(row["user_uuid"])]):
+        raise _not_found("Violation")
 
     return ViolationDetailPublic(**_violation_row_to_dict(row))
 
@@ -814,7 +1067,12 @@ async def bulk_enable_users(
     """Enable multiple users at once."""
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.enable_user(await _resolve_user_key(uuid))
             success += 1
@@ -832,7 +1090,12 @@ async def bulk_disable_users(
     """Disable multiple users at once."""
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.disable_user(await _resolve_user_key(uuid))
             success += 1
@@ -853,7 +1116,12 @@ async def bulk_delete_users(
         raise HTTPException(status_code=403, detail="Missing scope: users:delete")
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.delete_user(await _resolve_user_key(uuid))
             success += 1
@@ -871,7 +1139,12 @@ async def bulk_reset_traffic(
     """Reset traffic for multiple users at once."""
     api = _get_api_client()
     success, failed, errors = 0, 0, []
+    allowed = await _uuids_in_scope(api_key, body.uuids)
     for uuid in body.uuids:
+        if uuid not in allowed:
+            failed += 1
+            errors.append({"uuid": uuid, "error": "outside of key scope"})
+            continue
         try:
             await api.reset_user_traffic(await _resolve_user_key(uuid))
             success += 1

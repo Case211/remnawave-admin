@@ -93,6 +93,17 @@ async def get_panel_name(
         return {"panel_name": ""}
 
 
+@router.get("/timezone")
+async def get_display_timezone(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Часовой пояс, в котором админка показывает время. Нужна только авторизация:
+    время видит каждый админ, а не только тот, кому можно в настройки."""
+    from shared import timefmt
+
+    return {"timezone": timefmt.zone_name()}
+
+
 @router.get("/public-brand")
 async def get_public_brand():
     """Brand name for the login screen and browser tab title.
@@ -258,7 +269,7 @@ async def update_setting(
         # Check if setting exists and is editable
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
-                select_sql(BOT_CONFIG_TABLE, "key, is_readonly, env_var_name, is_secret", "WHERE key = $1"),
+                select_sql(BOT_CONFIG_TABLE, "key, value, is_readonly, env_var_name, is_secret", "WHERE key = $1"),
                 key
             )
 
@@ -293,7 +304,11 @@ async def update_setting(
             action="setting.update",
             resource="settings",
             resource_id=key,
-            details=json.dumps({"key": key, "value": data.value if not row['is_secret'] else "***"}),
+            details=json.dumps({
+                "key": key,
+                "value": data.value if not row['is_secret'] else "***",
+                "old": row['value'] if not row['is_secret'] else "***",
+            }),
             ip_address=get_client_ip(request),
         )
 
@@ -490,17 +505,8 @@ async def trigger_sync(
             from shared.database import db_service
             parser = ASNParser(db_service)
             try:
-                stats = await parser.sync_russian_asn_database(limit=None)
-                records = stats.get('success', 0) if isinstance(stats, dict) else 0
-                await db_service.update_sync_metadata(
-                    key="asn", status="success", records_synced=records
-                )
-                result = stats
-            except Exception as asn_err:
-                await db_service.update_sync_metadata(
-                    key="asn", status="error", error_message=str(asn_err)
-                )
-                raise
+                # статус в sync_metadata пишет сама синхронизация
+                result = await parser.sync_russian_asn_database(limit=None)
             finally:
                 await parser.close()
         else:

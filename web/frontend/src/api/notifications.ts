@@ -1,5 +1,5 @@
 /**
- * Notifications & Alerts API module.
+ * Notifications API module.
  */
 import client from './client'
 
@@ -41,49 +41,6 @@ export interface SmtpConfig {
   use_ssl: boolean
   is_enabled: boolean
   updated_at: string | null
-}
-
-export interface AlertRule {
-  id: number
-  name: string
-  description: string | null
-  is_enabled: boolean
-  rule_type: string
-  metric: string | null
-  operator: string | null
-  threshold: number | null
-  duration_minutes: number
-  channels: string[]
-  severity: string
-  cooldown_minutes: number
-  group_key: string | null
-  escalation_admin_id: number | null
-  escalation_minutes: number
-  title_template: string
-  body_template: string
-  topic_type: string | null
-  max_offline_minutes: number
-  last_triggered_at: string | null
-  last_value: number | null
-  trigger_count: number
-  created_by: number | null
-  created_at: string | null
-  updated_at: string | null
-}
-
-export interface AlertLog {
-  id: number
-  rule_id: number | null
-  rule_name: string | null
-  metric_value: number | null
-  threshold_value: number | null
-  severity: string | null
-  channels_notified: string[]
-  acknowledged: boolean
-  acknowledged_by: number | null
-  acknowledged_at: string | null
-  details: string | null
-  created_at: string | null
 }
 
 export interface PaginatedResponse<T> {
@@ -186,69 +143,19 @@ export const notificationsApi = {
     return data
   },
 
-  // ── Alert Rules ─────────────────────────────────────────────
-  listAlertRules: async (): Promise<AlertRule[]> => {
-    const { data } = await client.get('/alert-rules')
+  /** «Не беспокоить» текущего админа — окно по часам панели */
+  getDnd: async (): Promise<DndSettings> => {
+    const { data } = await client.get('/notification-dnd')
     return data
   },
-
-  createAlertRule: async (payload: Partial<AlertRule>): Promise<AlertRule> => {
-    const { data } = await client.post('/alert-rules', payload)
-    return data
-  },
-
-  updateAlertRule: async (id: number, payload: Partial<AlertRule>): Promise<AlertRule> => {
-    const { data } = await client.put(`/alert-rules/${id}`, payload)
-    return data
-  },
-
-  deleteAlertRule: async (id: number): Promise<void> => {
-    await client.delete(`/alert-rules/${id}`)
-  },
-
-  toggleAlertRule: async (id: number): Promise<AlertRule> => {
-    const { data } = await client.post(`/alert-rules/${id}/toggle`)
-    return data
-  },
-
-  // ── Alert Logs ──────────────────────────────────────────────
-  listAlertLogs: async (params?: {
-    page?: number
-    per_page?: number
-    rule_id?: number
-    acknowledged?: boolean
-  }): Promise<PaginatedResponse<AlertLog>> => {
-    const { data } = await client.get('/alert-logs', { params })
-    return data
-  },
-
-  acknowledgeAlerts: async (ids?: number[]): Promise<void> => {
-    await client.post('/alert-logs/acknowledge', { ids: ids || [] })
-  },
-
-  // Alert Templates
-  listAlertTemplates: async (): Promise<AlertTemplate[]> => {
-    const { data } = await client.get('/alert-templates')
-    return Array.isArray(data) ? data : []
-  },
-  activateAlertTemplate: async (templateId: string) => {
-    const { data } = await client.post(`/alert-templates/${templateId}/activate`)
+  setDnd: async (payload: DndSettings): Promise<DndSettings> => {
+    const { data } = await client.put('/notification-dnd', payload)
     return data
   },
 }
 
-export interface AlertTemplate {
-  id: string
-  name: string
-  description: string
-  metric: string
-  operator: string
-  threshold: number
-  duration_minutes: number
-  cooldown_minutes: number
-  severity: string
-  channels: string[]
-  title_template: string
-  body_template: string
-  is_activated: boolean
+export interface DndSettings {
+  dnd_from: string | null
+  dnd_to: string | null
 }
+

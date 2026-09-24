@@ -44,7 +44,7 @@ CATALOG: List[Dict[str, Any]] = [
     {
         "id": "system_alerts",
         "label": "Системные алерты",
-        "description": "Падения нод, эскалации алертов от alert_engine",
+        "description": "Падения нод и пороги нагрузки — из правил автоматизаций",
         "category": "alerts",
         "events": [
             _e("node.connection_lost", "Нода ушла офлайн", "critical"),

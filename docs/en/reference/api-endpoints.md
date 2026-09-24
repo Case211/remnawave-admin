@@ -31,7 +31,9 @@ Response: `List[UserPublic]`.
     "traffic_limit_bytes": 107374182400,
     "used_traffic_bytes": 52013875200,
     "expire_at": "2026-06-01T00:00:00Z",
-    "online": true
+    "online": true,
+    "short_uuid": "AbCdEf123",
+    "subscription_url": "https://sub.example.com/AbCdEf123"
   }
 ]
 ```
@@ -40,6 +42,8 @@ Response: `List[UserPublic]`.
 
 Required scope: `users:read`.
 Returns `UserPublic` or `404`.
+
+`short_uuid` and `subscription_url` are the panel's subscription id and link. The link comes from the last sync with the panel and is `null` until the user has been synced. It grants access to the configs — don't publish it.
 
 ### `POST /users` - create a user
 
@@ -67,7 +71,19 @@ Body:
 `external_squad_uuid` and `active_internal_squads` are optional; take squad UUIDs from
 `GET /squads/external` and `GET /squads/internal` (below).
 
-Returns `201` with `{"success": true, "uuid": "..."}`.
+Returns `201`:
+
+```json
+{
+  "success": true,
+  "message": "User alice created",
+  "uuid": "a2e...",
+  "short_uuid": "AbCdEf123",
+  "subscription_url": "https://sub.example.com/AbCdEf123"
+}
+```
+
+The user is written to the admin database right away, so `GET /users/{uuid}` works without waiting for a sync. If the local database is unavailable, `uuid` may be `null` — the user shows up after the next sync.
 
 ### `POST /users/{uuid}/enable` - enable
 
@@ -189,6 +205,7 @@ Query parameters:
 | `limit` | int (1..500) | 100 | Page size |
 | `offset` | int | 0 | Page offset |
 | `user_uuid` | string | - | Filter by user UUID |
+| `telegram_id` | int | - | Filter by the customer's Telegram ID |
 | `min_score` | float | - | Minimum violation score |
 | `recommended_action` | string | - | e.g. `hard_block`, `temp_block`, `monitor` |
 | `resolved` | bool | - | `true` = action taken, `false` = open |
@@ -209,10 +226,62 @@ Response: `List[ViolationPublic]`.
     "reasons": ["4 simultaneous connections from 3 countries"],
     "ip_addresses": ["1.2.3.4"],
     "countries": ["RU", "NL"],
-    "detected_at": "2026-06-07T11:50:00+00:00"
+    "detected_at": "2026-06-07T11:50:00+00:00",
+    "notified_at": null
   }
 ]
 ```
+
+`notified_at` is when the customer was sent a [warning](/en/guide/anti-abuse#client-warnings)
+about this violation; `null` if no warning was sent.
+
+### `GET /violations/summary` - customer verdict
+
+Required scope: `violations:read`. Answers a single question: can this person be trusted. Meant
+for integrations that make a decision — whether to grant a trial, a promo code, a renewal — and
+have no reason to parse the violation list.
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `telegram_id` | int | - | Customer by Telegram ID |
+| `user_uuid` | string | - | Customer by panel UUID |
+| `window_days` | int (1..365) | 30 | How far back to count |
+
+Either `telegram_id` **or** `user_uuid` is required, otherwise `422`.
+
+```json
+{
+  "user_uuid": "...",
+  "telegram_id": 366945364,
+  "window_days": 30,
+  "level": "warned",
+  "violations": 2,
+  "max_score": 74.0,
+  "last_detected_at": "2026-09-20T10:00:00+00:00",
+  "last_action": null,
+  "whitelisted": false,
+  "notice": {
+    "violation_id": 9123,
+    "kind": "device",
+    "subject": "Your subscription is used on several devices",
+    "body": "We noticed…",
+    "sent_at": "2026-09-20T10:05:00+00:00"
+  }
+}
+```
+
+`level` has three values: `clean` (no violations in the window, or the person is whitelisted),
+`warned` (there are violations, but no action was taken), `limited` (a block or a speed limit
+was applied for the latest violation).
+
+Annulled violations are not counted — the detector was wrong, and the person has nothing to do
+with it. The whitelist overrides everything: it is set by hand, already knowing about the
+violations, and an integration should not punish someone the operator cleared.
+
+`notice` is the latest warning the customer actually received: subject and text exactly as they
+were sent, even if the template was edited later; `null` if no warning was sent. `kind` is the
+violation type whose template was used: `default`, `temporal`, `geo`, `asn`, `profile`,
+`device`, `hwid`, `user_agent`, `torrent`, `traffic_rate`.
 
 ### `GET /violations/{id}` - violation detail
 

@@ -1043,13 +1043,17 @@
     "thr_suffix": "\n\n🐌 <i>Throttled to {rate} kbit/s{period}{moved} ({name})</i>",
     "thr_error": "❌ Could not throttle: {e}",
     "thr_moved": " + moved to the reserve squad",
+    "thr_unlimited": "ℹ️ The default speed in settings is 0, which means no limit. Nothing to throttle: set a speed in settings",
     "thr_period": " for {hours}h",
     "unthr_button": "↩️ Restore speed",
     "unthr_done": "↩️ Throttle lifted{restored}. Nodes learn about it within a minute",
     "unthr_suffix": "\n\n↩️ <i>Throttle lifted{restored} ({name})</i>",
     "unthr_restored": " + previous squads restored",
     "unthr_absent": "ℹ️ This user has no active throttle",
-    "unthr_error": "❌ Could not lift the throttle: {e}"
+    "unthr_error": "❌ Could not lift the throttle: {e}",
+    "warn_sent": "Warning sent: {channels}",
+    "warn_not_sent": "Warning was not delivered: {reason}",
+    "warn_no_violation": "No recent violation to warn about"
   },
   "pact": {
     "invalid_format": "Invalid button format",
@@ -1250,7 +1254,7 @@
       "more_devices": "... and {count} more",
       "duration": "⏱ In violation: <code>{seconds} sec</code>",
       "score": "📊 Score: <code>{score}/100</code>",
-      "time_msk": "🕐 Time (MSK): <code>{time}</code>",
+      "time": "🕐 Time: <code>{time}</code>",
       "btn": {
         "info": "👤 Details",
         "block": "🔒 Block",
@@ -1259,7 +1263,8 @@
         "annul": "🚫 Annul",
         "whitelist": "🤍 Whitelist",
         "whitelist_partial": "🤍 Skip: {analyzer}",
-        "throttle": "🐌 Throttle"
+        "throttle": "🐌 Throttle",
+        "warn": "⚠️ Warn"
       },
       "platform": {
         "android": "Android",

@@ -341,6 +341,9 @@ export function getEventTypes() {
     { value: 'node.went_offline', label: t('automations.events.node_went_offline'), description: t('automations.events.node_went_offlineDesc') },
     { value: 'user.traffic_exceeded', label: t('automations.events.user_traffic_exceeded'), description: t('automations.events.user_traffic_exceededDesc') },
     { value: 'torrent.detected', label: t('automations.events.torrent_detected'), description: t('automations.events.torrent_detectedDesc') },
+    { value: 'node.online', label: t('automations.events.node_online'), description: t('automations.events.node_onlineDesc') },
+    { value: 'user.created', label: t('automations.events.user_created'), description: t('automations.events.user_createdDesc') },
+    { value: 'user.expired', label: t('automations.events.user_expired'), description: t('automations.events.user_expiredDesc') },
   ] as const
 }
 export const EVENT_TYPES = new Proxy([] as unknown as ReturnType<typeof getEventTypes>, {
@@ -351,10 +354,15 @@ export function getThresholdMetrics() {
   return [
     { value: 'users_online', label: t('automations.metrics.users_online'), description: t('automations.metrics.users_onlineDesc') },
     { value: 'traffic_today', label: t('automations.metrics.traffic_today'), description: t('automations.metrics.traffic_todayDesc') },
-    { value: 'node_uptime_percent', label: t('automations.metrics.node_uptime_percent'), description: t('automations.metrics.node_uptime_percentDesc') },
     { value: 'user_traffic_percent', label: t('automations.metrics.user_traffic_percent'), description: t('automations.metrics.user_traffic_percentDesc') },
     { value: 'user_node_traffic_gb', label: t('automations.metrics.user_node_traffic_gb'), description: t('automations.metrics.user_node_traffic_gbDesc') },
     { value: 'user_node_traffic_today_gb', label: t('automations.metrics.user_node_traffic_today_gb'), description: t('automations.metrics.user_node_traffic_today_gbDesc') },
+    { value: 'user_traffic_today_gb', label: t('automations.metrics.user_traffic_today_gb'), description: t('automations.metrics.user_traffic_today_gbDesc') },
+    { value: 'node_cpu_percent', label: t('automations.metrics.node_cpu_percent'), description: t('automations.metrics.node_cpu_percentDesc') },
+    { value: 'node_memory_percent', label: t('automations.metrics.node_memory_percent'), description: t('automations.metrics.node_memory_percentDesc') },
+    { value: 'node_disk_percent', label: t('automations.metrics.node_disk_percent'), description: t('automations.metrics.node_disk_percentDesc') },
+    { value: 'violations_last_hour', label: t('automations.metrics.violations_last_hour'), description: t('automations.metrics.violations_last_hourDesc') },
+    { value: 'users_new_today', label: t('automations.metrics.users_new_today'), description: t('automations.metrics.users_new_todayDesc') },
   ] as const
 }
 export const THRESHOLD_METRICS = new Proxy([] as unknown as ReturnType<typeof getThresholdMetrics>, {
@@ -371,21 +379,93 @@ export function getConditionOperators() {
     { value: '<=', label: t('automations.operators.lte') },
     { value: 'contains', label: t('automations.operators.contains') },
     { value: 'not_contains', label: t('automations.operators.not_contains') },
+    { value: 'in', label: t('automations.operators.in') },
+    { value: 'not_in', label: t('automations.operators.not_in') },
   ] as const
 }
 export const CONDITION_OPERATORS = new Proxy([] as unknown as ReturnType<typeof getConditionOperators>, {
   get(_target, prop) { const d = getConditionOperators(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
+// Поля, которые движок реально кладёт в данные срабатывания, — по триггеру.
+// Условие на поле, которого нет в данных, всегда ложно, и правило молчит.
+const TRIGGER_FIELDS: Record<string, string[]> = {
+  'violation.detected': [
+    'score', 'recommended_action', 'country', 'countries', 'asn_types',
+    'is_mobile', 'is_datacenter', 'is_vpn', 'unique_ips', 'simultaneous', 'devices',
+  ],
+  'torrent.detected': ['event_count', 'window_events', 'peers', 'node_name'],
+  'node.went_offline': ['offline_minutes', 'users_before', 'country_code', 'node_name'],
+  'user.traffic_exceeded': ['percent', 'traffic_gb', 'days_left', 'tag', 'squads'],
+  'node.online': ['downtime_minutes', 'country_code', 'node_name'],
+  'user.created': ['created_by'],
+  'user.expired': ['tag', 'squads'],
+  users_online: ['users_online', 'node_name'],
+  traffic_today: ['traffic_today_gb', 'node_name'],
+  user_traffic_percent: ['percent', 'over_percent', 'days_left', 'tag', 'squads'],
+  user_node_traffic_gb: ['traffic_gb', 'over_gb'],
+  user_node_traffic_today_gb: ['traffic_gb', 'over_gb'],
+  user_traffic_today_gb: ['traffic_gb', 'over_gb'],
+  node_cpu_percent: ['value', 'memory', 'disk', 'node_name'],
+  node_memory_percent: ['value', 'cpu', 'disk', 'node_name'],
+  node_disk_percent: ['value', 'cpu', 'memory', 'node_name'],
+  violations_last_hour: ['violations_last_hour'],
+  users_new_today: ['users_new_today'],
+  schedule: ['users_online', 'users_total', 'nodes_online', 'violations_today'],
+}
+
+// Переменные для текста уведомления — по триггеру
+const TRIGGER_VARS: Record<string, string[]> = {
+  'violation.detected': ['{user}', '{user_code}', '{score}', '{recommended_action}', '{country}', '{unique_ips}'],
+  'torrent.detected': ['{user}', '{user_code}', '{window_events}', '{peers}', '{node}'],
+  'node.went_offline': ['{node}', '{node_code}', '{offline_minutes}', '{users_before}', '{country_code}'],
+  'user.traffic_exceeded': ['{user}', '{user_code}', '{percent}', '{traffic_gb}', '{days_left}'],
+  'node.online': ['{node}', '{node_code}', '{downtime_minutes}', '{country_code}'],
+  'user.created': ['{user}', '{user_code}', '{created_by}'],
+  'user.expired': ['{user}', '{user_code}', '{expire_at}', '{tag}'],
+  users_online: ['{users_online}', '{node}'],
+  traffic_today: ['{traffic_today_gb}', '{node}'],
+  user_traffic_today_gb: ['{user}', '{user_code}', '{traffic_gb}', '{over_gb}', '{threshold}'],
+  node_cpu_percent: ['{node}', '{node_code}', '{value}', '{threshold}'],
+  node_memory_percent: ['{node}', '{node_code}', '{value}', '{threshold}'],
+  node_disk_percent: ['{node}', '{node_code}', '{value}', '{threshold}'],
+  violations_last_hour: ['{violations_last_hour}', '{threshold}'],
+  users_new_today: ['{users_new_today}', '{threshold}'],
+  user_traffic_percent: ['{user}', '{user_code}', '{percent}', '{over_percent}', '{threshold}'],
+  user_node_traffic_gb: ['{user}', '{user_code}', '{node}', '{node_code}', '{traffic}', '{over}', '{threshold}'],
+  user_node_traffic_today_gb: ['{user}', '{user_code}', '{node}', '{node_code}', '{traffic}', '{over}', '{threshold}'],
+  schedule: [
+    '{users_total}', '{users_online}', '{nodes_online}', '{nodes_total}', '{traffic_today}',
+    '{traffic_yesterday}', '{report_date}', '{top_nodes_yesterday}', '{users_new_yesterday}',
+    '{users_expired_yesterday}', '{violations_today}', '{violations_yesterday}',
+  ],
+}
+
+function triggerKey(triggerType: string, event: string, metric: string): string {
+  if (triggerType === 'event') return event
+  if (triggerType === 'threshold') return metric
+  return 'schedule'
+}
+
+const ALL_CONDITION_FIELDS = [...new Set(Object.values(TRIGGER_FIELDS).flat())]
+
+function fieldOption(value: string) {
+  return { value, label: t(`automations.conditionFields.${value}`, { defaultValue: value }) }
+}
+
+/** Поля условий для выбранного триггера. */
+export function conditionFieldsFor(triggerType: string, event: string, metric: string) {
+  return (TRIGGER_FIELDS[triggerKey(triggerType, event, metric)] || []).map(fieldOption)
+}
+
+/** Переменные текста уведомления для выбранного триггера. */
+export function messageVarsFor(triggerType: string, event: string, metric: string): string[] {
+  return [...(TRIGGER_VARS[triggerKey(triggerType, event, metric)] || []), '{rule_name}', '{timestamp}']
+}
+
+/** Все известные поля — для подписи уже сохранённых условий. */
 export function getConditionFields() {
-  return [
-    { value: 'score', label: t('automations.conditionFields.score') },
-    { value: 'percent', label: t('automations.conditionFields.percent') },
-    { value: 'traffic_gb', label: t('automations.conditionFields.traffic_gb') },
-    { value: 'uptime', label: t('automations.conditionFields.uptime') },
-    { value: 'online_count', label: t('automations.conditionFields.online_count') },
-    { value: 'days_expired', label: t('automations.conditionFields.days_expired') },
-  ] as const
+  return ALL_CONDITION_FIELDS.map(fieldOption)
 }
 export const CONDITION_FIELDS = new Proxy([] as unknown as ReturnType<typeof getConditionFields>, {
   get(_target, prop) { const d = getConditionFields(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'some') return d.some.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -402,6 +482,8 @@ export function getActionTypes() {
     { value: 'cleanup_expired', label: t('automations.actionTypes.cleanup_expired'), category: 'system', description: t('automations.actionTypes.cleanup_expiredDesc') },
     { value: 'reset_traffic', label: t('automations.actionTypes.reset_traffic'), category: 'users', description: t('automations.actionTypes.reset_trafficDesc') },
     { value: 'force_sync', label: t('automations.actionTypes.force_sync'), category: 'system', description: t('automations.actionTypes.force_syncDesc') },
+    { value: 'throttle_user', label: t('automations.actionTypes.throttle_user'), category: 'users', description: t('automations.actionTypes.throttle_userDesc') },
+    { value: 'warn_user', label: t('automations.actionTypes.warn_user'), category: 'violations', description: t('automations.actionTypes.warn_userDesc') },
   ] as const
 }
 export const ACTION_TYPES = new Proxy([] as unknown as ReturnType<typeof getActionTypes>, {

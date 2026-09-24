@@ -24,6 +24,7 @@ import {
   type ApiKeyCreated,
   type WebhookSubscription,
   type WebhookDelivery,
+  type ApiKeyLimits,
   type WebhookTestResult,
 } from '../api/apiKeys'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useFormatters } from '@/lib/useFormatters'
 import { useTabParam } from '@/lib/useTabParam'
 import { toastMutationError } from '@/lib/mutationToast'
+import { squadsApi } from '@/api/squads'
 
 const COPY_RESET_MS = 3500
 
@@ -72,6 +74,71 @@ function ttlToIsoString(ttl: string): string | undefined {
 
 // ── API Keys Tab ────────────────────────────────────────────────
 
+type LimitsForm = { ips: string; squads: string[]; tag: string }
+
+const EMPTY_LIMITS: LimitsForm = { ips: '', squads: [], tag: '' }
+
+function limitsFromKey(key: ApiKey): LimitsForm {
+  return { ips: (key.allowed_ips || []).join('\n'), squads: key.user_squads || [], tag: key.user_tag || '' }
+}
+
+function limitsPayload(form: LimitsForm): ApiKeyLimits {
+  return {
+    allowed_ips: form.ips.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean),
+    user_squads: form.squads,
+    user_tag: form.tag.trim() || null,
+  }
+}
+
+/** Ограничения ключа: адреса, с которых он работает, и юзеры, которых он видит */
+function KeyLimitsFields({ value, onChange }: { value: LimitsForm; onChange: (v: LimitsForm) => void }) {
+  const { t } = useTranslation()
+  const { data: squads = [] } = useQuery({ queryKey: ['squads-internal'], queryFn: squadsApi.listInternal, staleTime: 60_000 })
+  return (
+    <div className="space-y-3 rounded-lg border border-[var(--glass-border)] p-3">
+      <p className="text-xs font-medium text-dark-200">{t('apiKeys.limits.title')}</p>
+      <div>
+        <Label htmlFor="key-ips">{t('apiKeys.limits.ips')}</Label>
+        <textarea
+          id="key-ips"
+          rows={2}
+          value={value.ips}
+          onChange={(e) => onChange({ ...value, ips: e.target.value })}
+          placeholder="203.0.113.10&#10;198.51.100.0/24"
+          className="mt-1 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 font-mono text-xs"
+        />
+        <p className="mt-1 text-[11px] text-dark-400">{t('apiKeys.limits.ipsHint')}</p>
+      </div>
+      <div>
+        <Label>{t('apiKeys.limits.squads')}</Label>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {squads.map((squad) => {
+            const on = value.squads.includes(squad.uuid)
+            return (
+              <button
+                key={squad.uuid}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChange({ ...value, squads: on ? value.squads.filter((s) => s !== squad.uuid) : [...value.squads, squad.uuid] })}
+                className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                  on ? 'bg-primary/20 text-primary-400 border-primary/40' : 'bg-[var(--glass-bg)] text-dark-300 border-[var(--glass-border)]'
+                }`}
+              >
+                {squad.name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="key-tag">{t('apiKeys.limits.tag')}</Label>
+        <Input id="key-tag" value={value.tag} maxLength={64} onChange={(e) => onChange({ ...value, tag: e.target.value })} />
+      </div>
+      <p className="text-[11px] text-dark-400">{t('apiKeys.limits.usersHint')}</p>
+    </div>
+  )
+}
+
 function ApiKeysTab() {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
@@ -91,6 +158,10 @@ function ApiKeysTab() {
   const [editName, setEditName] = useState('')
   const [editScopes, setEditScopes] = useState<string[]>([])
   const [editDesc, setEditDesc] = useState('')
+  const [newKeyLimits, setNewKeyLimits] = useState<LimitsForm>(EMPTY_LIMITS)
+  const [editLimits, setEditLimits] = useState<LimitsForm>(EMPTY_LIMITS)
+  const [rotateGrace, setRotateGrace] = useState('0')
+  const [requestsKey, setRequestsKey] = useState<ApiKey | null>(null)
 
   const retryLabel = t('common.retry', { defaultValue: 'Повторить' })
 
@@ -113,6 +184,7 @@ function ApiKeysTab() {
       setNewKeyScopes([])
       setNewKeyTtl('never')
       setNewKeyDesc('')
+      setNewKeyLimits(EMPTY_LIMITS)
       setKeySaved(false)
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
     },
@@ -128,8 +200,8 @@ function ApiKeysTab() {
       setConfirmRotate(null)
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
     },
-    onError: (err, id) =>
-      toastMutationError(err, t('apiKeys.rotateFailed', { defaultValue: 'Rotate failed' }), () => rotateKey.mutate(id), retryLabel),
+    onError: (err, vars) =>
+      toastMutationError(err, t('apiKeys.rotateFailed', { defaultValue: 'Rotate failed' }), () => rotateKey.mutate(vars), retryLabel),
   })
 
   const toggleKey = useMutation({
@@ -141,7 +213,7 @@ function ApiKeysTab() {
   })
 
   const updateKey = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; scopes?: string[]; description?: string | null } }) =>
+    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; scopes?: string[]; description?: string | null } & ApiKeyLimits }) =>
       apiKeysApi.update(id, payload as Parameters<typeof apiKeysApi.update>[1]),
     onSuccess: () => {
       toast.success(t('apiKeys.updated', { defaultValue: 'Ключ обновлён' }))
@@ -178,6 +250,7 @@ function ApiKeysTab() {
     setEditName(key.name)
     setEditScopes(key.scopes)
     setEditDesc(key.description || '')
+    setEditLimits(limitsFromKey(key))
   }
 
   const closeCreatedDialog = () => {
@@ -256,6 +329,23 @@ function ApiKeysTab() {
                         {key.last_used_at && ` · ${t('apiKeys.lastUsed')}: ${formatDate(key.last_used_at)}`}
                         {key.expires_at && ` · ${t('apiKeys.expiresAt', { defaultValue: 'Истекает' })}: ${formatDate(key.expires_at)}`}
                       </p>
+                      {(key.allowed_ips?.length > 0 || key.user_squads?.length > 0 || key.user_tag || key.prev_valid_until) && (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {key.allowed_ips?.length > 0 && (
+                            <Badge variant="outline" className="text-[10px]" title={key.allowed_ips.join(', ')}>
+                              {t('apiKeys.limits.ipsBadge', { count: key.allowed_ips.length })}
+                            </Badge>
+                          )}
+                          {(key.user_squads?.length > 0 || key.user_tag) && (
+                            <Badge variant="outline" className="text-[10px]">{t('apiKeys.limits.usersBadge')}</Badge>
+                          )}
+                          {key.prev_valid_until && (
+                            <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                              {t('apiKeys.prevValidUntil', { date: formatDate(key.prev_valid_until) })}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <PermissionGate resource="api_keys" action="edit">
@@ -268,9 +358,19 @@ function ApiKeysTab() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          aria-label={t('apiKeys.requests.title')}
+                          title={t('apiKeys.requests.title')}
+                          onClick={() => setRequestsKey(key)}
+                        >
+                          <History className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
                           aria-label={t('apiKeys.rotate', { defaultValue: 'Rotate key' })}
                           title={t('apiKeys.rotate', { defaultValue: 'Rotate key' })}
-                          onClick={() => setConfirmRotate(key.id)}
+                          onClick={() => { setRotateGrace('0'); setConfirmRotate(key.id) }}
                         >
                           <RotateCw className="w-4 h-4" />
                         </Button>
@@ -362,6 +462,7 @@ function ApiKeysTab() {
                 placeholder={t('apiKeys.descriptionPlaceholder', { defaultValue: 'Optional — what is this key used for?' })}
               />
             </div>
+            <KeyLimitsFields value={newKeyLimits} onChange={setNewKeyLimits} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>
@@ -374,6 +475,7 @@ function ApiKeysTab() {
                 scopes: newKeyScopes,
                 expires_at: ttlToIsoString(newKeyTtl),
                 description: newKeyDesc || undefined,
+                ...limitsPayload(newKeyLimits),
               })}
             >
               {createKey.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -467,6 +569,7 @@ function ApiKeysTab() {
                 ))}
               </div>
             </div>
+            <KeyLimitsFields value={editLimits} onChange={setEditLimits} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditKey(null)}>
@@ -476,7 +579,7 @@ function ApiKeysTab() {
               disabled={!editName.trim() || updateKey.isPending}
               onClick={() => editKey && updateKey.mutate({
                 id: editKey.id,
-                payload: { name: editName, scopes: editScopes, description: editDesc || null as unknown as string },
+                payload: { name: editName, scopes: editScopes, description: editDesc || null as unknown as string, ...limitsPayload(editLimits) },
               })}
             >
               {updateKey.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -498,17 +601,41 @@ function ApiKeysTab() {
         }}
       />
 
-      <ConfirmDialog
-        open={!!confirmRotate}
-        onOpenChange={(open) => !open && setConfirmRotate(null)}
-        title={t('apiKeys.confirmRotate', { defaultValue: 'Rotate this API key?' })}
-        description={t('apiKeys.confirmRotateDesc', { defaultValue: 'A new secret will be generated. The current key will stop working immediately. You will see the new key once — copy it.' })}
-        confirmLabel={t('apiKeys.rotate', { defaultValue: 'Rotate' })}
-        variant="destructive"
-        onConfirm={() => {
-          if (confirmRotate) rotateKey.mutate(confirmRotate)
-        }}
-      />
+      <Dialog open={!!confirmRotate} onOpenChange={(open) => !open && setConfirmRotate(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('apiKeys.confirmRotate', { defaultValue: 'Rotate this API key?' })}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-dark-200">{t('apiKeys.rotateGraceDesc')}</p>
+            <Select value={rotateGrace} onValueChange={setRotateGrace}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {['0', '1', '6', '24', '72'].map((h) => (
+                  <SelectItem key={h} value={h}>
+                    {h === '0' ? t('apiKeys.rotateNow') : t('apiKeys.rotateGraceHours', { count: Number(h) })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRotate(null)}>{t('common.cancel')}</Button>
+            <Button
+              variant={rotateGrace === '0' ? 'destructive' : 'default'}
+              disabled={rotateKey.isPending}
+              onClick={() => confirmRotate && rotateKey.mutate({ id: confirmRotate, graceHours: Number(rotateGrace) })}
+            >
+              {rotateKey.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {t('apiKeys.rotate', { defaultValue: 'Rotate' })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {requestsKey && <KeyRequestsDialog apiKey={requestsKey} onClose={() => setRequestsKey(null)} />}
     </div>
   )
 }
@@ -1009,12 +1136,80 @@ function WebhooksTab() {
 }
 
 
+function KeyRequestsDialog({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const { data: requests = [], isLoading } = useQuery({
+    queryKey: ['api-key-requests', apiKey.id],
+    queryFn: () => apiKeysApi.requests(apiKey.id),
+  })
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t('apiKeys.requests.title')} — {apiKey.name}</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[500px] overflow-auto py-2">
+          {isLoading ? (
+            <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
+          ) : requests.length === 0 ? (
+            <p className="py-8 text-center text-dark-400">{t('apiKeys.requests.empty')}</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-dark-400">
+                  <th className="py-1 pr-2 font-medium">{t('apiKeys.requests.time')}</th>
+                  <th className="py-1 pr-2 font-medium">{t('apiKeys.requests.request')}</th>
+                  <th className="py-1 pr-2 font-medium">{t('apiKeys.requests.status')}</th>
+                  <th className="py-1 font-medium">IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((r) => (
+                  <tr key={r.id} className="border-t border-[var(--glass-border)]">
+                    <td className="py-1 pr-2 whitespace-nowrap text-dark-300">{formatDate(r.created_at)}</td>
+                    <td className="py-1 pr-2 font-mono text-dark-100 break-all">{r.method} {r.path}</td>
+                    <td className="py-1 pr-2">
+                      <Badge variant={r.status_code < 400 ? 'success' : 'destructive'}>{r.status_code}</Badge>
+                    </td>
+                    <td className="py-1 font-mono text-dark-300">{r.ip_address || '\u2014'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose}>{t('common.close')}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function DeliveryHistoryDialog({ webhookId, onClose }: { webhookId: number; onClose: () => void }) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
+  const queryClient = useQueryClient()
+  const [eventFilter, setEventFilter] = useState('all')
+  const [outcome, setOutcome] = useState<'all' | 'ok' | 'failed'>('all')
+  const { data: events = [] } = useQuery({ queryKey: ['webhook-events'], queryFn: webhooksApi.getEvents })
   const { data: deliveries = [], isLoading } = useQuery({
-    queryKey: ['webhook-deliveries', webhookId],
-    queryFn: () => webhooksApi.deliveries(webhookId),
+    queryKey: ['webhook-deliveries', webhookId, eventFilter, outcome],
+    queryFn: () => webhooksApi.deliveries(webhookId, {
+      event: eventFilter === 'all' ? undefined : eventFilter,
+      outcome: outcome === 'all' ? undefined : outcome,
+    }),
+  })
+  const redeliver = useMutation({
+    mutationFn: (deliveryId: number) => webhooksApi.redeliver(webhookId, deliveryId),
+    onSuccess: (result) => {
+      const ok = result.status_code != null && result.status_code >= 200 && result.status_code < 300
+      if (ok) toast.success(t('apiKeys.redelivered', { status: result.status_code }))
+      else toast.error(t('apiKeys.redeliverFailed', { error: result.error || result.status_code || '?' }))
+      queryClient.invalidateQueries({ queryKey: ['webhook-deliveries', webhookId] })
+    },
+    onError: () => toast.error(t('common.error')),
   })
 
   return (
@@ -1023,6 +1218,23 @@ function DeliveryHistoryDialog({ webhookId, onClose }: { webhookId: number; onCl
         <DialogHeader>
           <DialogTitle>{t('apiKeys.deliveryHistory', { defaultValue: 'История вызовов' })}</DialogTitle>
         </DialogHeader>
+        <div className="flex flex-wrap gap-2">
+          <Select value={eventFilter} onValueChange={setEventFilter}>
+            <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('apiKeys.allEvents')}</SelectItem>
+              {events.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={outcome} onValueChange={(v) => setOutcome(v as 'all' | 'ok' | 'failed')}>
+            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('apiKeys.outcome.all')}</SelectItem>
+              <SelectItem value="ok">{t('apiKeys.outcome.ok')}</SelectItem>
+              <SelectItem value="failed">{t('apiKeys.outcome.failed')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-2 py-2 max-h-[500px] overflow-auto">
           {isLoading ? (
             <div className="space-y-2">
@@ -1043,6 +1255,17 @@ function DeliveryHistoryDialog({ webhookId, onClose }: { webhookId: number; onCl
                     <span className="text-xs text-dark-400 ml-auto">{formatDate(d.sent_at)}</span>
                     {d.duration_ms != null && (
                       <span className="text-xs text-dark-400">{d.duration_ms} ms</span>
+                    )}
+                    {d.can_redeliver && (
+                      <PermissionGate resource="api_keys" action="edit">
+                        <Button
+                          variant="ghost" size="sm" className="h-6 px-2 text-xs"
+                          disabled={redeliver.isPending}
+                          onClick={() => redeliver.mutate(d.id)}
+                        >
+                          {t('apiKeys.redeliver')}
+                        </Button>
+                      </PermissionGate>
                     )}
                   </div>
                   {d.error && <p className="text-xs text-red-400 mt-1">{d.error}</p>}

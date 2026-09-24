@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PasswordStrengthBar, getPasswordStrength } from '@/components/PasswordStrengthBar'
 import { ShieldAlert, Eye, EyeOff, KeyRound, Check } from '@/components/brand/icons'
 import { authApi } from '@/api/auth'
 import { usePermissionStore } from '@/store/permissionStore'
@@ -25,27 +26,6 @@ function generatePassword(length = 16): string {
     ;[chars[i], chars[j]] = [chars[j], chars[i]]
   }
   return chars.join('')
-}
-
-const CYRILLIC_RE = /[\u0400-\u04FF]/
-
-function getPasswordStrength(password: string) {
-  const checks = {
-    length: password.length >= 8,
-    lower: /[a-z]/.test(password),
-    upper: /[A-Z]/.test(password),
-    digit: /\d/.test(password),
-    special: /[!@#$%^&*_+\-=\[\]{}|;:',.<>?/\\~`"()]/.test(password),
-    noCyrillic: !CYRILLIC_RE.test(password),
-  }
-  const { noCyrillic, ...coreChecks } = checks
-  const passedCount = Object.values(coreChecks).filter(Boolean).length
-  let score = passedCount * 16
-  if (password.length >= 12) score += 10
-  if (password.length >= 16) score += 10
-  score = Math.min(100, score)
-  const allChecks = Object.values(checks).every(Boolean) && checks.noCyrillic
-  return { score, checks, allChecks }
 }
 
 function PasswordInput({ value, onChange, placeholder, autoComplete, disabled }: {
@@ -93,7 +73,7 @@ export function ForcePasswordChange() {
 
   const strength = useMemo(() => getPasswordStrength(newPassword), [newPassword])
   const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0
-  const canSubmit = currentPassword.length > 0 && strength.allChecks && passwordsMatch && !saving
+  const canSubmit = currentPassword.length > 0 && strength.ok && passwordsMatch && !saving
 
   const handleGenerate = () => {
     const pw = generatePassword(16)
@@ -118,7 +98,6 @@ export function ForcePasswordChange() {
     }
   }
 
-  const barColor = strength.score < 30 ? '#ef4444' : strength.score < 60 ? '#f59e0b' : strength.score < 80 ? '#22c55e' : '#10b981'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--glass-bg)] p-4">
@@ -178,19 +157,7 @@ export function ForcePasswordChange() {
               autoComplete="new-password"
               disabled={saving}
             />
-            {newPassword && (
-              <div className="h-1.5 rounded-full bg-[var(--glass-bg)] overflow-hidden mt-1">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{ width: `${strength.score}%`, backgroundColor: barColor }}
-                />
-              </div>
-            )}
-            {newPassword && !strength.checks.noCyrillic && (
-              <p className="text-[11px] text-amber-400 mt-1">
-                {t('login.passwordChecks.noCyrillic')}
-              </p>
-            )}
+            <PasswordStrengthBar password={newPassword} className="mt-1" />
           </div>
 
           <div className="space-y-1.5">

@@ -3,7 +3,7 @@
 Covers: AUTOMATION_TEMPLATES, list_automation_rules, get_automation_rules_stats,
 get_automation_rule_by_id, create_automation_rule, update_automation_rule,
 toggle_automation_rule, delete_automation_rule, increment_trigger_count,
-try_acquire_trigger, write_automation_log, get_automation_logs,
+try_acquire_target, write_automation_log, get_automation_logs,
 get_enabled_rules_by_trigger_type, get_enabled_event_rules.
 """
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,7 +20,7 @@ from web.backend.core.automation import (
     toggle_automation_rule,
     delete_automation_rule,
     increment_trigger_count,
-    try_acquire_trigger,
+    try_acquire_target,
     write_automation_log,
     get_automation_logs,
     get_enabled_rules_by_trigger_type,
@@ -312,28 +312,37 @@ class TestIncrementTriggerCount:
         conn.execute.assert_awaited_once()
 
 
-# ── try_acquire_trigger ───────────────────────────────────────
+# ── try_acquire_target ────────────────────────────────────────
 
 
-class TestTryAcquireTrigger:
+def _tx_conn(claimed, rule_updated=1):
+    conn = _conn(fetchval=AsyncMock(side_effect=[claimed, rule_updated]))
+    tx = MagicMock()
+    tx.__aenter__ = AsyncMock(return_value=None)
+    tx.__aexit__ = AsyncMock(return_value=False)
+    conn.transaction = MagicMock(return_value=tx)
+    return conn
 
-    async def test_acquired(self):
-        conn = _conn(fetchrow=AsyncMock(return_value={"id": 1}))
-        db = _make_db(conn)
 
-        with patch("shared.database.db_service", db):
-            result = await try_acquire_trigger(1, min_interval_seconds=60)
+class TestTryAcquireTarget:
 
-        assert result is True
+    async def test_acquired_counts_rule_trigger(self):
+        conn = _tx_conn(claimed=1)
+        with patch("shared.database.db_service", _make_db(conn)):
+            assert await try_acquire_target(1, "user-a", 30) is True
+        # замок на цель + статистика правила
+        assert conn.fetchval.await_count == 2
 
-    async def test_not_acquired(self):
-        conn = _conn(fetchrow=AsyncMock(return_value=None))
-        db = _make_db(conn)
+    async def test_locked_target_is_skipped_without_touching_rule(self):
+        conn = _tx_conn(claimed=None)
+        with patch("shared.database.db_service", _make_db(conn)):
+            assert await try_acquire_target(1, "user-a", 30) is False
+        assert conn.fetchval.await_count == 1
 
-        with patch("shared.database.db_service", db):
-            result = await try_acquire_trigger(1)
-
-        assert result is False
+    async def test_disabled_rule_is_not_claimed(self):
+        conn = _tx_conn(claimed=1, rule_updated=None)
+        with patch("shared.database.db_service", _make_db(conn)):
+            assert await try_acquire_target(1, "user-a", 30) is False
 
 
 # ── write_automation_log ──────────────────────────────────────

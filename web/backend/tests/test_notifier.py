@@ -21,9 +21,13 @@ class TestEscHtml:
 
 
 class TestNowStr:
-    def test_returns_string(self):
-        result = _now_str()
-        assert "UTC" in result
+    def test_returns_string_in_panel_zone(self):
+        from unittest.mock import patch
+        from shared import timefmt
+
+        with patch.object(timefmt, "zone_name", return_value="Asia/Yekaterinburg"):
+            result = _now_str()
+        assert result.endswith("UTC+5")
         assert len(result) > 10
 
 

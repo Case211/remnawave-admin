@@ -47,6 +47,8 @@ import {
 import client from '../api/client'
 import { UserTimelineDialog } from '@/components/violations/UserTimelineDialog'
 import { DetectorTuningTab } from '@/components/violations/DetectorTuningTab'
+import { NoticeTemplatesTab } from '@/components/violations/NoticeTemplatesTab'
+import { AsnDirectory } from '@/components/violations/AsnDirectory'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -59,7 +61,6 @@ import { cn } from '@/lib/utils'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
 import { exportJSON } from '@/lib/export'
-import Reports from './Reports'
 import { SharedHwidsCard } from '@/components/SharedHwidsCard'
 import type {
   Violation,
@@ -1647,7 +1648,7 @@ function ViolationSkeleton() {
 
 // ── Main page component ──────────────────────────────────────────
 
-type Tab = 'all' | 'pending' | 'top' | 'hwids' | 'reports' | 'tuning'
+type Tab = 'all' | 'pending' | 'top' | 'hwids' | 'asn' | 'tuning' | 'notices'
 
 export default function Violations() {
   const { t } = useTranslation()
@@ -1662,9 +1663,14 @@ export default function Violations() {
   const getP = (k: string, d: string) => searchParams.get(k) ?? d
   const getN = (k: string, d: number) => { const v = searchParams.get(k); return v !== null ? (Number(v) || d) : d }
 
-  const validTabs: Tab[] = ['all', 'pending', 'top', 'hwids', 'reports', 'tuning']
+  const validTabs: Tab[] = ['all', 'pending', 'top', 'hwids', 'asn', 'tuning', 'notices']
   const rawTab = getP('tab', 'all') as Tab
   const tab = validTabs.includes(rawTab) ? rawTab : 'all'
+
+  // Вкладка «Отчёты» ушла на свою страницу — старые ссылки ведём туда
+  useEffect(() => {
+    if (searchParams.get('tab') === 'reports') navigate('/reports', { replace: true })
+  }, [searchParams, navigate])
   const page = getN('page', 1)
   const perPage = getN('perPage', 20)
   const severity = getP('severity', '')
@@ -2261,20 +2267,22 @@ export default function Violations() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[var(--glass-bg)] rounded-lg p-1 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+      {/* На телефоне вкладки переносятся: семь в одну строку не влезают */}
+      <div className="flex flex-wrap gap-1 bg-[var(--glass-bg)] rounded-lg p-1 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
         {([
           { key: 'all' as Tab, label: t('violations.tabs.all'), count: stats?.total },
           { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
           { key: 'top' as Tab, label: t('violations.tabs.topViolators'), count: undefined },
           { key: 'hwids' as Tab, label: t('violations.tabs.hwids'), count: undefined },
-          { key: 'reports' as Tab, label: t('violations.tabs.reports'), count: undefined },
+          { key: 'asn' as Tab, label: t('violations.tabs.asn'), count: undefined },
           { key: 'tuning' as Tab, label: t('violations.tabs.tuning'), count: undefined },
+          { key: 'notices' as Tab, label: t('violations.tabs.notices'), count: undefined },
         ]).map((tabItem) => (
           <button
             key={tabItem.key}
             onClick={() => handleTabChange(tabItem.key)}
             className={cn(
-              'flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-md font-medium transition-all',
+              'flex-auto sm:flex-none whitespace-nowrap px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-md font-medium transition-all',
               tab === tabItem.key
                 ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
                 : 'text-dark-200 hover:text-white hover:bg-[var(--glass-bg)]'
@@ -2289,10 +2297,12 @@ export default function Violations() {
       </div>
 
       {/* Content based on tab */}
-      {tab === 'tuning' ? (
+      {tab === 'notices' ? (
+        <NoticeTemplatesTab />
+      ) : tab === 'tuning' ? (
         <DetectorTuningTab />
-      ) : tab === 'reports' ? (
-        <Reports embedded />
+      ) : tab === 'asn' ? (
+        <AsnDirectory />
       ) : tab === 'hwids' ? (
         <SharedHwidsCard />
       ) : tab === 'top' ? (

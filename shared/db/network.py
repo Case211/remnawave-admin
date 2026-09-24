@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from shared import timefmt
 from shared.logger import logger
 from shared.db._base import _parse_timestamp
 from shared.db_schema import (
@@ -92,6 +93,19 @@ def _subscription_is_active(expire_at: Any, status: Optional[str] = None) -> boo
         return expire_at > datetime.now(timezone.utc)
     except TypeError:
         return False
+
+
+def _bucket_sql(col: str, bucket_minutes: int) -> str:
+    """Начало корзины для графиков. Сутки режутся по часам панели, а не по
+    UTC; час и больше — целыми часами; меньше часа — по N минут внутри часа."""
+    if bucket_minutes >= 1440:
+        z = timefmt.sql_zone()
+        return f"(date_trunc('day', {col} AT TIME ZONE {z}) AT TIME ZONE {z})"
+    if bucket_minutes >= 60:
+        return f"date_trunc('hour', {col})"
+    step = max(1, int(bucket_minutes))
+    return (f"(date_trunc('hour', {col}) + INTERVAL '1 minute' * "
+            f"({step} * FLOOR(EXTRACT(MINUTE FROM {col}) / {step})))")
 
 
 class NetworkMixin:
@@ -1811,10 +1825,7 @@ class NetworkMixin:
             rows = await conn.fetch(
                 f"""
                 SELECT
-                    date_trunc('hour', created_at)
-                        + INTERVAL '1 minute' * ($3 * FLOOR(
-                            EXTRACT(MINUTE FROM created_at) / $3
-                          )) AS bucket,
+                    {_bucket_sql('created_at', bucket_minutes)} AS bucket,
                     node_uuid::text,
                     MAX(traffic_bytes) AS traffic_bytes
                 FROM {NODE_TRAFFIC_SNAPSHOTS_TABLE}
@@ -1822,7 +1833,7 @@ class NetworkMixin:
                 GROUP BY bucket, node_uuid
                 ORDER BY bucket
                 """,
-                since, until, bucket_minutes,
+                since, until,
             )
             return [dict(r) for r in rows]
 
@@ -1868,17 +1879,14 @@ class NetworkMixin:
             rows = await conn.fetch(
                 f"""
                 SELECT
-                    date_trunc('hour', ts)
-                        + INTERVAL '1 minute' * ($3 * FLOOR(
-                            EXTRACT(MINUTE FROM ts) / $3
-                          )) AS bucket,
+                    {_bucket_sql('ts', bucket_minutes)} AS bucket,
                     {agg_sql} AS value
                 FROM {ONLINE_USERS_SNAPSHOTS_TABLE}
                 WHERE ts >= $1 AND ts < $2
                 GROUP BY bucket
                 ORDER BY bucket
                 """,
-                since, until, bucket_minutes,
+                since, until,
             )
             return [{"bucket": r["bucket"], "value": int(r["value"] or 0)} for r in rows]
 
@@ -2271,7 +2279,7 @@ class NetworkMixin:
     async def get_user_node_traffic_today(
         self, node_uuid: str | None = None, threshold_bytes: int = 0
     ) -> List[Dict[str, Any]]:
-        """Sum per-user traffic deltas since start of today (UTC).
+        """Sum per-user traffic deltas since start of today (panel clock).
 
         Args:
             node_uuid: optional filter by specific node.
@@ -2281,6 +2289,7 @@ class NetworkMixin:
         """
         if not self.is_connected:
             return []
+        tz = timefmt.sql_zone()  # сутки — по часам панели
         async with self.acquire() as conn:
             if node_uuid:
                 rows = await conn.fetch(
@@ -2291,7 +2300,7 @@ class NetworkMixin:
                     FROM {USER_NODE_TRAFFIC_HISTORY_TABLE} h
                     JOIN {USERS_TABLE} u ON u.uuid = h.user_uuid
                     JOIN {NODES_TABLE} n ON n.uuid = h.node_uuid
-                    WHERE h.recorded_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+                    WHERE h.recorded_at >= (date_trunc('day', NOW() AT TIME ZONE {tz}) AT TIME ZONE {tz})
                       AND h.node_uuid = $1::uuid
                       AND u.status NOT IN ('EXPIRED', 'DISABLED', 'LIMITED')
                     GROUP BY h.user_uuid, u.username, n.name
@@ -2309,7 +2318,7 @@ class NetworkMixin:
                     FROM {USER_NODE_TRAFFIC_HISTORY_TABLE} h
                     JOIN {USERS_TABLE} u ON u.uuid = h.user_uuid
                     JOIN {NODES_TABLE} n ON n.uuid = h.node_uuid
-                    WHERE h.recorded_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+                    WHERE h.recorded_at >= (date_trunc('day', NOW() AT TIME ZONE {tz}) AT TIME ZONE {tz})
                       AND u.status NOT IN ('EXPIRED', 'DISABLED', 'LIMITED')
                     GROUP BY h.user_uuid, u.username, h.node_uuid, n.name
                     HAVING SUM(h.delta_bytes) >= $1

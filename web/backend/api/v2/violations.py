@@ -35,6 +35,7 @@ from web.backend.schemas.violation import (
     ThrottleItem,
     ThrottleListResponse,
 )
+from shared import timefmt
 from shared.database import DatabaseService
 from shared.geoip import get_geoip_service
 
@@ -142,7 +143,9 @@ async def list_violations(
         # Override start/end from date_from/date_to if provided
         if date_from:
             try:
-                start_date = datetime.fromisoformat(date_from)
+                # Дата из фильтра — сутки в часовом поясе панели; дальше код
+                # работает с naive UTC, как и значения по умолчанию выше
+                start_date = timefmt.parse_filter(date_from).replace(tzinfo=None)
             except ValueError:
                 raise HTTPException(
                     status_code=400,
@@ -150,7 +153,7 @@ async def list_violations(
                 )
         if date_to:
             try:
-                end_date = datetime.fromisoformat(date_to)
+                end_date = timefmt.parse_filter(date_to, end=True).replace(tzinfo=None)
             except ValueError:
                 raise HTTPException(
                     status_code=400,
@@ -968,7 +971,9 @@ async def list_throttles(
             until=row.get("until"),
         ))
 
-    return ThrottleListResponse(items=items, total=len(items))
+    from shared.throttle import default_rate_kbit
+
+    return ThrottleListResponse(items=items, total=len(items), default_rate_kbit=default_rate_kbit())
 
 
 @router.post("/throttle")
@@ -978,10 +983,33 @@ async def add_throttle(
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
     db: DatabaseService = Depends(get_db),
 ):
-    """Ограничить пользователю скорость вместо полного отключения."""
-    from shared.config_service import config_service
+    """Ограничить пользователю скорость вместо полного отключения.
 
-    rate_kbit = data.rate_kbit or int(config_service.get("throttle_default_kbit", 1024) or 1024)
+    0 — без лимита: персональное ограничение снимается, если было. Скорость не
+    указана — берётся из настроек, и 0 там значит то же самое.
+    """
+    from shared.config_service import config_service
+    from shared.throttle import default_rate_kbit, lift_throttle
+
+    rate_kbit = data.rate_kbit if data.rate_kbit is not None else default_rate_kbit()
+    if not rate_kbit:
+        removed, restored = await lift_throttle(data.user_uuid)
+        if removed:
+            try:
+                from web.backend.core.throttle_sync import push_throttles
+                await push_throttles()
+            except Exception as e:
+                logger.warning("Throttle removed in DB but push failed: %s", e)
+            await write_audit_log(
+                admin_id=admin.account_id,
+                admin_username=admin.username,
+                action="violation.throttle.remove",
+                resource="violations",
+                resource_id=data.user_uuid,
+                details=json.dumps({"squads_restored": restored, "via": "rate 0"}, ensure_ascii=False),
+                ip_address=get_client_ip(request),
+            )
+        return {"success": True, "rate_kbit": 0, "lifted": removed, "squads_restored": restored}
 
     # Срок не указан — берём общий лимит из настроек. Ноль там значит
     # «держать до ручного снятия», как было до появления настройки.
@@ -1069,6 +1097,104 @@ async def remove_throttle(
     )
 
     return {"success": True, "squads_restored": restored}
+
+
+# ── Предупреждения клиенту ───────────────────────────────────────
+
+
+class NoticeTemplateUpdate(BaseModel):
+    """Правка шаблона. Всё необязательно: меняют обычно одно поле."""
+
+    enabled: Optional[bool] = None
+    min_score: Optional[float] = Field(None, ge=0, le=100)
+    send_email: Optional[bool] = None
+    subject_ru: Optional[str] = Field(None, max_length=200)
+    body_ru: Optional[str] = Field(None, max_length=4000)
+    subject_en: Optional[str] = Field(None, max_length=200)
+    body_en: Optional[str] = Field(None, max_length=4000)
+
+
+class NoticeSendRequest(BaseModel):
+    """Повторная отправка — отдельным флагом: случайный двойной клик не должен
+    писать клиенту дважды."""
+
+    force: bool = False
+
+
+@router.get("/notice-templates")
+async def list_notice_templates(
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+):
+    """Шаблоны предупреждений — по одному на вид нарушения."""
+    from web.backend.core.violation_notices import NOTICE_KINDS, list_templates
+
+    return {"items": await list_templates(), "kinds": list(NOTICE_KINDS)}
+
+
+@router.patch("/notice-templates/{kind}")
+async def patch_notice_template(
+    kind: str,
+    data: NoticeTemplateUpdate,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+):
+    """Изменить шаблон. Правку текста, который уходит клиентам, пишем в аудит."""
+    from web.backend.core.violation_notices import update_template
+
+    updated = await update_template(
+        kind,
+        data.model_dump(exclude_none=True),
+        updated_by=admin.username,
+    )
+    if not updated:
+        raise api_error(404, E.NOT_FOUND, "Notice template not found")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violations.notice_template_updated",
+        resource="violations",
+        resource_id=kind,
+        ip_address=get_client_ip(request),
+    )
+    return updated
+
+
+@router.post("/{violation_id}/notify")
+async def notify_violation_user(
+    violation_id: int,
+    data: NoticeSendRequest,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+):
+    """Предупредить клиента об этом нарушении.
+
+    Право то же, что у блокировки: сообщение уходит человеку от имени сервиса,
+    и отозвать его нельзя.
+    """
+    from web.backend.core.violation_notices import send_notice
+
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE, "Database is not available")
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM violations WHERE id = $1", violation_id)
+    if not row:
+        raise api_error(404, E.NOT_FOUND, "Violation not found")
+
+    result = await send_notice(dict(row), sent_by=admin.username, force=data.force)
+
+    if result.get("sent"):
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="violations.client_notified",
+            resource="violations",
+            resource_id=str(violation_id),
+            ip_address=get_client_ip(request),
+        )
+    return result
 
 
 @router.get("/{violation_id}", response_model=ViolationDetail)

@@ -1339,40 +1339,89 @@ class ViolationsMixin:
         message_text: Optional[str] = None
     ) -> Optional[int]:
         """
-        Сохранить отчёт в базу данных.
+        Сохранить отчёт. Отчёт за тот же тип и период перезаписывается, а не
+        копится дублем (ручная генерация, повтор планировщика); отметка об
+        отправке при этом сохраняется.
 
         Returns:
-            ID созданного отчёта или None при ошибке
+            ID отчёта или None при ошибке
         """
         if not self.is_connected:
             return None
 
         try:
             async with self.acquire() as conn:
-                result = await conn.fetchval(
-                    insert_sql(
-                        VIOLATION_REPORTS_TABLE,
-                        [
-                            "report_type", "period_start", "period_end",
-                            "total_violations", "critical_count", "warning_count", "monitor_count", "unique_users",
-                            "prev_total_violations", "trend_percent",
-                            "top_violators", "by_country", "by_action", "by_asn_type",
-                            "message_text", "generated_at",
-                        ],
-                        values="$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()",
-                        returning="id",
-                    ),
+                return await conn.fetchval(
+                    f"""
+                    INSERT INTO {VIOLATION_REPORTS_TABLE} (
+                        report_type, period_start, period_end,
+                        total_violations, critical_count, warning_count, monitor_count, unique_users,
+                        prev_total_violations, trend_percent,
+                        top_violators, by_country, by_action, by_asn_type,
+                        message_text, generated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+                    ON CONFLICT (report_type, period_start, period_end) DO UPDATE SET
+                        total_violations = EXCLUDED.total_violations,
+                        critical_count = EXCLUDED.critical_count,
+                        warning_count = EXCLUDED.warning_count,
+                        monitor_count = EXCLUDED.monitor_count,
+                        unique_users = EXCLUDED.unique_users,
+                        prev_total_violations = EXCLUDED.prev_total_violations,
+                        trend_percent = EXCLUDED.trend_percent,
+                        top_violators = EXCLUDED.top_violators,
+                        by_country = EXCLUDED.by_country,
+                        by_action = EXCLUDED.by_action,
+                        by_asn_type = EXCLUDED.by_asn_type,
+                        message_text = EXCLUDED.message_text,
+                        generated_at = NOW()
+                    RETURNING id
+                    """,
                     report_type, period_start, period_end,
                     total_violations, critical_count, warning_count, monitor_count, unique_users,
                     prev_total_violations, trend_percent,
                     top_violators, by_country, by_action, by_asn_type,
                     message_text
                 )
-                return result
 
         except Exception as e:
             logger.error("Error saving violation report: %s", e, exc_info=True)
             return None
+
+    async def get_report_by_id(self, report_id: int) -> Optional[Dict[str, Any]]:
+        """Отчёт по id — любой давности."""
+        if not self.is_connected:
+            return None
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                select_sql(VIOLATION_REPORTS_TABLE, "*", "WHERE id = $1"), report_id,
+            )
+        return dict(row) if row else None
+
+    async def get_report_for_period(
+        self, report_type: str, period_start: datetime, period_end: datetime,
+    ) -> Optional[Dict[str, Any]]:
+        """Отчёт этого типа за ровно этот период, если уже есть."""
+        if not self.is_connected:
+            return None
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                select_sql(
+                    VIOLATION_REPORTS_TABLE, "*",
+                    "WHERE report_type = $1 AND period_start = $2 AND period_end = $3",
+                ),
+                report_type, period_start, period_end,
+            )
+        return dict(row) if row else None
+
+    async def delete_report(self, report_id: int) -> bool:
+        """Удалить отчёт; False — такого нет."""
+        if not self.is_connected:
+            return False
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                f"DELETE FROM {VIOLATION_REPORTS_TABLE} WHERE id = $1", report_id,
+            )
+        return result == "DELETE 1"
 
     async def mark_report_sent(self, report_id: int) -> bool:
         """Отметить отчёт как отправленный."""

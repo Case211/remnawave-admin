@@ -9,9 +9,10 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Bell,
   Terminal,
   CalendarClock,
+  Sparkles,
+  History,
 } from '@/components/brand/icons'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -34,10 +35,11 @@ import { TestResultDialog } from './TestResultDialog'
 import { CATEGORIES } from './helpers'
 import { useFormatters } from '@/lib/useFormatters'
 import { useTabParam } from '@/lib/useTabParam'
-import { AlertRulesTab } from '@/pages/Notifications'
+import { QueryError } from '@/components/QueryError'
 import { NodeScriptsPanel, SchedulesPanel } from './HubLinkCards'
 
-const HUB_SECTIONS = ['rules', 'alerts', 'scripts', 'schedules'] as const
+// Одна строка вкладок: раньше «Правила» были и снаружи, и внутри
+const HUB_SECTIONS = ['rules', 'templates', 'logs', 'scripts', 'schedules'] as const
 
 export default function Automations() {
   const { t } = useTranslation()
@@ -47,9 +49,6 @@ export default function Automations() {
   const canEdit = useHasPermission('automation', 'edit')
   const canDelete = useHasPermission('automation', 'delete')
   const canRun = useHasPermission('automation', 'run')
-  const canNotificationsCreate = useHasPermission('notifications', 'create')
-  const canNotificationsEdit = useHasPermission('notifications', 'edit')
-  const canNotificationsDelete = useHasPermission('notifications', 'delete')
 
   const [section, setSection] = useTabParam('rules', [...HUB_SECTIONS])
 
@@ -69,7 +68,7 @@ export default function Automations() {
   const [testResult, setTestResult] = useState<AutomationTestResult | null>(null)
 
   // Queries
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['automations', page, categoryFilter, triggerFilter, enabledFilter],
     queryFn: () =>
       automationsApi.list({
@@ -101,6 +100,54 @@ export default function Automations() {
     },
     onError: () => toast.error(t('automations.deleteError')),
   })
+
+  const runNowMutation = useMutation({
+    mutationFn: automationsApi.runNow,
+    onSuccess: (res) => {
+      if (res.result === 'success') toast.success(t('automations.runNowDone'))
+      else if (res.result === 'skipped') toast.info(t('automations.runNowSkipped'))
+      else toast.error(t('automations.runNowFailed'))
+      queryClient.invalidateQueries({ queryKey: ['automations'] })
+      queryClient.invalidateQueries({ queryKey: ['automation-rule-log'] })
+    },
+    onError: () => toast.error(t('automations.runNowFailed')),
+  })
+
+  const handleExport = async () => {
+    try {
+      const data = await automationsApi.exportRules()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'automations.json'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
+
+  const importMutation = useMutation({
+    mutationFn: automationsApi.importRules,
+    onSuccess: (res) => {
+      toast.success(t('automations.importDone', { created: res.created, errors: res.errors.length }))
+      queryClient.invalidateQueries({ queryKey: ['automations'] })
+    },
+    onError: () => toast.error(t('automations.importFailed')),
+  })
+
+  const handleImportFile = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text())
+      const rules = Array.isArray(parsed) ? parsed : parsed?.rules
+      if (!Array.isArray(rules)) throw new Error('no rules')
+      importMutation.mutate(rules)
+    } catch {
+      toast.error(t('automations.importBadFile'))
+    }
+  }
 
   const testMutation = useMutation({
     mutationFn: automationsApi.test,
@@ -135,30 +182,43 @@ export default function Automations() {
   const totalRules = data?.total ?? 0
   const activeRules = data?.total_active ?? 0
   const totalTriggers = data?.total_triggers ?? 0
-  const lastTriggered = data?.items
-    ?.filter((r) => r.last_triggered_at)
-    ?.sort((a, b) =>
-      new Date(b.last_triggered_at!).getTime() - new Date(a.last_triggered_at!).getTime()
-    )?.[0]?.last_triggered_at ?? null
+  // По всем правилам — с сервера, а не по текущей странице
+  const lastTriggered = data?.last_triggered_at ?? null
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      {/* Header: на телефоне кнопки уходят под заголовок и переносятся */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-display font-bold text-white">{t('automations.title')}</h1>
           <p className="text-sm text-dark-400 mt-1">
             {t('automations.subtitle')}
           </p>
         </div>
-        <PermissionGate resource="automation" action="create">
-          <Button
-            onClick={handleCreate}
-            className="bg-accent-teal text-white hover:bg-accent-teal/90"
-          >
-            <Plus className="w-4 h-4 mr-2" /> {t('automations.newRule')}
-          </Button>
-        </PermissionGate>
+        <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
+          {section === 'rules' && (
+            <Button variant="outline" onClick={handleExport}>{t('automations.export')}</Button>
+          )}
+          <PermissionGate resource="automation" action="create">
+            <label className={section === 'rules' ? 'inline-flex' : 'hidden'}>
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={(e) => { handleImportFile(e.target.files?.[0]); e.target.value = '' }}
+              />
+              <span className="inline-flex h-10 cursor-pointer items-center rounded-md border border-[var(--glass-border)] px-4 text-sm hover:bg-[var(--glass-bg-hover)]">
+                {t('automations.import')}
+              </span>
+            </label>
+            <Button
+              onClick={handleCreate}
+              className="bg-accent-teal text-white hover:bg-accent-teal/90"
+            >
+              <Plus className="w-4 h-4 mr-2" /> {t('automations.newRule')}
+            </Button>
+          </PermissionGate>
+        </div>
       </div>
 
       {/* Hub outer tabs */}
@@ -168,9 +228,13 @@ export default function Automations() {
             <Zap className="w-3.5 h-3.5" />
             {t('automations.hub.sections.rules', { defaultValue: '\u041f\u0440\u0430\u0432\u0438\u043b\u0430' })}
           </TabsTrigger>
-          <TabsTrigger value="alerts" className="gap-1.5">
-            <Bell className="w-3.5 h-3.5" />
-            {t('automations.hub.sections.alerts', { defaultValue: '\u0410\u043b\u0435\u0440\u0442\u044b' })}
+          <TabsTrigger value="templates" className="gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            {t('automations.tabs.templates')}
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="gap-1.5">
+            <History className="w-3.5 h-3.5" />
+            {t('automations.tabs.logs')}
           </TabsTrigger>
           <TabsTrigger value="scripts" className="gap-1.5">
             <Terminal className="w-3.5 h-3.5" />
@@ -201,23 +265,13 @@ export default function Automations() {
             />
           </div>
 
-          {/* Inner tabs: rules / templates / logs */}
-      <Tabs defaultValue="rules" className="space-y-4">
-        <TabsList className="bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-          <TabsTrigger value="rules">{t('automations.tabs.rules')}</TabsTrigger>
-          <TabsTrigger value="templates">{t('automations.tabs.templates')}</TabsTrigger>
-          <TabsTrigger value="logs">{t('automations.tabs.logs')}</TabsTrigger>
-        </TabsList>
-
-        {/* Rules tab */}
-        <TabsContent value="rules" className="space-y-4">
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Filters: на телефоне — сетка на всю ширину */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
             <Select
               value={categoryFilter}
               onValueChange={(v) => { setCategoryFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-40 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+              <SelectTrigger className="col-span-2 w-full sm:w-40 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
                 <SelectValue placeholder={t('automations.filters.category')} />
               </SelectTrigger>
               <SelectContent>
@@ -232,7 +286,7 @@ export default function Automations() {
               value={triggerFilter}
               onValueChange={(v) => { setTriggerFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+              <SelectTrigger className="w-full sm:w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
                 <SelectValue placeholder={t('automations.filters.trigger')} />
               </SelectTrigger>
               <SelectContent>
@@ -247,7 +301,7 @@ export default function Automations() {
               value={enabledFilter}
               onValueChange={(v) => { setEnabledFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-32 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+              <SelectTrigger className="w-full sm:w-32 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
                 <SelectValue placeholder={t('automations.filters.status')} />
               </SelectTrigger>
               <SelectContent>
@@ -259,7 +313,9 @@ export default function Automations() {
           </div>
 
           {/* Rules grid */}
-          {isLoading ? (
+          {isError ? (
+            <QueryError onRetry={refetch} />
+          ) : isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-48 bg-[var(--glass-bg)]" />
@@ -293,6 +349,7 @@ export default function Automations() {
                     onEdit={handleEdit}
                     onDelete={handleDeleteClick}
                     onTest={(id) => testMutation.mutate(id)}
+                    onRunNow={(id) => runNowMutation.mutate(id)}
                     toggleLoading={toggleMutation.isPending}
                   />
                 ))}
@@ -332,25 +389,12 @@ export default function Automations() {
           )}
         </TabsContent>
 
-        {/* Templates tab */}
         <TabsContent value="templates">
           <TemplatesGallery canCreate={canCreate} />
         </TabsContent>
 
-        {/* Logs tab */}
         <TabsContent value="logs">
           <LogsTimeline />
-        </TabsContent>
-      </Tabs>
-        </TabsContent>
-
-        {/* ── Section: Alerts ─────────────────────────────────── */}
-        <TabsContent value="alerts" className="space-y-4">
-          <AlertRulesTab
-            canEdit={canNotificationsEdit}
-            canCreate={canNotificationsCreate}
-            canDelete={canNotificationsDelete}
-          />
         </TabsContent>
 
         {/* ── Section: Node scripts ───────────────────────────── */}

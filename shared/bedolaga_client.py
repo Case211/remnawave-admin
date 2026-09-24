@@ -115,6 +115,30 @@ class BedolagaClient:
     async def get_user_by_telegram(self, telegram_id: int) -> dict:
         return await self._get(f"/users/by-telegram-id/{telegram_id}")
 
+    async def notify_user(
+        self,
+        user_id: int,
+        text: str,
+        channels: list[str] | None = None,
+        email_subject: str | None = None,
+        email_html: str | None = None,
+    ) -> dict:
+        """Сервисное сообщение клиенту через бота — в Telegram и на почту.
+
+        Бот уже разговаривает с клиентом везде, и письма уходят с привычного
+        ему адреса; свой токен и SMTP панели для этого держать незачем.
+        Ручка появилась в боте отдельно (её нет в старых версиях) — вызывающий
+        обязан быть готов к 404.
+        """
+        payload: dict = {"text": text}
+        if channels:
+            payload["channels"] = channels
+        if email_subject:
+            payload["email_subject"] = email_subject
+        if email_html:
+            payload["email_html"] = email_html
+        return await self._post(f"/users/{user_id}/notify", json=payload)
+
     async def update_user(self, user_id: int, data: dict) -> dict:
         return await self._patch(f"/users/{user_id}", json=data)
 
@@ -162,6 +186,72 @@ class BedolagaClient:
         params.update({k: v for k, v in filters.items() if v is not None})
         return await self._get("/transactions", params=params)
 
+    # ── Support tickets ──
+
+    async def list_tickets(self, limit: int = 50, offset: int = 0, **filters) -> list:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/tickets", params=params)
+
+    async def get_ticket(self, ticket_id: int) -> dict:
+        return await self._get(f"/tickets/{ticket_id}")
+
+    async def reply_ticket(
+        self,
+        ticket_id: int,
+        message_text: str,
+        media_type: str | None = None,
+        media_file_id: str | None = None,
+    ) -> dict:
+        payload: dict = {"message_text": message_text}
+        if media_file_id:
+            payload.update({"media_type": media_type or "document", "media_file_id": media_file_id})
+        return await self._post(f"/tickets/{ticket_id}/reply", json=payload)
+
+    async def upload_media(self, content: bytes, filename: str, media_type: str = "document") -> dict:
+        """Залить файл в Telegram через бота и получить его file_id.
+
+        Роутер медиа у бота подключён без префикса: загрузка — ``/upload``,
+        а скачивание — ``/media/{file_id}``.
+        """
+        client = self._get_client()
+        response = await client.post(
+            "/upload",
+            files={"file": (filename, content)},
+            data={"media_type": media_type},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def set_ticket_status(self, ticket_id: int, status: str) -> dict:
+        return await self._post(f"/tickets/{ticket_id}/status", json={"status": status})
+
+    async def set_ticket_priority(self, ticket_id: int, priority: str) -> dict:
+        return await self._post(f"/tickets/{ticket_id}/priority", json={"priority": priority})
+
+    async def download_media(self, file_id: str) -> bytes:
+        """Содержимое файла по его Telegram file_id (нужен для галерей)."""
+        client = self._get_client()
+        response = await client.get(f"/media/{file_id}")
+        response.raise_for_status()
+        return response.content
+
+    async def get_ticket_message_media(self, ticket_id: int, message_id: int) -> dict:
+        return await self._get(f"/tickets/{ticket_id}/messages/{message_id}/media")
+
+    # ── Activity ──
+
+    async def get_user_activity(self, user_id: int, limit: int = 50, offset: int = 0, types: str | None = None) -> dict:
+        """Лента активности пользователя (бот + кабинет).
+
+        Появилась в боте отдельной ручкой Web API; на старых версиях её нет —
+        вызывающий обязан быть готов к 404 (см. api/v2/bedolaga/customers.py).
+        """
+        params: dict = {"limit": limit, "offset": offset}
+        if types:
+            params["types"] = types
+        return await self._get(f"/users/{user_id}/activity", params=params)
+
     # ── Subscription Events ──
 
     async def list_subscription_events(self, limit: int = 20, offset: int = 0, **filters) -> dict:
@@ -199,9 +289,6 @@ class BedolagaClient:
         params = {"limit": limit, "offset": offset}
         params.update({k: v for k, v in filters.items() if v is not None})
         return await self._get("/campaigns", params=params)
-
-    async def get_campaign(self, campaign_id: int) -> dict:
-        return await self._get(f"/campaigns/{campaign_id}")
 
     async def create_campaign(self, data: dict) -> dict:
         return await self._post("/campaigns", json=data)

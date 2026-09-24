@@ -7,10 +7,12 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
     nav: [
       { text: 'Guide', link: '/en/guide/overview', activeMatch: '/en/guide/' },
       { text: 'Reference', link: '/en/reference/env', activeMatch: '/en/reference/' },
+      { text: 'Releases', link: '/en/releases/', activeMatch: '/en/releases/' },
       {
         text: 'Links',
         items: [
-          { text: 'Releases', link: 'https://github.com/Case211/remnawave-admin/releases' },
+          { text: 'GitHub releases', link: 'https://github.com/Case211/remnawave-admin/releases' },
+          { text: 'Updates in Telegram', link: 'https://t.me/remnawave_admin/3032' },
           { text: 'Telegram chat', link: 'https://t.me/remnawave_admin' },
           { text: 'Issues', link: 'https://github.com/Case211/remnawave-admin/issues' },
         ],
@@ -95,6 +97,16 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
             { text: 'Subscriptions and delivery', link: '/en/reference/webhooks' },
             { text: 'Event catalogue', link: '/en/reference/webhook-events' },
             { text: 'Signature verification', link: '/en/reference/webhook-signatures' },
+          ],
+        },
+      ],
+
+      '/en/releases/': [
+        {
+          text: 'Releases',
+          items: [
+            { text: 'All releases', link: '/en/releases/' },
+            { text: '5.0.0', link: '/en/releases/5.0.0' },
           ],
         },
       ],

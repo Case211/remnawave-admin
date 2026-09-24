@@ -62,6 +62,7 @@ async def create_database_backup(database_url: str) -> dict:
 
         if proc.returncode != 0:
             partial.unlink(missing_ok=True)
+            _fire_backup_failed("database", stderr.decode(errors="replace"))
             raise RuntimeError(f"pg_dump failed: {stderr.decode()}")
 
         partial.replace(filepath)
@@ -80,7 +81,13 @@ async def create_database_backup(database_url: str) -> dict:
             "backup_type": "database",
         }
     except FileNotFoundError:
+        _fire_backup_failed("database", "pg_dump not found")
         raise RuntimeError("pg_dump not found. Ensure PostgreSQL client tools are installed.")
+
+
+def _fire_backup_failed(backup_type: str, error: str) -> None:
+    from web.backend.core.webhook_security import fire_event
+    fire_event("backup.failed", {"backup_type": backup_type, "error": (error or "")[:500]})
 
 
 async def restore_database_backup(database_url: str, filename: str) -> None:
@@ -181,6 +188,7 @@ async def export_config() -> dict:
         }
     except Exception as e:
         logger.error("Failed to export config: %s", e, exc_info=True)
+        _fire_backup_failed("config", str(e))
         raise
 
 
@@ -620,6 +628,15 @@ async def _log_and_maybe_send(filename: str, backup_type: str, size_bytes: int, 
     except Exception as exc:
         logger.debug("Scheduled backup log failed: %s", exc)
 
+    # Хранилище независимо от Telegram: файл уезжает с сервера, даже если
+    # отправка в чат выключена или упала.
+    try:
+        from web.backend.core.backup_s3 import upload_if_enabled
+
+        await upload_if_enabled(filename)
+    except Exception as exc:  # noqa: BLE001 — выгрузка не должна валить бэкап
+        logger.warning("Scheduled backup S3 upload failed: %s", exc)
+
     if not send_tg:
         return
     try:
@@ -675,16 +692,18 @@ async def _run_auto_backup_if_due() -> None:
     """Create a DB (and optionally config) backup when the schedule is due.
 
     Two modes, config-driven:
-    - daily:    once a day at backup_auto_time (HH:MM UTC).
+    - daily:    once a day at backup_auto_time (HH:MM in the display time zone).
     - interval: first at backup_auto_time, then every backup_auto_interval_hours.
     """
     global _last_auto_backup_ts
+    from shared import timefmt
     from shared.config_service import config_service
 
     if not config_service.get("backup_auto_enabled", False):
         return
 
-    now = datetime.now(timezone.utc)
+    # Время бэкапа задаётся в зоне отображения, как и всё время в панели
+    now = timefmt.now()
     current_time = now.strftime("%H:%M")
     schedule_time = str(config_service.get("backup_auto_time", "03:00") or "03:00")
     interval_hours = int(config_service.get("backup_auto_interval_hours", 0) or 0)
@@ -699,7 +718,7 @@ async def _run_auto_backup_if_due() -> None:
     else:
         # Daily mode: once per day at schedule_time
         if _last_auto_backup_ts is not None and \
-                _last_auto_backup_ts.strftime("%Y-%m-%d") == now.strftime("%Y-%m-%d"):
+                timefmt.to_display(_last_auto_backup_ts).date() == now.date():
             return
         if current_time != schedule_time:
             return

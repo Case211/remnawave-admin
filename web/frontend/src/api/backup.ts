@@ -60,6 +60,38 @@ export interface BackupStatus {
   } | null
 }
 
+export interface S3Settings {
+  endpoint: string
+  bucket: string
+  region: string
+  prefix: string
+  path_style: boolean
+  auto_upload: boolean
+  keep_count: number
+  has_credentials: boolean
+  access_key_masked: string
+}
+
+export interface S3SettingsPayload {
+  endpoint: string
+  bucket: string
+  region: string
+  prefix: string
+  path_style: boolean
+  auto_upload: boolean
+  keep_count: number
+  /** null — ключи не трогаем, пустая строка — стираем */
+  access_key?: string | null
+  secret_key?: string | null
+}
+
+export interface S3Object {
+  key: string
+  filename: string
+  size: number
+  last_modified: string
+}
+
 export const backupApi = {
   listFiles: async (): Promise<BackupFile[]> => {
     const { data } = await client.get('/backups/')
@@ -156,5 +188,35 @@ export const backupApi = {
   sendToTelegram: async (filename: string, chatId?: string, topicId?: number) => {
     const { data } = await client.post('/backups/send-telegram', { filename, chat_id: chatId, topic_id: topicId })
     return data as { filename: string; parts_sent: number; size_bytes: number }
+  },
+
+  // S3-совместимое хранилище
+  getS3Settings: async (): Promise<S3Settings> => {
+    const { data } = await client.get('/backups/s3/settings')
+    return data
+  },
+
+  updateS3Settings: async (payload: S3SettingsPayload): Promise<S3Settings> => {
+    const { data } = await client.put('/backups/s3/settings', payload)
+    return data
+  },
+
+  testS3: async () => {
+    const { data } = await client.post('/backups/s3/test')
+    return data as { success: boolean; bucket: string; endpoint: string }
+  },
+
+  uploadToS3: async (filename: string) => {
+    const { data } = await client.post(`/backups/s3/upload/${encodeURIComponent(filename)}`)
+    return data as { success: boolean; key: string; size: number }
+  },
+
+  listS3Objects: async (): Promise<S3Object[]> => {
+    const { data } = await client.get('/backups/s3/objects')
+    return Array.isArray(data) ? data : []
+  },
+
+  deleteS3Object: async (key: string) => {
+    await client.delete(`/backups/s3/objects/${key.split('/').map(encodeURIComponent).join('/')}`)
   },
 }

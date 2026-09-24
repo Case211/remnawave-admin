@@ -27,6 +27,7 @@ import type {
   RadarTick,
   RadarVerdict,
 } from './types'
+import { getDisplayTimeZone } from '@/lib/timezone'
 
 const TRANSPORT_LABELS: Record<string, string> = {
   reality: 'Reality',
@@ -658,7 +659,7 @@ function formatTs(iso?: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString()
+  return d.toLocaleString(undefined, { timeZone: getDisplayTimeZone() })
 }
 
 /** Одна цифра сводки: значение, короткое имя и пояснение под ним. */

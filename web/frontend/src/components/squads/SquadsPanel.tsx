@@ -20,7 +20,7 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useTabParam } from '@/lib/useTabParam'
 
-const VALID_TABS = ['internal', 'external'] as const
+const SQUAD_KINDS = ['internal', 'external'] as const
 
 function InternalSquadsTab() {
   const { t } = useTranslation()
@@ -484,48 +484,34 @@ function ExternalSquadsTab() {
   )
 }
 
-export default function Squads() {
+/**
+ * Сквады — вкладка страницы «Ресурсы»: внутренние и внешние переключаются
+ * параметром ?squads=, чтобы не спорить с ?tab= самой страницы.
+ */
+export function SquadsPanel() {
   const { t } = useTranslation()
-  const hasPermission = usePermissionStore((s) => s.hasPermission)
-  const [tab, setTab] = useTabParam('internal', [...VALID_TABS])
-
-  if (!hasPermission('users', 'view')) {
-    return (
-      <div className="p-4 md:p-6 flex items-center justify-center min-h-[400px]">
-        <p className="text-muted-foreground">{t('common.noPermission', { defaultValue: 'No permission' })}</p>
-      </div>
-    )
-  }
+  const [kind, setKind] = useTabParam('internal', [...SQUAD_KINDS], 'squads')
 
   return (
-    <div className="p-4 md:p-6 space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-white">{t('squads.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('squads.subtitle')}
-        </p>
-      </div>
+    <Tabs value={kind} onValueChange={setKind} className="w-full">
+      <TabsList>
+        <TabsTrigger value="internal" className="gap-1.5">
+          <UsersRound className="w-4 h-4" />
+          {t('squads.internal')}
+        </TabsTrigger>
+        <TabsTrigger value="external" className="gap-1.5">
+          <Globe className="w-4 h-4" />
+          {t('squads.external')}
+        </TabsTrigger>
+      </TabsList>
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList>
-          <TabsTrigger value="internal" className="gap-1.5">
-            <UsersRound className="w-4 h-4" />
-            {t('squads.internal')}
-          </TabsTrigger>
-          <TabsTrigger value="external" className="gap-1.5">
-            <Globe className="w-4 h-4" />
-            {t('squads.external')}
-          </TabsTrigger>
-        </TabsList>
+      <TabsContent value="internal">
+        <InternalSquadsTab />
+      </TabsContent>
 
-        <TabsContent value="internal">
-          <InternalSquadsTab />
-        </TabsContent>
-
-        <TabsContent value="external">
-          <ExternalSquadsTab />
-        </TabsContent>
-      </Tabs>
-    </div>
+      <TabsContent value="external">
+        <ExternalSquadsTab />
+      </TabsContent>
+    </Tabs>
   )
 }

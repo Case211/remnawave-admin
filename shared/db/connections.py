@@ -6,12 +6,18 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from shared import timefmt
 from shared.logger import logger
 from shared.db_schema import USER_CONNECTIONS_TABLE, VIOLATIONS_TABLE, USERS_TABLE, NODES_TABLE
 from shared.db_query import select_sql, insert_sql, update_sql
 
 # Запас на странице под HOT-апдейты активных соединений (миграция 0105)
 CONNECTIONS_FILLFACTOR = 90
+
+
+def _uuid_list(uuids: Optional[list]) -> Optional[list]:
+    """Список uuid строками для ``$n::uuid[]``; None — без фильтра."""
+    return None if uuids is None else [str(u) for u in uuids]
 
 
 class ConnectionsMixin:
@@ -816,6 +822,24 @@ class ConnectionsMixin:
             logger.warning("count_recent_torrent_peers failed: %s", e)
             return 0
 
+    async def recent_torrent_destinations(self, user_uuid: str, minutes: int = 30, limit: int = 10) -> list:
+        """Адреса, с которыми шёл обмен за окно, — самые частые первыми."""
+        if not self.is_connected:
+            return []
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT destination FROM torrent_events "
+                    "WHERE user_uuid = $1::uuid "
+                    "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "GROUP BY destination ORDER BY count(*) DESC, destination LIMIT $3",
+                    user_uuid, minutes, limit,
+                )
+            return [r["destination"] for r in rows]
+        except Exception as e:
+            logger.warning("recent_torrent_destinations failed: %s", e)
+            return []
+
     async def shared_torrent_destinations(
         self, destinations: list, hours: int = 24,
     ) -> set:
@@ -863,8 +887,11 @@ class ConnectionsMixin:
             logger.error("get_recent_torrent_violation failed: %s", e)
             return None
 
-    async def get_torrent_stats(self, days: int = 7) -> dict:
-        """Get torrent event statistics for the given period."""
+    async def get_torrent_stats(self, days: int = 7, user_uuids: Optional[list] = None) -> dict:
+        """Get torrent event statistics for the given period.
+
+        ``user_uuids`` — видимые админу юзеры; None — без ограничения.
+        """
         if not self.is_connected:
             return {}
         try:
@@ -878,8 +905,9 @@ class ConnectionsMixin:
                         COUNT(DISTINCT node_uuid) as affected_nodes
                     FROM torrent_events
                     WHERE detected_at > NOW() - make_interval(days => $1)
+                      AND ($2::uuid[] IS NULL OR user_uuid = ANY($2::uuid[]))
                     """,
-                    days,
+                    days, _uuid_list(user_uuids),
                 )
                 top_users = await conn.fetch(
                     f"""
@@ -887,11 +915,12 @@ class ConnectionsMixin:
                     FROM torrent_events te
                     LEFT JOIN {USERS_TABLE} u ON u.uuid = te.user_uuid
                     WHERE te.detected_at > NOW() - make_interval(days => $1)
+                      AND ($2::uuid[] IS NULL OR te.user_uuid = ANY($2::uuid[]))
                     GROUP BY te.user_uuid, u.username
                     ORDER BY event_count DESC
                     LIMIT 10
                     """,
-                    days,
+                    days, _uuid_list(user_uuids),
                 )
                 return {
                     "total_events": row["total_events"] if row else 0,
@@ -904,23 +933,25 @@ class ConnectionsMixin:
             logger.error("get_torrent_stats failed: %s", e)
             return {}
 
-    async def get_torrent_timeseries(self, days: int = 7) -> list:
-        """Get torrent event counts grouped by day."""
+    async def get_torrent_timeseries(self, days: int = 7, user_uuids: Optional[list] = None) -> list:
+        """Get torrent event counts grouped by day (сутки — по часам панели)."""
         if not self.is_connected:
             return []
+        z = timefmt.sql_zone()
         try:
             async with self.acquire() as conn:
                 rows = await conn.fetch(
-                    """
-                    SELECT date_trunc('day', detected_at) AS day,
+                    f"""
+                    SELECT (date_trunc('day', detected_at AT TIME ZONE {z}))::date AS day,
                            COUNT(*) AS event_count,
                            COUNT(DISTINCT user_uuid) AS unique_users
                     FROM torrent_events
                     WHERE detected_at > NOW() - make_interval(days => $1)
+                      AND ($2::uuid[] IS NULL OR user_uuid = ANY($2::uuid[]))
                     GROUP BY day
                     ORDER BY day
                     """,
-                    days,
+                    days, _uuid_list(user_uuids),
                 )
                 return [
                     {
@@ -934,7 +965,9 @@ class ConnectionsMixin:
             logger.error("get_torrent_timeseries failed: %s", e)
             return []
 
-    async def get_torrent_top_destinations(self, days: int = 7, limit: int = 15) -> list:
+    async def get_torrent_top_destinations(
+        self, days: int = 7, limit: int = 15, user_uuids: Optional[list] = None,
+    ) -> list:
         """Get top torrent destinations by event count."""
         if not self.is_connected:
             return []
@@ -946,11 +979,12 @@ class ConnectionsMixin:
                            COUNT(DISTINCT user_uuid) AS unique_users
                     FROM torrent_events
                     WHERE detected_at > NOW() - make_interval(days => $1)
+                      AND ($3::uuid[] IS NULL OR user_uuid = ANY($3::uuid[]))
                     GROUP BY destination
                     ORDER BY event_count DESC
                     LIMIT $2
                     """,
-                    days, limit,
+                    days, limit, _uuid_list(user_uuids),
                 )
                 return [
                     {

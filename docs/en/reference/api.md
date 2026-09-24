@@ -106,6 +106,28 @@ Guidelines:
 - `bulk:write` bypasses per-user scope checks. Treat it as a privileged scope.
 - `nodes:token` grants access to a node's agent token — the credential that authenticates the Collector API, the agent WebSocket, and remote-terminal commands, effectively a key to the node host. Treat it as more privileged than `bulk:write`.
 
+A key cannot get a scope whose permission its creating admin does not have. Scopes that work across all users (`users:*`, `bulk:write`, `violations:read`) can only be granted by an admin without user visibility restrictions. A key of a disabled or deleted admin stops working.
+
+---
+
+## Key restrictions
+
+Besides scopes, a key can be narrowed down in the create or edit dialog:
+
+- **Addresses** - a list of IPs and subnets, for example `203.0.113.10` and `10.0.0.0/24`. From
+  any other address the key is treated as invalid and gets `401`. An empty list means any address.
+- **Users** - squads and a tag. The key only sees and changes users who belong to at least one of
+  these squads and carry this tag (if both are set, both must match), and only their violations.
+  Such a key can create users only in its own squads and with its own tag - the tag is filled in
+  automatically.
+
+---
+
+## Request log
+
+Every key has a log of its latest requests in the UI: method, path, response code, IP and time.
+It shows who uses the key and from where - and when it is time to rotate it.
+
 ---
 
 ## Rate limits
@@ -127,12 +149,11 @@ IP do not share quota.
 
 ## Rotation
 
-If a key is compromised:
-
 1. In the UI, click the **Rotate** icon next to the key.
-2. Confirm. The old secret becomes invalid immediately; a new raw key is shown once.
-3. Update your integration.
-4. No history is lost - `id`, `name`, `scopes`, `expires_at`, `description` are preserved.
+2. Choose how long the old secret keeps working: revoke it **immediately** if the key leaked, or
+   keep it for 1-72 hours while the integration switches to the new one.
+3. A new raw key is shown once - update your integration.
+4. No history is lost - `id`, `name`, `scopes`, restrictions, `expires_at`, `description` are preserved.
 
 Rotation is logged in the audit trail (`api_keys.rotate`).
 
@@ -161,4 +182,4 @@ View from **Admin -> Audit log** or query `admin_audit_log` directly.
 - **Can I share a key between integrations?** Technically yes. Practically no - a single
   compromised service taints all of them, and audit trails become ambiguous.
 - **Can I see the raw key again?** No. Rotate or recreate.
-- **IP allowlist?** Not yet - planned for a later release.
+- **IP allowlist?** Yes - a list of IPs and subnets in the [key restrictions](#key-restrictions).

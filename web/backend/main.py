@@ -31,6 +31,7 @@ from web.backend.core.ip_whitelist import get_allowed_ips, is_ip_allowed
 from web.backend.core.rate_limit import limiter
 from web.backend.core.update_checker import get_latest_version
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
+from web.backend.api.v2 import node_shaper as node_shaper_api
 from web.backend.api.v2 import settings as settings_api
 from web.backend.api.v2 import diagnostics as diagnostics_api
 from web.backend.api.v2 import admins as admins_api, roles as roles_api
@@ -58,6 +59,7 @@ from web.backend.api.v2 import reports as reports_api
 from web.backend.api.v2 import asn as asn_api
 from web.backend.api.v2 import collector as collector_api
 from web.backend.api.v2 import backup as backup_api
+from web.backend.api.v2 import support as support_api
 from web.backend.api.v2 import api_keys as api_keys_api
 from web.backend.api.v2 import blocked_ips as blocked_ips_api
 from web.backend.api.v2 import webhooks as webhooks_api
@@ -584,10 +586,6 @@ async def lifespan(app: FastAPI):
                     await automation_engine.start()
                     _svc_names.append("automation")
 
-                    from web.backend.core.alert_engine import alert_engine
-                    await alert_engine.start()
-                    _svc_names.append("alerts")
-
                     try:
                         from web.backend.core.mail.mail_service import mail_service
                         await mail_service.start()
@@ -603,6 +601,18 @@ async def lifespan(app: FastAPI):
 
                     from web.backend.core.backup_service import backup_scheduler_loop
                     _bg("backup_scheduler", backup_scheduler_loop())
+
+                    from web.backend.core.support_sync import support_sync_loop
+                    _bg("support_sync", support_sync_loop())
+
+                    from web.backend.core.support_ws_client import support_ws_loop
+                    _bg("support_ws", support_ws_loop())
+
+                    from web.backend.core.support_alerts import support_alerts_loop
+                    _bg("support_alerts", support_alerts_loop())
+
+                    from web.backend.core.support_media_cache import cleanup_loop as support_media_cleanup_loop
+                    _bg("support_media_cleanup", support_media_cleanup_loop())
 
                     from web.backend.core.bscheck_scheduler import bscheck_scheduler_loop
                     _bg("bscheck_scheduler", bscheck_scheduler_loop())
@@ -939,11 +949,6 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     try:
-        from web.backend.core.alert_engine import alert_engine
-        await alert_engine.stop()
-    except Exception:
-        pass
-    try:
         from web.backend.core.automation_engine import engine as automation_engine
         await automation_engine.stop()
     except Exception:
@@ -1150,6 +1155,7 @@ def create_app() -> FastAPI:
         app.include_router(auth.router, prefix="/api/v2/auth", tags=["auth"])
         app.include_router(users.router, prefix="/api/v2/users", tags=["users"])
         app.include_router(nodes.router, prefix="/api/v2/nodes", tags=["nodes"])
+        app.include_router(node_shaper_api.router, prefix="/api/v2/nodes", tags=["nodes"])
         app.include_router(analytics.router, prefix="/api/v2/analytics", tags=["analytics"])
         app.include_router(violations.router, prefix="/api/v2/violations", tags=["violations"])
         app.include_router(hosts.router, prefix="/api/v2/hosts", tags=["hosts"])
@@ -1181,6 +1187,7 @@ def create_app() -> FastAPI:
         app.include_router(reports_api.router, prefix="/api/v2/reports", tags=["reports"])
         app.include_router(asn_api.router, prefix="/api/v2/asn", tags=["asn"])
         app.include_router(backup_api.router, prefix="/api/v2/backups", tags=["backups"])
+        app.include_router(support_api.router, prefix="/api/v2/support", tags=["support"])
         app.include_router(api_keys_api.router, prefix="/api/v2/api-keys", tags=["api-keys"])
         app.include_router(blocked_ips_api.router, prefix="/api/v2/blocked-ips", tags=["blocked-ips"])
 

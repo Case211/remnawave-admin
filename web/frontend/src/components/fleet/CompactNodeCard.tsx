@@ -16,6 +16,7 @@ import {
   Terminal,
 } from '@/components/brand/icons'
 import { cn } from '@/lib/utils'
+import { PanelNodeChip } from './PanelNodeChip'
 import { type FleetNode, getNodeStatus } from './NodeCard'
 
 const STATUS_STYLE: Record<string, string> = {
@@ -96,10 +97,12 @@ export function CompactNodeCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="font-medium text-white text-sm truncate leading-tight">{node.name}</div>
-              {node.is_external && (
+              {node.is_external ? (
                 <span className="shrink-0 rounded border border-sky-500/40 bg-sky-500/10 px-1 text-[10px] leading-4 text-sky-300">
                   {t('fleet.server.badge')}
                 </span>
+              ) : (
+                <PanelNodeChip uuid={node.uuid} />
               )}
             </div>
             <div className="text-[11px] text-dark-300 font-mono truncate">{node.address}:{node.port}</div>

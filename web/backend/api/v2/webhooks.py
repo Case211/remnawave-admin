@@ -1,7 +1,7 @@
 """Webhook subscription management and dispatch."""
 import json
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ from shared.db_query import select_sql, insert_sql, update_sql, delete_sql
 from web.backend.api.deps import AdminUser, require_permission
 from web.backend.core.errors import api_error, E
 from web.backend.core.webhook_security import (
-    check_url_safety,
+    check_url_safety_async,
     deliver_once,
     dispatch_event as _dispatch_event,
     sign_payload,
@@ -26,11 +26,16 @@ AVAILABLE_EVENTS = [
     "user.updated",
     "user.deleted",
     "user.blocked",
+    "user.expired",
+    "user.traffic_exceeded",
     "node.online",
     "node.offline",
+    "node.shaper_penalty",
     "violation.created",
     "automation.triggered",
     "backup.created",
+    "backup.failed",
+    "report.generated",
 ]
 
 _SIGNATURE_VERSIONS = {"v1", "v2"}
@@ -98,8 +103,8 @@ def _validate_signature_version(v: Optional[str]) -> None:
         raise api_error(400, E.INVALID_ACTION, f"Unknown signature_version: {v}")
 
 
-def _validate_url(url: str) -> None:
-    ok, err = check_url_safety(url)
+async def _validate_url(url: str) -> None:
+    ok, err = await check_url_safety_async(url)
     if not ok:
         raise api_error(400, E.INVALID_ACTION, err or "Invalid URL")
 
@@ -137,7 +142,7 @@ async def create_webhook(
     from shared.database import db_service
     if not db_service.is_connected:
         raise api_error(503, E.DB_UNAVAILABLE)
-    _validate_url(body.url)
+    await _validate_url(body.url)
     _validate_events(body.events)
     _validate_signature_version(body.signature_version)
 
@@ -166,12 +171,15 @@ async def update_webhook(
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise api_error(400, E.NO_FIELDS_TO_UPDATE)
+    # Пустой секрет — снять подпись (раньше убрать секрет было нельзя)
+    if updates.get("secret") == "":
+        updates["secret"] = None
     if "events" in updates:
         _validate_events(updates["events"])
     if "signature_version" in updates:
         _validate_signature_version(updates["signature_version"])
     if "url" in updates:
-        _validate_url(updates["url"])
+        await _validate_url(updates["url"])
 
     # Re-enable clears auto-disable state and resets consecutive failures.
     if updates.get("is_active") is True:
@@ -195,7 +203,7 @@ async def update_webhook(
             *params,
         )
     if not row:
-        raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
+        raise api_error(404, E.WEBHOOK_NOT_FOUND)
     return _row_to_response(row)
 
 
@@ -212,7 +220,7 @@ async def delete_webhook(
             delete_sql(WEBHOOK_SUBSCRIPTIONS_TABLE, "id = $1"), webhook_id,
         )
     if result == "DELETE 0":
-        raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
+        raise api_error(404, E.WEBHOOK_NOT_FOUND)
 
 
 # ── Test & Delivery History ──────────────────────────────────────
@@ -233,6 +241,8 @@ class WebhookDeliveryResponse(BaseModel):
     error: Optional[str] = None
     duration_ms: Optional[int] = None
     sent_at: str
+    # Можно ли повторить: тело события сохранено (у старых записей его нет)
+    can_redeliver: bool = False
 
 
 @router.post("/{webhook_id}/test", response_model=WebhookTestResult)
@@ -250,9 +260,9 @@ async def test_webhook(
             webhook_id,
         )
     if not row:
-        raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
+        raise api_error(404, E.WEBHOOK_NOT_FOUND)
 
-    ok, err = check_url_safety(row["url"])
+    ok, err = await check_url_safety_async(row["url"])
     if not ok:
         return WebhookTestResult(error=err, duration_ms=0)
 
@@ -274,17 +284,30 @@ async def test_webhook(
 async def list_deliveries(
     webhook_id: int,
     limit: int = Query(50, ge=1, le=200),
+    event: Optional[str] = Query(None),
+    outcome: Optional[Literal["ok", "failed"]] = Query(None),
     admin: AdminUser = Depends(require_permission("api_keys", "view")),
 ):
     from shared.database import db_service
     if not db_service.is_connected:
         return []
+    where = ["webhook_id = $1"]
+    args: list = [webhook_id]
+    if event:
+        args.append(event)
+        where.append(f"event = ${len(args)}")
+    if outcome == "ok":
+        where.append("status_code BETWEEN 200 AND 299")
+    elif outcome == "failed":
+        where.append("NOT (status_code BETWEEN 200 AND 299)")
+    args.append(limit)
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             select_sql(WEBHOOK_DELIVERIES_TABLE,
-                "id, webhook_id, event, status_code, response_body, error, duration_ms, sent_at",
-                "WHERE webhook_id = $1 ORDER BY sent_at DESC LIMIT $2"),
-            webhook_id, limit,
+                "id, webhook_id, event, status_code, response_body, error, duration_ms, sent_at, "
+                "payload IS NOT NULL AS can_redeliver",
+                f"WHERE {' AND '.join(where)} ORDER BY sent_at DESC LIMIT ${len(args)}"),
+            *args,
         )
     result = []
     for r in rows:
@@ -293,6 +316,48 @@ async def list_deliveries(
             d["sent_at"] = d["sent_at"].isoformat()
         result.append(WebhookDeliveryResponse(**d))
     return result
+
+
+@router.post("/{webhook_id}/deliveries/{delivery_id}/redeliver", response_model=WebhookTestResult)
+async def redeliver(
+    webhook_id: int,
+    delivery_id: int,
+    admin: AdminUser = Depends(require_permission("api_keys", "edit")),
+):
+    """Повторить доставку из журнала тем же телом. Результат пишется в журнал."""
+    from shared.database import db_service
+    from web.backend.core.webhook_security import _log_delivery, _mark_success
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+    async with db_service.acquire() as conn:
+        hook = await conn.fetchrow(
+            select_sql(WEBHOOK_SUBSCRIPTIONS_TABLE, "id, url, secret, signature_version", "WHERE id = $1"),
+            webhook_id,
+        )
+        delivery = await conn.fetchrow(
+            select_sql(WEBHOOK_DELIVERIES_TABLE, "event, payload", "WHERE id = $1 AND webhook_id = $2"),
+            delivery_id, webhook_id,
+        )
+    if not hook:
+        raise api_error(404, E.WEBHOOK_NOT_FOUND)
+    if not delivery or delivery["payload"] is None:
+        raise api_error(404, E.NOT_FOUND, "Delivery payload is not stored")
+    payload = delivery["payload"]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    ok, status_code, response_body, error, elapsed = await deliver_once(
+        webhook_id, hook["url"], hook["secret"], hook["signature_version"] or "v1",
+        delivery["event"], payload,
+    )
+    await _log_delivery(webhook_id, delivery["event"], status_code, response_body, error, elapsed, payload)
+    if ok:
+        await _mark_success(webhook_id)
+    return WebhookTestResult(
+        status_code=status_code or None,
+        response_body=response_body[:5000] if response_body else None,
+        error=error,
+        duration_ms=elapsed,
+    )
 
 
 # ── Dispatch (public re-export) ──────────────────────────────────

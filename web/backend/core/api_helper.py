@@ -4,7 +4,7 @@ This module provides direct API access without depending on the bot's Settings.
 Uses WebSettings (API_BASE_URL, API_TOKEN) for configuration.
 """
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -289,6 +289,41 @@ async def fetch_nodes_usage_by_range(
     if not data:
         return None
     return data.get("response", data)
+
+
+def parse_nodes_usage_series(resp: Optional[Dict[str, Any]]) -> List[Tuple[str, Dict[str, int]]]:
+    """Ответ /api/bandwidth-stats/nodes → [(день, {uuid ноды: байты}), ...].
+
+    Панель 3.x: ``categories`` — дни, ``series`` — по ноде с массивом ``data``
+    вдоль дней. Старый формат (строка на день, ноды ключами) тоже понимаем.
+    """
+    if not isinstance(resp, dict):
+        return []
+    categories = resp.get("categories") or []
+    series = resp.get("series") or []
+    days: Dict[str, Dict[str, int]] = {str(d): {} for d in categories}
+    for entry in series:
+        if not isinstance(entry, dict):
+            continue
+        if isinstance(entry.get("data"), list) and entry.get("uuid"):
+            for day, value in zip(categories, entry["data"]):
+                try:
+                    days[str(day)][entry["uuid"]] = int(float(value or 0))
+                except (TypeError, ValueError):
+                    continue
+            continue
+        day = entry.get("date") or entry.get("timestamp")
+        if not day:
+            continue
+        per_node = days.setdefault(str(day), {})
+        for key, value in entry.items():
+            if key in ("date", "timestamp"):
+                continue
+            try:
+                per_node[key] = int(float(value))
+            except (TypeError, ValueError):
+                continue
+    return sorted(days.items())
 
 
 async def fetch_nodes_realtime_usage() -> List[Dict[str, Any]]:

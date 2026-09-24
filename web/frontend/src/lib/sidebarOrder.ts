@@ -162,13 +162,32 @@ export function applySidebarOrder(
   return result
 }
 
+// «Ноды» и «Флот» стали одним пунктом «Сервера»: он встаёт на место «Нод»,
+// а «Флот» из сохранённого порядка просто уходит. «Хосты» и «Сквады» стали
+// вкладками «Ресурсов»: хосты уступают им место, сквады просто уходят.
+const LEGACY_ITEMS: Record<string, string | null> = {
+  'item:/nodes': 'item:/servers',
+  'item:/fleet': null,
+  'item:/hosts': 'item:/resources',
+  'item:/squads': null,
+}
+
+function renameLegacy(keys: string[]): string[] {
+  const out: string[] = []
+  for (const key of keys) {
+    const mapped = key in LEGACY_ITEMS ? LEGACY_ITEMS[key] : key
+    if (mapped && !out.includes(mapped)) out.push(mapped)
+  }
+  return out
+}
+
 function loadOrder(): SidebarOrder {
   try {
     const raw = localStorage.getItem(SIDEBAR_ORDER_KEY)
     if (!raw) return EMPTY_ORDER
     const parsed = JSON.parse(raw) as Partial<SidebarOrder>
     const top = Array.isArray(parsed.top)
-      ? parsed.top.filter((key): key is string => typeof key === 'string')
+      ? renameLegacy(parsed.top.filter((key): key is string => typeof key === 'string'))
       : []
     const groups: Record<string, string[]> = {}
     if (parsed.groups && typeof parsed.groups === 'object') {

@@ -15,6 +15,10 @@ from typing import Any, Callable, Awaitable, Dict, Optional
 
 from .config import Settings
 
+
+#: Сколько помнить отправленные штрафы (и не слать события старше этого)
+_PENALTY_MEMORY_SEC = 86400
+
 logger = logging.getLogger(__name__)
 
 # ── Security: Forbidden Patterns ──────────────────────────────────
@@ -42,6 +46,7 @@ ALLOWED_COMMAND_TYPES = {
     "sync_blocked_ips",
     "sync_throttled_ips",
     "set_ndpi",
+    "set_shaper",
     "ping",
 }
 
@@ -101,6 +106,19 @@ class CommandRunner:
         # ничего не должен, поэтому здесь только вызов контроллера.
         self._ndpi_control = ndpi_control
 
+        # Шейпер ноды: общий конфиг приходит командой set_shaper, персональные
+        # лимиты — sync_throttled_ips. Программа одна на оба, поэтому и
+        # помнить их нужно вместе. «Загружена» — в этом процессе агента:
+        # после его перезапуска пинов нет, и ставить приходится заново.
+        from . import shaper as _shaper
+        self._shaper_general = _shaper.DISABLED
+        self._shaper_personal: Dict[str, int] = {}
+        self._shaper_loaded = False
+        # Штрафы, о которых панель уже знает: (адрес, начало) → конец штрафа
+        self._penalties_seen: Dict[tuple, float] = {}
+        #: Последний ответ set_shaper — отдаём его, если настройки не менялись
+        self._shaper_state: Optional[dict] = None
+
     async def handle(self, msg: dict) -> None:
         """Route an incoming command message."""
         msg_type = msg.get("type")
@@ -149,6 +167,8 @@ class CommandRunner:
             await self._sync_throttled_ips(msg)
         elif msg_type == "set_ndpi":
             await self._set_ndpi(msg)
+        elif msg_type == "set_shaper":
+            await self._set_shaper(msg)
 
     async def _run_shell(self, script: str, timeout: int) -> tuple:
         """Run a shell script (on the HOST via nsenter when host_mode).
@@ -163,7 +183,21 @@ class CommandRunner:
             )
         else:
             shell_cmd = script
+        return await self._communicate(shell_cmd, timeout)
 
+    async def _run_hostnet(self, script: str, timeout: int) -> tuple:
+        """Скрипт в сети хоста, но с файловой системой контейнера.
+
+        Шейперу нужны объектник eBPF, bpftool и tc из образа агента, а
+        вешать программу — на интерфейс хоста. Поэтому меняется только
+        сетевое пространство: PID 1 при ``pid: host`` — init хоста.
+        """
+        import shlex
+        shell_cmd = f"nsenter --target 1 --net -- /bin/sh -c {shlex.quote(script)}"
+        return await self._communicate(shell_cmd, timeout)
+
+    @staticmethod
+    async def _communicate(shell_cmd: str, timeout: int) -> tuple:
         proc = await asyncio.create_subprocess_shell(
             shell_cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -274,49 +308,42 @@ class CommandRunner:
             })
 
     async def _sync_throttled_ips(self, msg: dict) -> None:
-        """Ограничить скорость к указанным адресам на этой ноде (tc HTB).
+        """Персональные лимиты скорости (мягкая блокировка) на этой ноде.
 
         Payload: {"rules": [{"ip": "1.2.3.4", "rate_kbit": 1024}, ...]}.
 
         Список заменяет прежний целиком, поэтому пустой снимает все
-        ограничения. Режется исходящий трафик ноды к адресу — то есть
-        скачивание у клиента; отдача идёт входящей стороной, её tc без
-        отдельного ifb-интерфейса не шейпит.
-
-        Ограничение вешается на адрес, а не на порт или пользователя: так
-        не нужно ни трогать конфиг Xray, ни переносить человека между
-        сквадами, и мера применяется мгновенно.
+        персональные лимиты. Режет их шейпер ноды — в обе стороны, по адресу
+        клиента и на любом порту; общий потолок ноды при этом тоже действует,
+        и для клиента берётся меньший из двух.
         """
-        import ipaddress
+        from . import shaper
 
         command_id = msg.get("command_id")
-        raw_rules = msg.get("rules") or []
-
         # До шелла доходят только разобранный адрес и целое число — оба
         # приходят снаружи, и подставлять их в скрипт как есть нельзя.
-        rules, skipped = [], 0
-        for item in raw_rules:
-            try:
-                addr = ipaddress.ip_address(str(item.get("ip", "")).strip())
-                rate = int(item.get("rate_kbit"))
-            except (AttributeError, TypeError, ValueError):
-                skipped += 1
-                continue
-            if addr.version != 4 or rate <= 0:
-                # IPv6 в подключениях пока не встречается, а фильтр под него
-                # нужен отдельный — молча резать не тот трафик хуже, чем не резать.
-                skipped += 1
-                continue
-            rules.append((str(addr), rate))
-
+        personal, skipped = shaper.parse_personal(msg.get("rules") or [])
         if skipped:
             logger.warning("sync_throttled_ips: skipped %d invalid entries", skipped)
 
-        script = self._build_throttle_script(rules)
-        output, exit_code = await self._run_shell(script, timeout=60)
+        previous = self._shaper_personal
+        self._shaper_personal = personal
+        output, exit_code = "", 0
+        incremental = self._shaper_loaded and (self._shaper_general.enabled or personal)
+        if incremental:
+            to_set = {ip: kbit for ip, kbit in personal.items() if previous.get(ip) != kbit}
+            to_delete = [ip for ip in previous if ip not in personal]
+            if to_set or to_delete:
+                output, exit_code = await self._run_hostnet(
+                    shaper.build_personal_update_script(to_set, to_delete), timeout=60,
+                )
+            if exit_code == shaper.RELOAD_EXIT:
+                incremental = False
+        if not incremental:
+            output, exit_code = await self._shaper_apply()
 
         if exit_code == 0:
-            logger.info("Throttling applied: %d addresses", len(rules))
+            logger.info("Throttling applied: %d addresses", len(personal))
         else:
             logger.error("Throttling failed (exit=%d): %.500s", exit_code, output)
 
@@ -329,59 +356,71 @@ class CommandRunner:
                 "exit_code": exit_code,
             })
 
-    @staticmethod
-    def _build_throttle_script(rules: list) -> str:
-        """Собрать POSIX-скрипт, целиком заменяющий текущую раскладку tc.
+    async def collect_penalties(self) -> list:
+        """Штрафы шейпера, о которых панель ещё не знает; пусто, если штраф не включён."""
+        from . import shaper
 
-        Корнем стоит prio с priomap из одних нулей: весь неразмеченный
-        трафик уходит в первую полосу, где никакого ограничителя нет. HTB
-        висит только на отдельной полосе, куда фильтры заводят наказанные
-        адреса.
+        if not (self._shaper_loaded and self._shaper_general.penalty_mb):
+            return []
+        output, exit_code = await self._communicate(shaper.PENALTIES_DUMP, timeout=30)
+        if exit_code != 0:
+            return []
+        events = shaper.parse_penalties(output, time.monotonic_ns(), time.time())
+        # Карта штрафов не чистится, а память об отправленных живёт сутки:
+        # старое событие иначе снова показалось бы новым и уходило бы каждую минуту
+        cutoff = time.time() - _PENALTY_MEMORY_SEC
+        return [
+            e for e in events
+            if e["until"] > cutoff and (e["ip"], e["start_ns"]) not in self._penalties_seen
+        ]
 
-        Так сделано ради безопасности. Если завернуть в HTB весь трафик,
-        дисциплине придётся сообщить ширину канала — и ошибка в этом числе
-        придушит всех пользователей ноды разом. Здесь знать ширину не нужно
-        вовсе: обычный трафик ограничителя просто не касается.
+    async def watch_penalties(self, shutdown_event: asyncio.Event, interval: int = 60) -> None:
+        """Раз в минуту сообщать панели о новых штрафах шейпера.
 
-        Режется исходящий трафик ноды к адресу, то есть скачивание у
-        клиента; отдача идёт входящей стороной, её tc без отдельного
-        ifb-интерфейса не шейпит.
+        Отправленным событие считается, только если ушло: при обрыве связи
+        оно уйдёт в следующий раз, а не потеряется.
         """
-        lines = [
-            "set -e",
-            'IFACE=$(ip route show default 2>/dev/null | awk \'/default/ {print $5; exit}\')',
-            '[ -n "$IFACE" ] || { echo "no default route interface"; exit 1; }',
-            # Прежняя раскладка снимается всегда: список приходит целиком,
-            # и разбирать разницу дороже, чем собрать заново.
-            'tc qdisc del dev "$IFACE" root 2>/dev/null || true',
-        ]
+        while not shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(shutdown_event.wait(), timeout=interval)
+                return
+            except asyncio.TimeoutError:
+                pass
+            try:
+                fresh = await self.collect_penalties()
+                if not fresh:
+                    continue
+                sent = await self._send({
+                    "type": "shaper_penalties",
+                    "events": [
+                        {k: e[k] for k in ("ip", "started_at", "until", "bytes")} for e in fresh
+                    ],
+                })
+                if sent:
+                    for e in fresh:
+                        self._penalties_seen[(e["ip"], e["start_ns"])] = e["until"]
+                    # Давно закончившиеся забываем, чтобы память не росла
+                    cutoff = time.time() - _PENALTY_MEMORY_SEC
+                    self._penalties_seen = {
+                        k: until for k, until in self._penalties_seen.items() if until > cutoff
+                    }
+                    logger.info("Shaper penalties reported: %d", len(fresh))
+            except Exception as e:
+                logger.warning("Shaper penalties check failed: %s", e)
 
-        if not rules:
-            lines.append('echo "throttling cleared on $IFACE"')
-            return "\n".join(lines)
+    async def _shaper_apply(self) -> tuple:
+        """Поставить программу заново или снять её, если лимитов не осталось."""
+        from . import shaper
 
-        lines += [
-            # priomap из нулей: без явного фильтра пакет всегда идёт в 1:1.
-            'tc qdisc add dev "$IFACE" root handle 1: prio bands 4 '
-            'priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0',
-            # Ограничитель — только на четвёртой полосе, отдельно от всех.
-            'tc qdisc add dev "$IFACE" parent 1:4 handle 40: htb',
-        ]
-
-        for index, (ip, rate_kbit) in enumerate(rules, start=10):
-            lines += [
-                f'tc class add dev "$IFACE" parent 40: classid 40:{index} '
-                f'htb rate {rate_kbit}kbit ceil {rate_kbit}kbit burst 32k',
-                # Первый фильтр уводит адрес на полосу ограничителя,
-                # второй — в его личный класс с нужной скоростью.
-                f'tc filter add dev "$IFACE" protocol ip parent 1:0 prio 1 u32 '
-                f'match ip dst {ip}/32 flowid 1:4',
-                f'tc filter add dev "$IFACE" protocol ip parent 40: prio 1 u32 '
-                f'match ip dst {ip}/32 flowid 40:{index}',
-            ]
-
-        lines.append(f'echo "throttled {len(rules)} addresses on $IFACE"')
-        return "\n".join(lines)
+        if self._shaper_general.enabled or self._shaper_personal:
+            script = shaper.build_apply_script(self._shaper_general, self._shaper_personal)
+        else:
+            script = shaper.build_disable_script()
+        output, exit_code = await self._run_hostnet(script, timeout=60)
+        self._shaper_loaded = exit_code == 0 and bool(
+            self._shaper_general.enabled or self._shaper_personal
+        )
+        return output, exit_code
 
     @staticmethod
     def _build_blocklist_script(v4: list, v6: list) -> str:
@@ -561,6 +600,67 @@ class CommandRunner:
                 "output": str(e),
                 "exit_code": 1,
             })
+
+    async def _set_shaper(self, msg: dict) -> None:
+        """Включить, перенастроить или выключить шейпер клиентов ноды.
+
+        Отвечаем состоянием, а не «принято»: панель должна показать, что
+        шейпер реально работает, что стало с корнем интерфейса и почему
+        не встал, если не встал.
+        """
+        from . import shaper
+
+        command_id = msg.get("command_id")
+        try:
+            cfg = shaper.parse_config(msg)
+        except ValueError as e:
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "error",
+                "output": json.dumps({"enabled": bool(msg.get("enabled")), "active": False,
+                                      "error": str(e)}, ensure_ascii=False),
+                "exit_code": 1,
+            })
+            return
+
+        # Панель шлёт настройки при каждом подключении агента. Если они те же,
+        # а программа стоит, переустановка только сбросила бы счётчики клиентов
+        # и снятые с них штрафы — отвечаем прежним состоянием.
+        if cfg.enabled and cfg == self._shaper_general and self._shaper_loaded                 and self._shaper_state is not None:
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "completed",
+                "output": json.dumps(
+                    dict(self._shaper_state, personal=len(self._shaper_personal)),
+                    ensure_ascii=False,
+                ),
+                "exit_code": 0,
+            })
+            return
+
+        self._shaper_general = cfg
+        output, exit_code = await self._shaper_apply()
+        state = shaper.summarize(cfg, output, exit_code, personal=len(self._shaper_personal))
+        self._shaper_state = state if exit_code == 0 else None
+
+        if exit_code == 0:
+            logger.info(
+                "Shaper %s on %s (root: %s, personal: %d)",
+                "applied" if cfg.enabled else "disabled", state["interface"], state["root"],
+                state["personal"],
+            )
+        else:
+            logger.error("Shaper failed (exit=%d): %.500s", exit_code, output)
+
+        await self._send({
+            "type": "command_result",
+            "command_id": command_id,
+            "status": "completed" if exit_code == 0 else "error",
+            "output": json.dumps(state, ensure_ascii=False),
+            "exit_code": exit_code,
+        })
 
     async def _service_status(self, msg: dict) -> None:
         """Get service status information."""

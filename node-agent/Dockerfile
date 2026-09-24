@@ -32,6 +32,21 @@ RUN git clone --depth 1 --branch "${NDPID_REF}" https://github.com/utoni/nDPId.g
 RUN strip /src/nDPId/build/nDPId /src/nDPId/build/nDPIsrvd || true; \
     test -x /src/nDPId/build/nDPId && test -x /src/nDPId/build/nDPIsrvd
 
+# ── Сборка шейпера клиентов (eBPF) ────────────────────────────────
+# Программа компилируется в байткод здесь, на ноду едет готовый
+# объектник: ни clang, ни заголовки ядра там не нужны. Байткод от
+# архитектуры не зависит, поэтому стадия идёт на родной платформе
+# сборщика, без эмуляции arm64.
+FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS bpf-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        clang llvm libbpf-dev linux-libc-dev libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY bpf/shaper.bpf.c /src/shaper.bpf.c
+RUN clang -O2 -g -Wall -target bpf -I/usr/include/$(uname -m)-linux-gnu \
+        -c /src/shaper.bpf.c -o /src/shaper.bpf.o
+
 # ── Образ агента ──────────────────────────────────────────────────
 FROM python:3.12-slim
 
@@ -40,12 +55,15 @@ WORKDIR /app
 # procps — pgrep для healthcheck
 # util-linux — nsenter для host mode (выполнение команд на хосте)
 # libpcap0.8, libjson-c5 — рантайм nDPId
+# iproute2, bpftool — шейпер клиентов: bpftool грузит программу и пишет
+# настройки в её карты, tc вешает её на интерфейс
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    procps util-linux libpcap0.8 libjson-c5 \
+    procps util-linux libpcap0.8 libjson-c5 iproute2 bpftool \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ndpi-builder /src/nDPId/build/nDPId /usr/local/bin/nDPId
 COPY --from=ndpi-builder /src/nDPId/build/nDPIsrvd /usr/local/bin/nDPIsrvd
+COPY --from=bpf-builder /src/shaper.bpf.o /app/bpf/shaper.bpf.o
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

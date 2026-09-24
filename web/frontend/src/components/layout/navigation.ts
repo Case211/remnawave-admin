@@ -2,8 +2,6 @@ import {
   LayoutDashboard,
   Users,
   Server,
-  Activity,
-  Globe,
   ShieldAlert,
   Settings,
   UserCog,
@@ -17,9 +15,9 @@ import {
   Key,
   Bot,
   ShieldCheck,
-  UsersRound,
   Ticket,
   Megaphone,
+  MessageSquare,
   Share2,
   ShieldBan,
   Package,
@@ -36,6 +34,8 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   permission: { resource: string; action: string } | null
+  /** Виден, если есть хотя бы одно из прав (вместо единственного permission). */
+  anyPermission?: { resource: string; action: string }[]
   /** Выделить пункт цветом: он не про рутину, на него хотят обратить внимание. */
   accent?: boolean
 }
@@ -82,16 +82,31 @@ export const navigation: NavigationEntry[] = [
   // People — «управляю людьми»
   { type: 'section', name: 'nav.sections.people' },
   { name: 'nav.users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
-  { name: 'nav.squads', href: '/squads', icon: UsersRound, permission: { resource: 'users', action: 'view' } },
   // Infrastructure — «управляю железом и конфигурацией»
   { type: 'section', name: 'nav.sections.infrastructure' },
-  { name: 'nav.nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
-  { name: 'nav.fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
-  { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
+  // «Сервера» — ноды панели и флот машин на одной странице, вкладками
+  {
+    name: 'nav.servers',
+    href: '/servers',
+    icon: Server,
+    permission: null,
+    anyPermission: [{ resource: 'fleet', action: 'view' }, { resource: 'nodes', action: 'view' }],
+  },
   { name: 'nav.dns', href: '/dns', icon: Network, permission: { resource: 'dns', action: 'view' } },
   { name: 'nav.bscheck', href: '/bscheck', icon: ShieldCheck, permission: { resource: 'bscheck', action: 'view' } },
   { name: 'nav.finance', href: '/finance', icon: Wallet, permission: { resource: 'finance', action: 'view' } },
-  { name: 'nav.resources', href: '/resources', icon: Boxes, permission: { resource: 'resources', action: 'view' } },
+  // «Ресурсы» — конфигурация панели: хосты, шаблоны, сниппеты, профили и сквады
+  {
+    name: 'nav.resources',
+    href: '/resources',
+    icon: Boxes,
+    permission: null,
+    anyPermission: [
+      { resource: 'hosts', action: 'view' },
+      { resource: 'resources', action: 'view' },
+      { resource: 'users', action: 'view' },
+    ],
+  },
   // Security — «защищаюсь»
   { type: 'section', name: 'nav.sections.security' },
   { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
@@ -115,6 +130,7 @@ export const navigation: NavigationEntry[] = [
       { name: 'nav.bedolaga.promo', href: '/bedolaga/promo', icon: Ticket, permission: { resource: 'bedolaga_promo', action: 'view' } },
       { name: 'nav.bedolaga.marketing', href: '/bedolaga/marketing', icon: Megaphone, permission: { resource: 'bedolaga_marketing', action: 'view' } },
       { name: 'nav.bedolaga.referrals', href: '/bedolaga/referrals', icon: Share2, permission: { resource: 'bedolaga', action: 'view' } },
+      { name: 'nav.bedolaga.support', href: '/support', icon: MessageSquare, permission: { resource: 'bedolaga_support', action: 'view' } },
     ],
   },
   // Administration
@@ -137,6 +153,7 @@ type PermissionCheck = (resource: string, action: string) => boolean
 
 /** Виден ли пункт текущему админу (пункты без permission видны всем). */
 export function isItemVisible(item: NavItem, hasPermission: PermissionCheck): boolean {
+  if (item.anyPermission) return item.anyPermission.some((p) => hasPermission(p.resource, p.action))
   if (!item.permission) return true
   return hasPermission(item.permission.resource, item.permission.action)
 }

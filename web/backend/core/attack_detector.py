@@ -358,7 +358,7 @@ async def _notify_started(
         source="attack_detector",
         source_id=sample.node_uuid,
         group_key=f"{key}:{sample.node_uuid}",
-        link=f"/fleet?node={sample.node_uuid}",
+        link=f"/servers?node={sample.node_uuid}",
     )
 
 
@@ -382,7 +382,7 @@ async def _notify_finished(event: dict[str, Any]) -> None:
         source="attack_detector",
         source_id=str(event["node_uuid"]),
         group_key=f"node_attack_end:{event['node_uuid']}",
-        link=f"/fleet?node={event['node_uuid']}",
+        link=f"/servers?node={event['node_uuid']}",
     )
 
 

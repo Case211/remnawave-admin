@@ -22,7 +22,7 @@ import {
   Search,
   Recycle,
 } from '@/components/brand/icons'
-import { backupApi } from '../api/backup'
+import { backupApi, type S3SettingsPayload } from '../api/backup'
 import { useAuthStore } from '../store/authStore'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +35,8 @@ import { EmptyState } from '@/components/EmptyState'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { useFormatters } from '@/lib/useFormatters'
+import { timeZoneLabel, useDisplayTimeZone } from '@/lib/timezone'
+import { settingsOf } from '@/api/settings'
 import client from '../api/client'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -66,18 +68,15 @@ function FileIcon({ filename }: { filename: string }) {
 
 function AutoBackupScheduleCard() {
   const { t } = useTranslation()
+  const timeZone = useDisplayTimeZone()
   const queryClient = useQueryClient()
   const canEdit = useHasPermission('settings', 'edit')
 
   const { data: s } = useQuery({
     queryKey: ['settings'],
-    queryFn: async () => {
-      const { data } = await client.get('/settings')
-      const result: Record<string, string> = {}
-      const cat = (data?.categories || {})['backup'] || []
-      for (const item of cat) result[item.key] = item.value ?? item.default_value ?? ''
-      return result
-    },
+    // полный ответ в общем кэше, свой кусок — через select
+    queryFn: async () => (await client.get('/settings')).data,
+    select: (data) => settingsOf(data, 'backup'),
   })
 
   const updateMutation = useMutation({
@@ -112,7 +111,7 @@ function AutoBackupScheduleCard() {
         <p className="text-xs text-dark-300">{t('backup.schedule.description')}</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <Label className="text-xs text-dark-300">{t('backup.schedule.time')}</Label>
+            <Label className="text-xs text-dark-300">{t('backup.schedule.time', { zone: timeZoneLabel(timeZone) })}</Label>
             <Input
               type="time"
               value={s?.backup_auto_time || '03:00'}
@@ -260,6 +259,23 @@ function BackupsTab() {
       setTelegramDialog(null)
     },
     onError: (err: any) => toast.error(err.response?.data?.detail || t('backup.toastSendFailed'), { duration: 8000 }),
+  })
+
+  // Кнопку выгрузки показываем, только когда хранилище настроено.
+  const { data: s3Settings } = useQuery({
+    queryKey: ['backup', 's3', 'settings'],
+    queryFn: backupApi.getS3Settings,
+    retry: false,
+  })
+
+  const s3UploadMutation = useMutation({
+    mutationFn: backupApi.uploadToS3,
+    onSuccess: (data) => {
+      toast.success(t('backup.s3.uploaded', { key: data.key }))
+      queryClient.invalidateQueries({ queryKey: ['backup', 's3', 'objects'] })
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.detail?.message || t('backup.s3.uploadFailed'), { duration: 8000 }),
   })
 
   const handleUpload = () => {
@@ -504,6 +520,20 @@ function BackupsTab() {
                     >
                       <Send className="w-4 h-4" />
                     </Button>
+                    {s3Settings?.has_credentials && (
+                      <PermissionGate resource="backups" action="create">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-dark-200 hover:text-cyan-400"
+                          onClick={() => s3UploadMutation.mutate(file.filename)}
+                          disabled={s3UploadMutation.isPending}
+                          aria-label={t('backup.s3.upload')}
+                        >
+                          <HardDrive className="w-4 h-4" />
+                        </Button>
+                      </PermissionGate>
+                    )}
 
                     {file.filename.endsWith('.sql.gz') && (
                       <PermissionGate resource="backups" action="create">
@@ -887,6 +917,291 @@ function HistoryTab() {
 
 // ── Main Page ───────────────────────────────────────────────────
 
+function S3StorageTab() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const canEdit = useHasPermission('settings', 'edit')
+  const canDelete = useHasPermission('backups', 'delete')
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['backup', 's3', 'settings'],
+    queryFn: backupApi.getS3Settings,
+  })
+
+  const [form, setForm] = useState<S3SettingsPayload | null>(null)
+  const [accessKey, setAccessKey] = useState('')
+  const [secretKey, setSecretKey] = useState('')
+
+  useEffect(() => {
+    if (!settings) return
+    setForm({
+      endpoint: settings.endpoint,
+      bucket: settings.bucket,
+      region: settings.region,
+      prefix: settings.prefix,
+      path_style: settings.path_style,
+      auto_upload: settings.auto_upload,
+      keep_count: settings.keep_count,
+    })
+  }, [settings])
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!form) return
+      const payload: S3SettingsPayload = { ...form }
+      // Пустые поля ключей означают «не трогать», очистка — отдельной кнопкой.
+      if (accessKey || secretKey) {
+        payload.access_key = accessKey
+        payload.secret_key = secretKey
+      }
+      return backupApi.updateS3Settings(payload)
+    },
+    onSuccess: () => {
+      setAccessKey('')
+      setSecretKey('')
+      queryClient.invalidateQueries({ queryKey: ['backup', 's3'] })
+      toast.success(t('common.saved'))
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail?.message || t('common.error')),
+  })
+
+  const clearKeysMutation = useMutation({
+    mutationFn: async () => {
+      if (!form) return
+      return backupApi.updateS3Settings({ ...form, access_key: '', secret_key: '' })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['backup', 's3'] })
+      toast.success(t('backup.s3.keysCleared'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const testMutation = useMutation({
+    mutationFn: backupApi.testS3,
+    onSuccess: (r) => toast.success(t('backup.s3.testOk', { bucket: r.bucket })),
+    onError: (e: any) => toast.error(e?.response?.data?.detail?.message || t('backup.s3.testFailed')),
+  })
+
+  const { data: objects, isFetching: objectsLoading } = useQuery({
+    queryKey: ['backup', 's3', 'objects'],
+    queryFn: backupApi.listS3Objects,
+    enabled: Boolean(settings?.has_credentials && settings?.bucket),
+    retry: false,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: backupApi.deleteS3Object,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['backup', 's3', 'objects'] })
+      toast.success(t('backup.s3.objectDeleted'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  if (isLoading || !form) {
+    return <Skeleton className="h-64 w-full" />
+  }
+
+  const patch = (changes: Partial<S3SettingsPayload>) => setForm({ ...form, ...changes })
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-[var(--glass-border)] bg-[var(--glass-bg)]">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium text-white">
+            <HardDrive className="w-4 h-4 text-cyan-400" />
+            {t('backup.s3.title')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 space-y-4">
+          <p className="text-xs text-dark-300">{t('backup.s3.description')}</p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.endpoint')}</Label>
+              <Input
+                value={form.endpoint}
+                onChange={(e) => patch({ endpoint: e.target.value })}
+                placeholder="https://s3.timeweb.cloud"
+                disabled={!canEdit}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.bucket')}</Label>
+              <Input
+                value={form.bucket}
+                onChange={(e) => patch({ bucket: e.target.value })}
+                placeholder="remnawave-backups"
+                disabled={!canEdit}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.region')}</Label>
+              <Input
+                value={form.region}
+                onChange={(e) => patch({ region: e.target.value })}
+                placeholder="ru-1"
+                disabled={!canEdit}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.prefix')}</Label>
+              <Input
+                value={form.prefix}
+                onChange={(e) => patch({ prefix: e.target.value })}
+                placeholder="admin"
+                disabled={!canEdit}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.accessKey')}</Label>
+              <Input
+                value={accessKey}
+                onChange={(e) => setAccessKey(e.target.value)}
+                placeholder={settings?.has_credentials ? settings.access_key_masked : t('backup.s3.notSet')}
+                autoComplete="off"
+                disabled={!canEdit}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.secretKey')}</Label>
+              <Input
+                type="password"
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                placeholder={settings?.has_credentials ? '••••••••' : t('backup.s3.notSet')}
+                autoComplete="new-password"
+                disabled={!canEdit}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.pathStyle')}</Label>
+              <p className="text-[11px] text-dark-400">{t('backup.s3.pathStyleHint')}</p>
+            </div>
+            <Switch
+              checked={form.path_style}
+              onCheckedChange={(v) => patch({ path_style: v })}
+              disabled={!canEdit}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-xs text-dark-300">{t('backup.s3.autoUpload')}</Label>
+              <p className="text-[11px] text-dark-400">{t('backup.s3.autoUploadHint')}</p>
+            </div>
+            <Switch
+              checked={form.auto_upload}
+              onCheckedChange={(v) => patch({ auto_upload: v })}
+              disabled={!canEdit}
+            />
+          </div>
+
+          <div className="sm:w-1/2">
+            <Label className="text-xs text-dark-300">{t('backup.s3.keepCount')}</Label>
+            <Input
+              type="number"
+              min={0}
+              value={form.keep_count}
+              onChange={(e) => patch({ keep_count: Number(e.target.value) || 0 })}
+              disabled={!canEdit}
+            />
+            <p className="text-[11px] text-dark-400 mt-1">{t('backup.s3.keepCountHint')}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={!canEdit || saveMutation.isPending}
+              className="gap-1.5"
+            >
+              {saveMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {t('common.save')}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending || !settings?.has_credentials}
+              className="gap-1.5"
+            >
+              {testMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {t('backup.s3.test')}
+            </Button>
+            {settings?.has_credentials && (
+              <Button
+                variant="ghost"
+                onClick={() => clearKeysMutation.mutate()}
+                disabled={!canEdit || clearKeysMutation.isPending}
+                className="gap-1.5 text-red-400"
+              >
+                <Trash2 className="w-4 h-4" />
+                {t('backup.s3.clearKeys')}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-[var(--glass-border)] bg-[var(--glass-bg)]">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between text-sm font-medium text-white">
+            <span className="flex items-center gap-2">
+              <Archive className="w-4 h-4 text-emerald-400" />
+              {t('backup.s3.objects')}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['backup', 's3', 'objects'] })}
+              disabled={objectsLoading}
+            >
+              <RefreshCw className={`w-4 h-4 ${objectsLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          {!settings?.has_credentials ? (
+            <EmptyState icon={HardDrive} title={t('backup.s3.notConfigured')} />
+          ) : !objects?.length ? (
+            <EmptyState icon={Archive} title={t('backup.s3.noObjects')} />
+          ) : (
+            <div className="space-y-2">
+              {objects.map((obj) => (
+                <div
+                  key={obj.key}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--glass-border)] px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-white">{obj.filename}</p>
+                    <p className="text-[11px] text-dark-400">
+                      {formatBytes(obj.size)} · {obj.last_modified}
+                    </p>
+                  </div>
+                  {canDelete && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-400"
+                      onClick={() => deleteMutation.mutate(obj.key)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 export default function Backup() {
   const { t } = useTranslation()
 
@@ -918,6 +1233,10 @@ export default function Backup() {
               <Clock className="w-3.5 h-3.5" />
               {t('backup.tabs.history')}
             </TabsTrigger>
+            <TabsTrigger value="storage" className="gap-1.5">
+              <HardDrive className="w-3.5 h-3.5" />
+              {t('backup.tabs.storage')}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="backups" className="mt-4">
@@ -928,6 +1247,9 @@ export default function Backup() {
           </TabsContent>
           <TabsContent value="history" className="mt-4">
             <HistoryTab />
+          </TabsContent>
+          <TabsContent value="storage" className="mt-4">
+            <S3StorageTab />
           </TabsContent>
         </Tabs>
       </div>

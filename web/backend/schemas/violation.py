@@ -262,8 +262,11 @@ class ThrottleAddRequest(BaseModel):
     """Запрос на ограничение скорости пользователю («мягкая блокировка»)."""
     user_uuid: str
     rate_kbit: Optional[int] = Field(
-        None, ge=64, le=1_000_000,
-        description="Скорость в кбит/с. Не указана — берётся throttle_default_kbit.",
+        None, ge=0, le=1_000_000,
+        description=(
+            "Скорость в кбит/с. Не указана — берётся throttle_default_kbit. "
+            "0 — без лимита: персональное ограничение снимается."
+        ),
     )
     reason: Optional[str] = Field(None, max_length=1000)
     expires_in_hours: Optional[int] = Field(
@@ -278,6 +281,14 @@ class ThrottleAddRequest(BaseModel):
         if not uuid_re.match(v.strip()):
             raise ValueError('Invalid UUID format')
         return v.strip()
+
+    @field_validator('rate_kbit')
+    @classmethod
+    def validate_rate(cls, v: Optional[int]) -> Optional[int]:
+        # Меньше 64 кбит/с соединение не живёт вовсе — это уже не урезание
+        if v is not None and 0 < v < 64:
+            raise ValueError('rate_kbit must be 0 (no limit) or at least 64')
+        return v
 
 
 class ThrottleItem(BaseModel):
@@ -295,3 +306,5 @@ class ThrottleListResponse(BaseModel):
     """Ответ списка ограничений."""
     items: List[ThrottleItem]
     total: int
+    #: Скорость по умолчанию из настроек — окно подставляет её; 0 — без лимита
+    default_rate_kbit: int = 0

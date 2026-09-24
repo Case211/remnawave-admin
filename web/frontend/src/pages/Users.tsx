@@ -13,6 +13,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { useFormatters } from '@/lib/useFormatters'
+import { fromZonedInputValue, timeZoneLabel, toZonedInputValue } from '@/lib/timezone'
 import { useOpenUser } from '@/lib/useOpenUser'
 import {
   Search,
@@ -506,11 +507,7 @@ function CreateUserModal({
   // Reset expire_at to today when modal opens
   useEffect(() => {
     if (!open) return
-    const now = new Date()
-    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16)
-    setForm(prev => ({ ...prev, expire_at: local }))
+    setForm(prev => ({ ...prev, expire_at: toZonedInputValue(new Date()) }))
   }, [open])
 
   // Sync form state with policy
@@ -553,7 +550,7 @@ function CreateUserModal({
       if (Array.isArray(d.active_internal_squads)) next.active_internal_squads = d.active_internal_squads
       if (d.expire_days != null) {
         const dt = new Date(Date.now() + d.expire_days * 86400000)
-        next.expire_at = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+        next.expire_at = toZonedInputValue(dt)
       }
       return next
     })
@@ -575,7 +572,7 @@ function CreateUserModal({
     if (form.tag.trim()) data.tag = form.tag.trim().toUpperCase()
     if (form.description.trim()) data.description = form.description.trim()
     if (form.expire_at) {
-      const days = Math.round((new Date(form.expire_at).getTime() - Date.now()) / 86400000)
+      const days = Math.round(((fromZonedInputValue(form.expire_at)?.getTime() ?? Date.now()) - Date.now()) / 86400000)
       if (days > 0) data.expire_days = days
     }
     return data
@@ -621,7 +618,8 @@ function CreateUserModal({
     createData.traffic_limit_strategy = form.traffic_limit_strategy
 
     if (form.expire_at) {
-      createData.expire_at = new Date(form.expire_at).toISOString()
+      const expire = fromZonedInputValue(form.expire_at)
+      if (expire) createData.expire_at = expire.toISOString()
     }
 
     const hwid = parseInt(form.hwid_device_limit, 10)
@@ -852,7 +850,7 @@ function CreateUserModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-dark-200">{t('users.createModal.expireDate')}</Label>
+                <Label className="text-xs text-dark-200">{t('users.createModal.expireDate')} ({timeZoneLabel()})</Label>
                 <Input
                   type="datetime-local"
                   value={form.expire_at}
@@ -878,9 +876,7 @@ function CreateUserModal({
                         const d = days > 0
                           ? new Date(now.getTime() + days * 86400000)
                           : new Date(now.setFullYear(2099))
-                        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                          .toISOString().slice(0, 16)
-                        setForm({ ...form, expire_at: local })
+                        setForm({ ...form, expire_at: toZonedInputValue(d) })
                       }}
                     >
                       {label === '2099' ? t('users.createModal.indefinite') : `+${label}`}

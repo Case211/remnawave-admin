@@ -21,16 +21,13 @@ def esc(value: Any) -> str:
 
 
 def fmt_dt(value: Any) -> str:
-    """Дата человеку: «22.08.2026 12:50». Пустое — пустая строка."""
+    """Дата человеку в зоне отображения: «22.08.2026 12:50 МСК». Пустое — пустая строка."""
     if not value:
         return ""
-    if isinstance(value, str):
-        try:
-            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return esc(value)
-    if isinstance(value, datetime):
-        return value.strftime("%d.%m.%Y %H:%M")
+    from shared import timefmt
+
+    if isinstance(value, (str, datetime)):
+        return esc(timefmt.fmt(value))
     return esc(value)
 
 

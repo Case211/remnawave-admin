@@ -44,6 +44,16 @@ describe('ThrottleDialog', () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 
+  it('пустая скорость — без лимита: уходит 0, и ограничение снимается', async () => {
+    const user = userEvent.setup()
+    post.mockResolvedValue({ data: { success: true, rate_kbit: 0, lifted: true } })
+    renderDialog({ userUuid: 'u-1' })
+    await user.click(screen.getByRole('button', { name: SUBMIT }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/violations/throttle', {
+      user_uuid: 'u-1', rate_kbit: 0, expires_in_hours: undefined, reason: undefined,
+    }))
+  })
+
   it('без пользователя просит UUID и не даёт отправить пустой', () => {
     renderDialog()
     expect(screen.getByPlaceholderText('uuid')).toBeTruthy()

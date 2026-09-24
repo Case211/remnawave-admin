@@ -97,11 +97,15 @@ describe('Sidebar', () => {
     )
     const { container } = renderSidebar()
     const routes = menuRoutes(container)
-    expect(routes.slice(0, 3)).toEqual(['/nodes', '/fleet', '/hosts'])
-    expect(routes.indexOf('/')).toBeGreaterThan(routes.indexOf('/hosts'))
+    // Старые «Ноды» и «Флот» из сохранённого порядка превращаются в «Сервера»
+    // на месте «Нод», «Хосты» — в «Ресурсы»
+    expect(routes[0]).toBe('/servers')
+    expect(routes).not.toContain('/hosts')
+    expect(routes.indexOf('/resources')).toBeGreaterThan(0)
+    expect(routes.indexOf('/')).toBeGreaterThan(routes.indexOf('/resources'))
     // Пункты, которых не было в сохранённом порядке, никуда не делись — и
-    // остались в родной секции, а не съехали в конец меню
-    expect(routes.indexOf('/dns')).toBeGreaterThan(routes.indexOf('/hosts'))
+    // остались в родной секции (рядом с соседом по меню), а не съехали в конец
+    expect(routes.indexOf('/dns')).toBe(1)
     expect(routes.indexOf('/dns')).toBeLessThan(routes.indexOf('/'))
     expect(routes).toContain('/settings')
   })

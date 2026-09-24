@@ -1,4 +1,4 @@
-"""Ограничение скорости на ноде: скрипт tc и разбор входящих правил.
+"""Мягкая блокировка на ноде: персональные лимиты через шейпер.
 
 Гоняется в наборе агента — пакет здесь зовётся ``src`` и в одном процессе
 с тестами бэкенда конкурировал бы за это имя:
@@ -15,97 +15,158 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src import shaper
 from src.command_runner import CommandRunner
 
-
-def build(rules):
-    return CommandRunner._build_throttle_script(rules)
+APPLIED = ("IFACE=ens3\nROOT=kept:fq\nPERSONAL=1\nACTIVE=1\n", 0)
 
 
-def runner():
+def runner(result=APPLIED):
     r = CommandRunner.__new__(CommandRunner)
     r._settings = MagicMock(host_mode=False)
-    r._run_shell = AsyncMock(return_value=("", 0))
+    r._shaper_general = shaper.DISABLED
+    r._shaper_personal = {}
+    r._shaper_loaded = False
+    r._shaper_state = None
+    r._run_hostnet = AsyncMock(return_value=result)
     r._send = AsyncMock()
     return r
 
 
-class TestThrottleScript:
-    def test_empty_list_clears_everything(self):
-        """Пустой список — снятие: иначе снятое ограничение висело бы вечно."""
-        script = build([])
-        assert "tc qdisc del" in script
-        assert "tc class add" not in script
-        assert "tc filter add" not in script
-
-    def test_rule_per_address(self):
-        script = build([("1.2.3.4", 1024), ("5.6.7.8", 512)])
-        assert "match ip dst 1.2.3.4/32 flowid 40:10" in script
-        assert "match ip dst 5.6.7.8/32 flowid 40:11" in script
-        assert "rate 1024kbit ceil 1024kbit" in script
-        assert "rate 512kbit ceil 512kbit" in script
-
-    def test_ordinary_traffic_never_enters_the_shaper(self):
-        """Ошибиться в ширине канала нельзя, если её вообще не нужно знать."""
-        script = build([("1.2.3.4", 1024)])
-        assert "priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0" in script
-        assert "gbit" not in script
-        assert "parent 1:4 handle 40: htb" in script
-
-    def test_previous_layout_is_replaced_not_stacked(self):
-        script = build([("1.2.3.4", 1024)])
-        assert script.index("tc qdisc del") < script.index("tc qdisc add")
-
-    def test_interface_is_taken_from_the_default_route(self):
-        assert "ip route show default" in build([])
+def rule(ip, kbit=1024):
+    return {"ip": ip, "rate_kbit": kbit}
 
 
-class TestRuleValidation:
-    """Правила приходят по сети — до shell должны доходить только разобранные значения."""
+class TestPersonalRules:
+    def test_ipv4_and_ipv6_are_both_accepted(self):
+        personal, skipped = shaper.parse_personal([rule("1.2.3.4"), rule("2001:db8::1", 512)])
+        assert personal == {"1.2.3.4": 1024, "2001:db8::1": 512}
+        assert skipped == 0
+
+    def test_zero_means_no_limit_and_is_left_out(self):
+        personal, skipped = shaper.parse_personal([rule("1.2.3.4", 0)])
+        assert personal == {} and skipped == 1
+
+    def test_duplicate_address_takes_the_stricter_rate(self):
+        """За одним адресом двое урезанных — действует меньшая скорость."""
+        personal, _ = shaper.parse_personal([rule("1.2.3.4", 2048), rule("1.2.3.4", 512)])
+        assert personal == {"1.2.3.4": 512}
+
+    def test_shell_injection_attempt_is_dropped(self):
+        personal, skipped = shaper.parse_personal([rule("1.2.3.4; rm -rf /"), rule("8.8.8.8")])
+        assert personal == {"8.8.8.8": 1024} and skipped == 1
+
+    def test_malformed_entries_do_not_break_the_batch(self):
+        personal, skipped = shaper.parse_personal(["not-a-dict", {"rate_kbit": 1024}, rule("9.9.9.9", 2048)])
+        assert personal == {"9.9.9.9": 2048} and skipped == 2
+
+    def test_ipv4_key_is_the_mapped_ipv6_form(self):
+        """Программа кладёт IPv4 в ключ как ::ffff:a.b.c.d — агент обязан так же."""
+        assert shaper.client_key("1.2.3.4") == bytes(10) + b"\xff\xff" + bytes([1, 2, 3, 4])
+        assert len(shaper.client_key("2001:db8::1")) == 16
+
+
+class TestScripts:
+    def test_personal_limits_go_into_the_map_on_full_apply(self):
+        script = shaper.build_apply_script(shaper.DISABLED, {"1.2.3.4": 1024})
+        key = " ".join(f"{b:02x}" for b in shaper.client_key("1.2.3.4"))
+        assert f"rws_personal key hex {key}" in script
+        # Общий шейпер выключен — портов в карте нет, режутся только персональные
+        assert "rws_ports key" not in script
+
+    def test_legacy_layouts_are_cleaned_before_the_root_decision(self):
+        script = shaper.build_apply_script(shaper.DISABLED, {"1.2.3.4": 1024})
+        assert script.index("htb 40: parent 1:4") < script.index("ROOT=$(tc qdisc show")
+        assert f"ip link del {shaper.LEGACY_IFB}" in script
+        deletions = [line for line in script.splitlines() if "tc filter del" in line]
+        assert all("pref" in line for line in deletions)
+
+    def test_incremental_update_never_reloads_the_program(self):
+        """Перезагрузка обнулила бы штраф качальщиков при каждой смене адреса урезанного."""
+        script = shaper.build_personal_update_script({"5.6.7.8": 512}, ["1.2.3.4"])
+        assert "loadall" not in script and "tc filter" not in script
+        assert "rws_personal key hex" in script
+        assert "map delete pinned" in script
+        assert f"exit {shaper.RELOAD_EXIT}" in script
+
+
+class TestSyncHandler:
+    @pytest.mark.asyncio
+    async def test_first_rules_install_the_program(self):
+        r = runner()
+        await r._sync_throttled_ips({"rules": [rule("1.2.3.4")]})
+
+        script = r._run_hostnet.await_args.args[0]
+        assert "bpftool prog loadall" in script
+        assert r._shaper_loaded is True
+        assert r._shaper_personal == {"1.2.3.4": 1024}
 
     @pytest.mark.asyncio
-    async def test_shell_injection_attempt_is_dropped(self):
+    async def test_changed_rules_update_the_map_in_place(self):
         r = runner()
-        await r._sync_throttled_ips({"rules": [
-            {"ip": "1.2.3.4; rm -rf /", "rate_kbit": 1024},
-            {"ip": "8.8.8.8", "rate_kbit": 1024},
-        ]})
+        r._shaper_loaded = True
+        r._shaper_personal = {"1.2.3.4": 1024}
+        r._run_hostnet = AsyncMock(return_value=("UPDATED=1\n", 0))
 
-        script = r._run_shell.await_args.args[0]
-        assert "rm -rf" not in script
-        assert "8.8.8.8/32" in script
+        await r._sync_throttled_ips({"rules": [rule("5.6.7.8")]})
+
+        script = r._run_hostnet.await_args.args[0]
+        assert "loadall" not in script
+        assert "map delete pinned" in script
+        assert r._shaper_personal == {"5.6.7.8": 1024}
 
     @pytest.mark.asyncio
-    async def test_nonpositive_rate_is_dropped(self):
+    async def test_same_rules_touch_nothing(self):
         r = runner()
-        await r._sync_throttled_ips({"rules": [{"ip": "8.8.8.8", "rate_kbit": 0}]})
-        assert "tc filter add" not in r._run_shell.await_args.args[0]
+        r._shaper_loaded = True
+        r._shaper_personal = {"1.2.3.4": 1024}
+
+        await r._sync_throttled_ips({"rules": [rule("1.2.3.4")]})
+
+        r._run_hostnet.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_ipv6_is_skipped_rather_than_mismatched(self):
-        """Фильтр под IPv6 нужен отдельный — молча резать не тот трафик хуже."""
+    async def test_missing_pins_fall_back_to_full_install(self):
+        """Агент перезапустился — пинов нет, ставим программу заново."""
         r = runner()
-        await r._sync_throttled_ips({"rules": [{"ip": "2001:db8::1", "rate_kbit": 1024}]})
-        assert "tc filter add" not in r._run_shell.await_args.args[0]
+        r._shaper_loaded = True
+        r._shaper_personal = {"1.2.3.4": 1024}
+        r._run_hostnet = AsyncMock(side_effect=[("RELOAD=1\n", shaper.RELOAD_EXIT), APPLIED])
+
+        await r._sync_throttled_ips({"rules": [rule("5.6.7.8")]})
+
+        assert r._run_hostnet.await_count == 2
+        assert "bpftool prog loadall" in r._run_hostnet.await_args_list[1].args[0]
 
     @pytest.mark.asyncio
-    async def test_malformed_entries_do_not_break_the_batch(self):
-        r = runner()
-        await r._sync_throttled_ips({"rules": [
-            "not-a-dict",
-            {"rate_kbit": 1024},
-            {"ip": "9.9.9.9", "rate_kbit": 2048},
-        ]})
+    async def test_last_limit_lifted_removes_the_program(self):
+        """Ни общего шейпера, ни персональных — ноде возвращается прежний вид."""
+        r = runner(("IFACE=ens3\nROOT=restored\nACTIVE=0\n", 0))
+        r._shaper_loaded = True
+        r._shaper_personal = {"1.2.3.4": 1024}
 
-        script = r._run_shell.await_args.args[0]
-        assert "9.9.9.9/32" in script
-        # На адрес приходится два фильтра: на полосу ограничителя и в его класс
-        assert script.count("tc filter add") == 2
+        await r._sync_throttled_ips({"rules": []})
+
+        script = r._run_hostnet.await_args.args[0]
+        assert "ROOT=restored" in script and "loadall" not in script
+        assert r._shaper_loaded is False
+
+    @pytest.mark.asyncio
+    async def test_general_shaper_keeps_the_program_when_personal_are_gone(self):
+        r = runner(("UPDATED=1\n", 0))
+        r._shaper_general = shaper.parse_config({"enabled": True, "ports": [443], "down_kbit": 10000})
+        r._shaper_loaded = True
+        r._shaper_personal = {"1.2.3.4": 1024}
+
+        await r._sync_throttled_ips({"rules": []})
+
+        script = r._run_hostnet.await_args.args[0]
+        assert "map delete pinned" in script and "ROOT=restored" not in script
 
     @pytest.mark.asyncio
     async def test_result_is_reported_back(self):
         r = runner()
-        await r._sync_throttled_ips({"command_id": "c1", "rules": [{"ip": "9.9.9.9", "rate_kbit": 512}]})
+        await r._sync_throttled_ips({"command_id": "c1", "rules": [rule("9.9.9.9", 512)]})
 
         reply = r._send.await_args.args[0]
         assert reply["command_id"] == "c1"

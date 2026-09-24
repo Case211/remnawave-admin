@@ -875,10 +875,10 @@ async def _process_torrent_violations(
                 # событий за минуты. Считаем накопленное по базе, а не по
                 # батчу: рой приезжает кусками, и в отдельном куске событий
                 # может быть немного.
+                recent = await db_service.count_recent_torrent_events(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                )
                 if min_events > 1:
-                    recent = await db_service.count_recent_torrent_events(
-                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
-                    )
                     if recent < min_events:
                         logger.info(
                             "Torrent: %d event(s) for %s in %d min — below threshold %d",
@@ -890,10 +890,10 @@ async def _process_torrent_violations(
                 # доказывает. У обмена десятки пиров сразу; у ложного
                 # срабатывания адрес один и тот же (ловился антивирус,
                 # которому эвристика приписала шифрованный BitTorrent).
+                peers = await db_service.count_recent_torrent_peers(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                )
                 if min_peers > 1:
-                    peers = await db_service.count_recent_torrent_peers(
-                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
-                    )
                     if peers < min_peers:
                         logger.info(
                             "Torrent: %d peer(s) for %s in %d min — below threshold %d",
@@ -960,16 +960,50 @@ async def _process_torrent_violations(
                     "source": "torrent",
                 })
 
-                # Notification
+                # Автоблок — до уведомления, чтобы в нём был итог, а не обещание
+                action = "notify"
+                if auto_action == "block_user":
+                    try:
+                        from shared.api_client import api_client
+                        await api_client.disable_user(await _resolve_user_key(user_uuid))
+                        action = "blocked"
+                        logger.info("Auto-blocked user %s for torrent usage", user_uuid)
+                        fire_event("user.blocked", {
+                            "uuid": user_uuid,
+                            "username": username,
+                            "reason": "torrent",
+                            "details": f"Torrent traffic detected ({recent} events, {peers} peers)",
+                            "blocked_by": "auto",
+                        })
+                    except Exception as e:
+                        action = "block_failed"
+                        logger.warning("Failed to auto-block user %s: %s", user_uuid, e)
+
+                # Уведомление — по окну, на котором сработали пороги: в самом
+                # батче событий и адресов обычно горстка, и алерт выглядел
+                # так, будто пороги не применились
                 try:
                     from web.backend.core.violation_notifier import send_torrent_notification
+                    window_destinations = await torrent_p2p_whitelist.filter_destinations(
+                        await db_service.recent_torrent_destinations(
+                            user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                        )
+                    ) or destinations
                     await send_torrent_notification(
                         user_uuid=user_uuid,
                         user_info=user_info,
                         torrent_events=user_events,
-                        destinations=destinations,
+                        destinations=window_destinations,
                         ips=ips,
                         node_name=node_name,
+                        window={
+                            "minutes": _TORRENT_EVENT_WINDOW_MINUTES,
+                            "events": recent,
+                            "peers": peers,
+                            "min_events": min_events,
+                            "min_peers": min_peers,
+                        },
+                        action=action,
                     )
                 except Exception as e:
                     logger.warning("Failed to send torrent notification: %s", e)
@@ -986,7 +1020,12 @@ async def _process_torrent_violations(
                         "ips": ips,
                         "event_count": len(user_events),
                         "node_uuid": user_events[0].node_uuid,
+                        "node_name": node_name or "",
+                        # Счёт за окно, по которому сработали пороги, — для условий
+                        "window_events": recent,
+                        "peers": peers,
                         "score": 100.0,
+                        "violation_id": violation_id,
                     })
                 except Exception as e:
                     logger.warning("Automation event failed: %s", e)
@@ -1004,22 +1043,6 @@ async def _process_torrent_violations(
                     })
                 except Exception as e:
                     logger.debug("WebSocket broadcast failed for torrent violation: %s", e)
-
-                # Auto-block if configured
-                if auto_action == "block_user":
-                    try:
-                        from shared.api_client import api_client
-                        await api_client.disable_user(await _resolve_user_key(user_uuid))
-                        logger.info("Auto-blocked user %s for torrent usage", user_uuid)
-                        fire_event("user.blocked", {
-                            "uuid": user_uuid,
-                            "username": username,
-                            "reason": "torrent",
-                            "details": f"Torrent traffic detected ({len(user_events)} events)",
-                            "blocked_by": "auto",
-                        })
-                    except Exception as e:
-                        logger.warning("Failed to auto-block user %s: %s", user_uuid, e)
 
             except Exception as e:
                 logger.warning("Error processing torrent violation for user %s: %s", user_uuid, e)
@@ -1357,15 +1380,18 @@ async def _handle_violation(
         # урезать скорость. Мера обратимая и не выкидывает человека из сети,
         # поэтому в отличие от автоблокировки её не страшно применять на
         # среднем скоре; выключено по умолчанию, решает администратор.
+        from shared.throttle import default_rate_kbit
+
         if (
             violation_score.recommended_action == ViolationAction.SOFT_BLOCK
             and config_service.get("violation_auto_soft_throttle", False)
+            # 0 или пусто в настройках — без лимита, урезать нечем
+            and default_rate_kbit()
         ):
             try:
-                from shared.config_service import config_service as _cfg
                 from shared.throttle import apply_throttle
 
-                rate_kbit = int(_cfg.get("throttle_default_kbit", 1024) or 1024)
+                rate_kbit = default_rate_kbit()
                 ok, err, moved = await apply_throttle(
                     user_uuid=user_uuid,
                     rate_kbit=rate_kbit,
@@ -1460,12 +1486,25 @@ async def _handle_violation(
 
         try:
             from web.backend.api.v2.websocket import broadcast_violation
+            countries = sorted(geo.countries) if geo and geo.countries else []
+            asn_types = sorted(asn.asn_types) if asn and asn.asn_types else []
             await broadcast_violation({
                 "user_uuid": user_uuid,
                 "username": username,
+                "violation_id": violation_id,
                 "score": violation_score.total,
                 "recommended_action": violation_score.recommended_action.value,
                 "reasons": violation_score.reasons[:5],
+                # Для условий автоматизаций: «только hard_block», «не мобильные» и т.п.
+                "countries": countries,
+                "country": countries[0] if len(countries) == 1 else ("" if not countries else "multiple"),
+                "asn_types": asn_types,
+                "is_mobile": bool(asn.is_mobile_carrier) if asn else False,
+                "is_datacenter": bool(asn.is_datacenter) if asn else False,
+                "is_vpn": bool(asn.is_vpn) if asn else False,
+                "unique_ips": len(ip_addresses) if ip_addresses else 0,
+                "simultaneous": temporal.simultaneous_connections_count if temporal else 0,
+                "devices": len(device.os_list) if device and device.os_list else 0,
             })
         except Exception:
             pass

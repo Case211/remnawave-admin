@@ -74,6 +74,7 @@ import {
   type StoreStatus,
   type TransferOutResponse,
 } from '@/api/adminPlugins'
+import { getDisplayTimeZone } from '@/lib/timezone'
 
 /**
  * Admin → Plugins: the store (keyless model). Catalog cards with prices
@@ -111,6 +112,7 @@ export function pickText(text: CatalogText | string | undefined, lang: string): 
 function formatTs(ts: number | null | undefined, lang: string): string {
   if (!ts) return '—'
   return new Date(ts * 1000).toLocaleString(lang.startsWith('ru') ? 'ru-RU' : 'en-US', {
+    timeZone: getDisplayTimeZone(),
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -211,7 +213,7 @@ export default function AdminPlugins() {
           <h1 className="text-2xl font-bold text-white">{t('adminPlugins.title')}</h1>
           <p className="mt-1 text-sm text-dark-300">{t('adminPlugins.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"

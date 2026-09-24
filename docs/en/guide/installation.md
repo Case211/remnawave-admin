@@ -98,7 +98,7 @@ If your Telegram group is a forum, notifications can be split across topics — 
 
 ## 5. Agent on the nodes
 
-Required for anti-abuse, host metrics, the terminal and torrent detection. The panel builds the install command for you: **Nodes → node → Agent token → Install agent**.
+Required for anti-abuse, host metrics, the terminal and torrent detection. The panel builds the install command for you: **Servers → Panel nodes → node menu → Agent token → Install agent**.
 
 Details and manual installation: [Node Agent](/en/guide/node-agent).
 

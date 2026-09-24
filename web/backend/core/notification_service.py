@@ -6,7 +6,7 @@ import logging
 import re
 import smtplib
 import ssl
-from datetime import datetime
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
@@ -22,6 +22,7 @@ from shared.db_schema import (
     NOTIFICATION_CHANNEL_CONFIGS_TABLE,
 )
 from shared.db_query import select_sql, insert_sql
+from shared import timefmt
 from shared.notification_config import (
     is_notification_type_enabled,
     resolve_notification_topic,
@@ -32,6 +33,65 @@ logger = logging.getLogger(__name__)
 
 # Тег телеграм-разметки: буква сразу после «<», чтобы «score < 50» не считалось тегом
 _TAG_RE = re.compile(r"</?[a-zA-Z][^<>]*>")
+
+
+# Тип уведомления → раздел, право на просмотр которого нужно получателю.
+# Общее уведомление о нарушении не должно уходить админу, которому нарушения
+# не видны: ни в колокольчик, ни в Telegram, ни на почту. Типы без раздела
+# (служебные, системные) видят все.
+_TYPE_RESOURCE = {
+    "violation": "violations",
+    "torrent": "violations",
+    "traffic_rate": "violations",
+    "shaper": "violations",
+    "alert": "nodes",
+    "nodes": "nodes",
+    "finance": "finance",
+    "automation": "automation",
+    "plugin": "plugins",
+}
+
+
+def notification_resource(notification_type: Optional[str]) -> Optional[str]:
+    return _TYPE_RESOURCE.get(notification_type or "")
+
+
+# Уведомления про конкретного юзера: source_id у них — uuid юзера
+_USER_SUBJECT_TYPES = {"violation", "torrent", "traffic_rate"}
+
+
+async def _recipient_admin_ids(conn, notification_type: Optional[str],
+                               user_uuid: Optional[str] = None) -> List[int]:
+    """Активные админы, которым положено это уведомление.
+
+    Суперадмин и админ без роли (легаси, полный доступ) — всегда; остальные —
+    если у роли есть право на просмотр раздела уведомления. Уведомление про
+    конкретного юзера получают только те, кому этот юзер виден: админ с
+    ограниченной областью видимости не узнаёт о нарушениях чужих юзеров.
+    """
+    resource = notification_resource(notification_type)
+    rows = await conn.fetch(
+        f"""
+        SELECT a.id, r.name AS role_name FROM {ADMIN_TABLE} a
+        LEFT JOIN admin_roles r ON r.id = a.role_id
+        WHERE a.is_active = true
+          AND ($1::text IS NULL OR r.id IS NULL OR r.name = 'superadmin' OR EXISTS (
+                SELECT 1 FROM admin_permissions p
+                WHERE p.role_id = a.role_id AND p.resource = $1 AND p.action = 'view'))
+        ORDER BY a.id
+        """,
+        resource,
+    )
+    if not user_uuid:
+        return [r["id"] for r in rows]
+    from shared.rbac import get_visible_user_uuids
+    wanted = str(user_uuid).lower()
+    result = []
+    for r in rows:
+        visible = await get_visible_user_uuids(r["id"], r["role_name"])
+        if visible is None or wanted in {str(u).lower() for u in visible}:
+            result.append(r["id"])
+    return result
 
 
 def _plain_text(markup: str) -> str:
@@ -131,7 +191,7 @@ def _build_html_email(title: str, body: str, severity: str = "info", link: Optio
     {link_html}
 </td></tr>
 <tr><td style="padding:16px 32px;border-top:1px solid #2a3a4a;color:#64748b;font-size:12px">
-    Remnawave Admin &middot; {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}
+    Remnawave Admin &middot; {timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M")}
 </td></tr>
 </table>
 </td></tr>
@@ -354,8 +414,8 @@ async def send_webhook(
 ) -> bool:
     """Send notification to a webhook URL (Discord, Slack compatible)."""
     # SSRF-защита: не даём слать на приватные/служебные адреса (метаданные облака и т.п.)
-    from web.backend.core.webhook_security import check_url_safety
-    ok, reason = check_url_safety(url)
+    from web.backend.core.webhook_security import check_url_safety_async
+    ok, reason = await check_url_safety_async(url)
     if not ok:
         logger.warning("send_webhook blocked (SSRF): %s", reason)
         NOTIFICATIONS_FAILED.labels(channel="webhook").inc()
@@ -426,6 +486,7 @@ async def create_notification(
     telegram_body: Optional[str] = None,
     reply_markup: Optional[Dict[str, Any]] = None,
     event: Optional[str] = None,
+    user_uuid: Optional[str] = None,
     **kwargs,
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
@@ -440,6 +501,9 @@ async def create_notification(
     channels = channels or ["in_app"]
     body, telegram_body = _split_body(body, telegram_body)
     notification_id = None
+    # Про какого юзера уведомление — чтобы не показать его тем, кому он не виден
+    subject_user = user_uuid or (source_id if type in _USER_SUBJECT_TYPES else None)
+    recipient_ids: List[int] = []
 
     try:
         from shared.database import db_service
@@ -467,15 +531,9 @@ async def create_notification(
             # Broadcast to all admins
             all_deduplicated = True
             async with db_service.acquire() as conn:
-                admin_ids = await conn.fetch(
-                    select_sql(
-                        ADMIN_TABLE,
-                        "id",
-                        "WHERE is_active = true",
-                    ),
-                )
-                for row in admin_ids:
-                    aid = row["id"]
+                admin_ids = await _recipient_admin_ids(conn, type, subject_user)
+                recipient_ids = admin_ids
+                for aid in admin_ids:
 
                     # Deduplication: skip if same group_key exists within last 15 min
                     if group_key:
@@ -508,7 +566,7 @@ async def create_notification(
         # Broadcast via WebSocket
         try:
             from web.backend.api.v2.websocket import manager
-            await manager.broadcast({
+            ws_message = {
                 "type": "notification",
                 "data": {
                     "id": notification_id,
@@ -520,7 +578,15 @@ async def create_notification(
                     "link": link,
                 },
                 "timestamp": datetime.utcnow().isoformat(),
-            })
+            }
+            if admin_id is not None:
+                await manager.send_to_account(admin_id, ws_message)
+            elif subject_user:
+                for aid in recipient_ids:
+                    await manager.send_to_account(aid, ws_message)
+            else:
+                resource = notification_resource(type)
+                await manager.broadcast(ws_message, permission=(resource, "view") if resource else None)
         except Exception as e:
             logger.warning("WebSocket broadcast failed: %s", e)
 
@@ -537,22 +603,13 @@ async def create_notification(
         else:
             # For broadcasts, dispatch to all admins' external channels
             try:
-                async with db_service.acquire() as conn:
-                    admin_ids_rows = await conn.fetch(
-                        select_sql(
-                            ADMIN_TABLE,
-                            "id",
-                            "WHERE is_active = true",
-                        ),
-                    )
-
-                if admin_ids_rows:
-                    logger.debug("Broadcasting external channels to %d admin accounts", len(admin_ids_rows))
-                    for row in admin_ids_rows:
-                        aid_chat_ids = await _collect_telegram_chat_ids(row["id"])
+                if recipient_ids:
+                    logger.debug("Broadcasting external channels to %d admin accounts", len(recipient_ids))
+                    for recipient_id in recipient_ids:
+                        aid_chat_ids = await _collect_telegram_chat_ids(recipient_id)
                         per_admin_tg_chat_ids.update(aid_chat_ids)
                         asyncio.create_task(
-                            _dispatch_external(row["id"], title, tg_body, severity, link, channels, reply_markup=reply_markup)
+                            _dispatch_external(recipient_id, title, tg_body, severity, link, channels, reply_markup=reply_markup)
                         )
                 else:
                     logger.debug("No admin_accounts found for external dispatch")
@@ -618,6 +675,20 @@ async def create_notification(
     return notification_id
 
 
+async def _admin_in_dnd(admin_id: int) -> bool:
+    """Сейчас окно «не беспокоить» админа (часы панели)?"""
+    try:
+        from shared.database import db_service
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(f"SELECT dnd_from, dnd_to FROM {ADMIN_TABLE} WHERE id = $1", admin_id)
+    except Exception as e:
+        logger.debug("DND lookup failed for admin %s: %s", admin_id, e)
+        return False
+    if not row:
+        return False
+    return timefmt.quiet_window_end(row["dnd_from"], row["dnd_to"], timefmt.now()) is not None
+
+
 async def _collect_telegram_chat_ids(admin_id: int) -> set:
     """Return the set of Telegram chat_ids configured for this admin."""
     try:
@@ -681,6 +752,9 @@ async def _dispatch_external(
     """Dispatch notification to external channels based on admin's channel config."""
     try:
         from shared.database import db_service
+        if severity != "critical" and await _admin_in_dnd(admin_id):
+            logger.debug("Admin %s is in do-not-disturb, external channels skipped", admin_id)
+            return
         async with db_service.acquire() as conn:
             channels = await conn.fetch(
                 select_sql(NOTIFICATION_CHANNELS_TABLE, "channel_type, config", "WHERE admin_id = $1 AND is_enabled = true"),
@@ -744,7 +818,7 @@ def _esc_html(text: str) -> str:
 
 
 def _now_str() -> str:
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    return timefmt.fmt(datetime.now(timezone.utc), "%Y-%m-%d %H:%M:%S")
 
 
 async def notify_login_failed(

@@ -42,6 +42,19 @@ class ConnectionManager:
             self._admins.pop(websocket, None)
         logger.info(f"WebSocket disconnected. Active: {len(self.active_connections)}")
 
+    async def send_to_account(self, account_id: int, message: Dict[str, Any]) -> None:
+        """Сообщение только вкладкам конкретного админа (адресное уведомление)."""
+        targets = [ws for ws, admin in list(self._admins.items())
+                   if getattr(admin, "account_id", None) == account_id]
+        if not targets:
+            return
+        data = json.dumps(message, default=str)
+        for ws in targets:
+            try:
+                await ws.send_text(data)
+            except Exception:
+                await self.disconnect(ws)
+
     @staticmethod
     def _admin_can(admin: Optional[AdminUser], permission: Optional[Tuple[str, str]]) -> bool:
         """Есть ли у админа право на событие (superadmin/legacy — всегда)."""
@@ -219,7 +232,12 @@ async def broadcast_violation(violation_data: Dict[str, Any]):
         "data": violation_data,
         "timestamp": datetime.utcnow().isoformat(),
     }, permission=("violations", "view"))
-    # Dispatch to automation engine (fire-and-forget)
+    # Dispatch to automation engine (fire-and-forget). Торрент в автоматизации
+    # уходит своим событием torrent.detected — второй раз как нарушение его не
+    # шлём: иначе правило «блокировать шаринг» блокировало за торрент в обход
+    # настройки torrent_auto_action.
+    if violation_data.get("type") == "torrent":
+        return
     try:
         from web.backend.core.automation_engine import engine as automation_engine
         asyncio.create_task(automation_engine.handle_event("violation.detected", violation_data))
@@ -243,14 +261,8 @@ async def broadcast_node_status(node_data: Dict[str, Any]):
         "data": node_data,
         "timestamp": datetime.utcnow().isoformat(),
     }, permission=("nodes", "view"))
-    # Dispatch to automation engine (fire-and-forget)
-    try:
-        from web.backend.core.automation_engine import engine as automation_engine
-        is_connected = node_data.get("is_connected", node_data.get("isConnected", True))
-        if not is_connected:
-            asyncio.create_task(automation_engine.handle_event("node.went_offline", node_data))
-    except Exception as e:
-        logger.debug("Non-critical: %s", e)
+    # node.went_offline в автоматизации шлёт детектор движка: он знает, с
+    # какого момента нода лежит, и не считает выключенные ноды упавшими
 
 
 async def broadcast_user_update(user_data: Dict[str, Any]):
@@ -260,15 +272,8 @@ async def broadcast_user_update(user_data: Dict[str, Any]):
         "data": user_data,
         "timestamp": datetime.utcnow().isoformat(),
     }, permission=("users", "view"))
-    # Dispatch traffic exceeded events to automation engine (fire-and-forget)
-    try:
-        from web.backend.core.automation_engine import engine as automation_engine
-        limit = user_data.get("traffic_limit_bytes", user_data.get("trafficLimitBytes", 0))
-        used = user_data.get("used_traffic_bytes", user_data.get("usedTrafficBytes", 0))
-        if limit and used and used > limit:
-            asyncio.create_task(automation_engine.handle_event("user.traffic_exceeded", user_data))
-    except Exception as e:
-        logger.debug("Non-critical: %s", e)
+    # user.traffic_exceeded шлёт детектор движка — один раз на превышение,
+    # а не на каждое обновление юзера
 
 
 async def broadcast_activity(activity_type: str, message: str, details: Dict[str, Any] = None):
@@ -312,7 +317,7 @@ async def broadcast_audit_event(
             "resource_id": resource_id,
         },
         "timestamp": datetime.utcnow().isoformat(),
-    }, permission=("admins", "view"))
+    }, permission=("audit", "view"))
 
 
 async def broadcast_dashboard_stats(stats: Dict[str, Any]):

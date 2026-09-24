@@ -1,3 +1,4 @@
+from urllib.parse import urlencode
 import httpx
 
 from shared.config import get_shared_settings as get_settings
@@ -836,6 +837,12 @@ class RemnawaveApiClient(BaseHttpClient):
             f"/api/bandwidth-stats/nodes/{node_uuid}/users",
             params={"start": start, "end": end, "topUsersLimit": top_users_limit}
         )
+
+    async def get_nodes_users_usage(self, node_uuids: list, start: str, end: str,
+                                    top_users_limit: int = 100) -> dict:
+        """Топ юзеров по трафику сразу по нескольким нодам (панель 2.8+)."""
+        query = urlencode({"start": start, "end": end, "topUsersLimit": top_users_limit})
+        return await self._post(f"/api/bandwidth-stats/nodes/users?{query}", json={"nodesUuids": node_uuids})
 
     async def get_hwid_devices_stats(self) -> dict:
         """Получает статистику по устройствам (HWID)."""

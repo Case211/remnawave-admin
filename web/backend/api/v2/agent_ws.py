@@ -125,6 +125,15 @@ async def agent_websocket(
     except Exception as e:
         logger.debug("Failed to push blocked IPs to agent %s: %s", node_uuid, e)
 
+    # Шейпер ноды — до персональных лимитов: программа у них одна, и пустой
+    # список урезаний иначе снял бы её, а следом шейпер поставил бы заново.
+    # Правила tc и программа eBPF не переживают перезагрузку ноды.
+    try:
+        from web.backend.core import shaper_rollout
+        await shaper_rollout.push_on_connect(node_uuid, token)
+    except Exception as e:
+        logger.debug("Failed to push shaper settings to agent %s: %s", node_uuid, e)
+
     # Ограничения скорости — тоже заново: правила tc живут в ядре и не
     # переживают перезагрузку ноды, а отпечаток отправленного надо забыть,
     # иначе синхронизатор решит, что у агента всё на месте, и промолчит.
@@ -177,8 +186,21 @@ async def agent_websocket(
                         logger.debug("Failed to update agent ping timestamp: %s", e)
 
                 elif msg_type == "command_result":
-                    # Agent finished executing a command — log it
-                    await _handle_command_result(node_uuid, msg)
+                    from web.backend.core import shaper_rollout
+                    if msg.get("command_id") == shaper_rollout.COMMAND_ID:
+                        # Ответ шейпера — состояние ноды, а не запись журнала скриптов
+                        await shaper_rollout.store_result(node_uuid, msg)
+                    else:
+                        # Agent finished executing a command — log it
+                        await _handle_command_result(node_uuid, msg)
+
+                elif msg_type == "shaper_penalties":
+                    # Кого шейпер ноды оштрафовал за объём — в историю и админу
+                    from web.backend.core import shaper_rollout
+                    try:
+                        await shaper_rollout.handle_penalties(node_uuid, msg.get("events"))
+                    except Exception as e:
+                        logger.warning("Failed to handle shaper penalties from %s: %s", node_uuid, e)
 
                 elif msg_type == "script_output":
                     # Streaming script output — forward to frontend SSE/WS

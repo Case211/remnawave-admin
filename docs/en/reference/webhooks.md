@@ -95,8 +95,10 @@ Toggling the switch back to Active clears the counter and re-enables it.
 
 ### Manual re-dispatch
 
-The UI currently does not expose a "resend" button per delivery; it is planned for a later
-release. Re-enabling the webhook + triggering the original event again is the current workaround.
+Every delivery in the history keeps the event body, so any of them can be sent again with the
+**Redeliver** button: the same body goes out with a fresh signature, and the result lands in the
+history as a new delivery. Deliveries recorded before 5.0.0 have no stored body and cannot be
+resent. The history can be filtered by event and by result.
 
 ---
 

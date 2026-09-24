@@ -70,20 +70,17 @@ class TestCronMatchesNow:
     def test_invalid_expression(self):
         assert not cron_matches_now("bad cron expression here now")
 
-    @patch("web.backend.core.automation_engine.datetime")
-    def test_specific_minute(self, mock_dt):
-        mock_now = datetime(2026, 2, 11, 10, 30, 0, tzinfo=timezone.utc)
-        mock_dt.now.return_value = mock_now
-        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+    # CRON считается по часам панели (timefmt.now), а не по UTC
+    @patch("shared.timefmt.now")
+    def test_specific_minute(self, mock_now):
+        mock_now.return_value = datetime(2026, 2, 11, 10, 30, 0, tzinfo=timezone.utc)
         # 30th minute, 10th hour
         assert cron_matches_now("30 10 * * *")
         assert not cron_matches_now("0 10 * * *")
 
-    @patch("web.backend.core.automation_engine.datetime")
-    def test_specific_hour(self, mock_dt):
-        mock_now = datetime(2026, 2, 11, 14, 0, 0, tzinfo=timezone.utc)
-        mock_dt.now.return_value = mock_now
-        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+    @patch("shared.timefmt.now")
+    def test_specific_hour(self, mock_now):
+        mock_now.return_value = datetime(2026, 2, 11, 14, 0, 0, tzinfo=timezone.utc)
         assert cron_matches_now("0 14 * * *")
         assert not cron_matches_now("0 15 * * *")
 

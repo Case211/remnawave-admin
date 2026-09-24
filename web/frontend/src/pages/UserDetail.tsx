@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useFormatters, formatDateShortUtil, parseApiDate } from '@/lib/useFormatters'
+import { fromZonedInputValue, timeZoneLabel, toZonedInputValue } from '@/lib/timezone'
 import { InteractiveChart, type ChartSeries } from '@/components/charts/InteractiveChart'
 import { translateBackendError } from '@/lib/mutationToast'
 import {
@@ -43,6 +44,7 @@ import {
 import { toast } from 'sonner'
 import client from '../api/client'
 import { useHasPermission } from '../components/PermissionGate'
+import { AuditHistory } from '@/components/AuditHistory'
 import { ThrottleDialog, useActiveThrottle } from '@/components/ThrottleDialog'
 import { usePermissionStore } from '@/store/permissionStore'
 
@@ -201,12 +203,10 @@ function gbToBytes(gb: string): number | null {
   return Math.round(val * 1024 * 1024 * 1024)
 }
 
+/** Срок в поле datetime-local — на часах зоны панели, а не браузера. */
 function formatDateForInput(dateStr: string | null): string {
   if (!dateStr) return ''
-  const d = new Date(dateStr)
-  // Format as YYYY-MM-DDTHH:mm for datetime-local input
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return toZonedInputValue(parseApiDate(dateStr))
 }
 
 interface TrafficStats {
@@ -326,7 +326,7 @@ function HourlyTrafficChart({ userUuid }: { userUuid: string }) {
     () =>
       (data?.points ?? []).map((p) => {
         const row: Record<string, string | number> = {
-          label: `${String(parseApiDate(p.bucket).getHours()).padStart(2, '0')}:00`,
+          label: `${toZonedInputValue(parseApiDate(p.bucket)).slice(11, 13)}:00`,
           raw: p.bucket,
           total: p.total_bytes,
         }
@@ -840,30 +840,11 @@ function PaginatedDeviceList({
 /**
  * User audit history — shows admin actions on this user.
  */
-interface AuditItem {
-  id: number
-  action: string
-  admin_username: string
-  created_at: string | null
-  details: string | null
-}
-
 function UserHistory({ uuid }: { uuid: string }) {
   const { t } = useTranslation()
-  const { formatDate } = useFormatters()
   const [isOpen, setIsOpen] = useState(false)
-
-  const { data, isLoading } = useQuery<{ items: AuditItem[] }>({
-    queryKey: ['user-history', uuid],
-    queryFn: async () => {
-      const response = await client.get(`/audit/resource/users/${uuid}`, { params: { limit: 20 } })
-      return response.data
-    },
-    enabled: !!uuid && isOpen,
-    staleTime: 30000,
-  })
-
-  const items = data?.items ?? []
+  const canView = useHasPermission('audit', 'view')
+  if (!canView) return null
 
   return (
     <CollapsibleSection
@@ -871,44 +852,9 @@ function UserHistory({ uuid }: { uuid: string }) {
       icon={Clock}
       defaultOpen={false}
       onOpenChange={setIsOpen}
-      badge={items.length > 0 ? <Badge variant="secondary" className="ml-1">{items.length}</Badge> : undefined}
       animationDelay="0.25s"
     >
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="text-center py-4 text-dark-300 text-sm">
-              {t('common.noData')}
-            </div>
-          ) : (
-            <div className="relative pl-6 space-y-4">
-              <div className="absolute left-[9px] top-2 bottom-2 w-px bg-[var(--glass-bg-hover)]" />
-              {items.map((item) => {
-                const rawAction = item.action ?? ''
-                const dot = rawAction.indexOf('.')
-                const action = dot > 0 ? rawAction.slice(dot + 1) : rawAction || 'unknown'
-                return (
-                  <div key={item.id} className="relative">
-                    <div className="absolute -left-6 top-1 w-[7px] h-[7px] rounded-full bg-primary-400 ring-2 ring-dark-800" />
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-white">{item.admin_username}</span>
-                      <Badge variant="outline" className="text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
-                        {action}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {item.created_at ? formatDate(item.created_at) : ''}
-                      </span>
-                    </div>
-                    {item.details && (
-                      <p className="text-xs text-dark-300 mt-0.5 truncate max-w-md">{item.details}</p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
+      <AuditHistory resource="users" resourceId={uuid} enabled={isOpen} />
     </CollapsibleSection>
   )
 }
@@ -1947,8 +1893,8 @@ export default function UserDetail() {
 
     // Expire at
     if (editForm.expire_at) {
-      const newExpire = new Date(editForm.expire_at).toISOString()
-      if (user && newExpire !== user.expire_at) {
+      const newExpire = fromZonedInputValue(editForm.expire_at)?.toISOString() ?? null
+      if (user && newExpire && newExpire !== user.expire_at) {
         updateData.expire_at = newExpire
       }
     } else if (user?.expire_at) {
@@ -2455,7 +2401,7 @@ export default function UserDetail() {
 
                   {/* Expire date */}
                   <div className="space-y-2">
-                    <Label>{t('userDetail.fields.expireDate')}</Label>
+                    <Label>{t('userDetail.fields.expireDate')} ({timeZoneLabel()})</Label>
                     <div className="flex flex-wrap gap-1">
                       {[
                         { label: '7d', days: 7 },
@@ -2475,9 +2421,7 @@ export default function UserDetail() {
                             const d = days > 0
                               ? new Date(now.getTime() + days * 86400000)
                               : new Date(now.setFullYear(2099))
-                            const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                              .toISOString().slice(0, 16)
-                            setEditForm({ ...editForm, expire_at: local })
+                            setEditForm({ ...editForm, expire_at: toZonedInputValue(d) })
                           }}
                         >
                           {label === '2099' ? t('userDetail.indefinite') : `+${label}`}

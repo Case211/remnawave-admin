@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { format, subDays } from 'date-fns'
+import { toast } from 'sonner'
+import { subDays } from 'date-fns'
 import {
   Search,
   Filter,
@@ -48,10 +50,21 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { QueryError } from '@/components/QueryError'
 import { ExportDropdown } from '@/components/ExportDropdown'
-import { exportCSV, exportJSON } from '@/lib/export'
 import { auditApi, type AuditLogEntry, type AuditLogParams } from '@/api/audit'
 import { useFormatters } from '@/lib/useFormatters'
-import type { TFunction } from 'i18next'
+import {
+  resourceKey,
+  resourceStyleKey,
+  getResourceLabel,
+  getActionLabelT,
+  getDetailLabel,
+  parseAction,
+  getActionColor,
+  tryParseJSON,
+  formatDetailValue,
+  getDescription,
+  getVisibleDetails,
+} from '@/lib/auditFormat'
 
 // ── Constants ───────────────────────────────────────────────────
 
@@ -84,116 +97,6 @@ const RESOURCE_COLORS: Record<string, string> = {
   automation: ACCENT_RESOURCE,
 }
 
-// ── Helpers ──────────────────────────────────────────────────────
-
-function getResourceLabel(t: TFunction, resource: string): string {
-  return t(`audit.resources.${resource}`, { defaultValue: resource })
-}
-
-function getActionLabelT(t: TFunction, action: string): string {
-  return t(`audit.actions.${action}`, { defaultValue: action })
-}
-
-function getDetailLabel(t: TFunction, key: string): string {
-  return t(`audit.details.${key}`, { defaultValue: key })
-}
-
-function parseAction(fullAction: string): { resource: string; action: string } {
-  const dot = fullAction.indexOf('.')
-  if (dot === -1) return { resource: '', action: fullAction }
-  return { resource: fullAction.slice(0, dot), action: fullAction.slice(dot + 1) }
-}
-
-function getActionColor(action: string): string {
-  // Semantic: destructive actions stay red
-  if (action.includes('delete') || action === 'disable' || action.includes('revoke'))
-    return 'bg-red-500/20 text-red-400 border-red-500/30'
-  // Semantic: create/enable stay green
-  if (action === 'create' || action === 'enable')
-    return 'bg-green-500/20 text-green-400 border-green-500/30'
-  // Neutral actions use muted style
-  if (action === 'logout')
-    return 'bg-muted text-muted-foreground border-border'
-  // Default: theme accent
-  return 'bg-primary/20 text-primary-400 border-primary/30'
-}
-
-function tryParseJSON(str: string | null): Record<string, unknown> | null {
-  if (!str) return null
-  try {
-    const parsed = JSON.parse(str)
-    return typeof parsed === 'object' && parsed !== null ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function formatBytesRaw(bytes: unknown): string {
-  const num = Number(bytes)
-  if (isNaN(num) || num === 0) return '0'
-  if (num >= 1125899906842624) return `${(num / 1125899906842624).toFixed(1)} PB`
-  if (num >= 1099511627776) return `${(num / 1099511627776).toFixed(1)} TB`
-  if (num >= 1073741824) return `${(num / 1073741824).toFixed(1)} GB`
-  if (num >= 1048576) return `${(num / 1048576).toFixed(1)} MB`
-  return `${(num / 1024).toFixed(0)} KB`
-}
-
-function formatDetailValue(t: TFunction, key: string, value: unknown): string {
-  if (value === null || value === undefined) return '\u2014'
-  if (typeof value === 'boolean') return value ? t('common.yes') : t('common.no')
-  if (key === 'data_limit' && typeof value === 'number') return formatBytesRaw(value)
-  if (key === 'expire_date' && typeof value === 'string') {
-    try {
-      return format(new Date(value), 'dd.MM.yyyy HH:mm')
-    } catch { return String(value) }
-  }
-  if (key === 'new_state') return value === 'enabled' ? t('common.enabled') : t('common.disabled')
-  if (key === 'is_disabled') return value ? t('common.yes') : t('common.no')
-  if (key === 'is_active') return value ? t('common.yes') : t('common.no')
-  if (Array.isArray(value)) return value.join(', ')
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
-function getDescription(
-  t: TFunction,
-  resource: string,
-  action: string,
-  resourceId: string | null,
-  details: Record<string, unknown> | null,
-): string {
-  const target = (details?.username as string)
-    || (details?.name as string)
-    || (details?.remark as string)
-    || (details?.setting as string)
-    || resourceId
-    || ''
-
-  // Special case for automation toggle
-  if (resource === 'automation' && action === 'toggle') {
-    const name = (details?.name as string) || target
-    return details?.new_state === 'enabled'
-      ? t('audit.descriptions.automation.toggle_on', { target: name })
-      : t('audit.descriptions.automation.toggle_off', { target: name })
-  }
-
-  const key = `audit.descriptions.${resource}.${action}`
-  const result = t(key, { target })
-  if (result && result !== key) return result
-
-  // Fallback: generate a generic description
-  const actionLabel = getActionLabelT(t, action).toLowerCase()
-  const resourceLabel = getResourceLabel(t, resource).toLowerCase()
-  return `${actionLabel} ${resourceLabel}${target ? ` ${target}` : ''}`
-}
-
-/** Get top N detail entries, excluding keys already used in description */
-function getVisibleDetails(details: Record<string, unknown> | null): [string, unknown][] {
-  if (!details) return []
-  const skipKeys = new Set(['setting'])
-  return Object.entries(details).filter(([k]) => !skipKeys.has(k))
-}
-
 // ── Component ───────────────────────────────────────────────────
 
 export default function AuditLog() {
@@ -203,6 +106,13 @@ export default function AuditLog() {
   const [resourceFilter, setResourceFilter] = useState<string>('all')
   const [actionFilter, setActionFilter] = useState<string>('all')
   const [periodFilter, setPeriodFilter] = useState<string>('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [adminFilter, setAdminFilter] = useState<string>('all')
+  const [ipFilter, setIpFilter] = useState('')
+  // «Весь журнал» из истории в карточке юзера или ноды — ?resource_id=
+  const [searchParams, setSearchParams] = useSearchParams()
+  const resourceIdFilter = searchParams.get('resource_id') || ''
   const [searchInput, setSearchInput] = useState('')
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
 
@@ -211,6 +121,7 @@ export default function AuditLog() {
     { value: '24h', label: t('audit.period.24h') },
     { value: '7d', label: t('audit.period.7d') },
     { value: '30d', label: t('audit.period.30d') },
+    { value: 'custom', label: t('audit.period.custom') },
   ], [t])
 
   // Build query params
@@ -221,15 +132,24 @@ export default function AuditLog() {
     }
     if (search) p.search = search
     if (resourceFilter !== 'all') p.resource = resourceFilter
-    if (actionFilter !== 'all') p.action = actionFilter
+    if (adminFilter !== 'all') p.admin_username = adminFilter
+    if (ipFilter) p.ip_address = ipFilter
+    if (resourceIdFilter) p.resource_id = resourceIdFilter
+    // Точное действие: «create» без точки ловил и «create_external_server»
+    if (actionFilter !== 'all') p.action = `.${actionFilter}`
     if (periodFilter !== 'all') {
       const now = new Date()
       if (periodFilter === '24h') p.date_from = subDays(now, 1).toISOString()
       else if (periodFilter === '7d') p.date_from = subDays(now, 7).toISOString()
       else if (periodFilter === '30d') p.date_from = subDays(now, 30).toISOString()
+      // Голая дата — сутки по часам панели, «по» включает весь день
+      else if (periodFilter === 'custom') {
+        if (dateFrom) p.date_from = dateFrom
+        if (dateTo) p.date_to = dateTo
+      }
     }
     return p
-  }, [page, search, resourceFilter, actionFilter, periodFilter])
+  }, [page, search, resourceFilter, actionFilter, periodFilter, dateFrom, dateTo, adminFilter, ipFilter, resourceIdFilter])
 
   const { data, isLoading, isError: isDataError, refetch } = useQuery({
     queryKey: ['audit-logs', params],
@@ -241,6 +161,12 @@ export default function AuditLog() {
     queryKey: ['audit-stats'],
     queryFn: () => auditApi.stats(),
     staleTime: 30000,
+  })
+
+  const { data: auditAdmins } = useQuery({
+    queryKey: ['audit-admins'],
+    queryFn: () => auditApi.admins(),
+    staleTime: 60000,
   })
 
   const { data: actions, isError: isActionsError, refetch: refetchActions } = useQuery({
@@ -259,7 +185,7 @@ export default function AuditLog() {
     const set = new Set<string>()
     actions.forEach((a) => {
       const dot = a.indexOf('.')
-      if (dot > 0) set.add(a.slice(0, dot))
+      if (dot > 0) set.add(resourceKey(a.slice(0, dot)))
     })
     return Array.from(set).sort()
   }, [actions])
@@ -289,27 +215,6 @@ export default function AuditLog() {
     })
   }
 
-  // Export data
-  const exportData = useMemo(
-    () =>
-      items.map((item) => {
-        const { resource, action } = parseAction(item.action)
-        const details = tryParseJSON(item.details)
-        return {
-          id: item.id,
-          date: item.created_at ? format(new Date(item.created_at), 'yyyy-MM-dd HH:mm:ss') : '',
-          admin: item.admin_username,
-          resource,
-          action: getActionLabelT(t, action),
-          description: getDescription(t, resource, action, item.resource_id, details),
-          resource_id: item.resource_id || '',
-          details: item.details || '',
-          ip: item.ip_address || '',
-        }
-      }),
-    [items, t],
-  )
-
   const hasError = isDataError || isStatsError || isActionsError
   const handleRetry = () => { refetch(); refetchStats(); refetchActions() }
 
@@ -324,9 +229,9 @@ export default function AuditLog() {
           </p>
         </div>
         <ExportDropdown
-          onExportCSV={() => exportCSV(exportData, 'audit-log')}
-          onExportJSON={() => exportJSON(exportData, 'audit-log')}
-          disabled={items.length === 0}
+          onExportCSV={() => auditApi.export(params, 'csv').catch(() => toast.error(t('common.error')))}
+          onExportJSON={() => auditApi.export(params, 'json').catch(() => toast.error(t('common.error')))}
+          disabled={total === 0}
         />
       </div>
 
@@ -380,7 +285,9 @@ export default function AuditLog() {
                 <Activity className="w-4 h-4 text-primary-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">{t('audit.stats.resourceTypes')}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('audit.stats.resourceTypesPeriod', { days: stats?.period_days ?? 30 })}
+                </p>
                 <p className="text-lg font-bold text-white">
                   {stats?.by_resource ? Object.keys(stats.by_resource).length : '\u2014'}
                 </p>
@@ -432,6 +339,20 @@ export default function AuditLog() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={adminFilter} onValueChange={(v) => { setAdminFilter(v); setPage(1) }}>
+              <SelectTrigger className="w-[170px] bg-[var(--glass-bg)] border-[var(--glass-border)]">
+                <User className="w-4 h-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder={t('audit.admin')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('audit.allAdmins')}</SelectItem>
+                {(auditAdmins ?? []).map((a) => (
+                  <SelectItem key={a.username} value={a.username}>
+                    {a.username}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={periodFilter} onValueChange={(v) => { setPeriodFilter(v); setPage(1) }}>
               <SelectTrigger className="w-[160px] bg-[var(--glass-bg)] border-[var(--glass-border)]">
                 <Clock className="w-4 h-4 mr-2 text-muted-foreground" />
@@ -445,6 +366,27 @@ export default function AuditLog() {
                 ))}
               </SelectContent>
             </Select>
+            {periodFilter === 'custom' && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                  aria-label={t('audit.dateFrom')}
+                  className="w-[150px] bg-[var(--glass-bg)] border-[var(--glass-border)]"
+                />
+                <span className="text-muted-foreground">{'\u2014'}</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                  aria-label={t('audit.dateTo')}
+                  className="w-[150px] bg-[var(--glass-bg)] border-[var(--glass-border)]"
+                />
+              </div>
+            )}
             <Button
               variant="outline"
               onClick={handleSearch}
@@ -454,6 +396,24 @@ export default function AuditLog() {
               {t('common.search')}
             </Button>
           </div>
+          {(ipFilter || resourceIdFilter) && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              {resourceIdFilter && (
+                <FilterChip
+                  label={`ID: ${resourceIdFilter}`}
+                  clearLabel={t('audit.clearFilter')}
+                  onClear={() => { setSearchParams({}); setPage(1) }}
+                />
+              )}
+              {ipFilter && (
+                <FilterChip
+                  label={`IP: ${ipFilter}`}
+                  clearLabel={t('audit.clearIpFilter')}
+                  onClear={() => { setIpFilter(''); setPage(1) }}
+                />
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -492,6 +452,7 @@ export default function AuditLog() {
                         item={item}
                         expanded={expandedRows.has(item.id)}
                         onToggle={() => toggleRow(item.id)}
+                        onFilterIp={(ip) => { setIpFilter(ip); setPage(1) }}
                       />
                     ))}
                   </TableBody>
@@ -542,22 +503,35 @@ export default function AuditLog() {
   )
 }
 
+function FilterChip({ label, clearLabel, onClear }: { label: string; clearLabel: string; onClear: () => void }) {
+  return (
+    <Badge variant="outline" className="gap-1.5 font-mono text-xs">
+      {label}
+      <button type="button" onClick={onClear} aria-label={clearLabel} className="text-muted-foreground hover:text-white">
+        {'\u2715'}
+      </button>
+    </Badge>
+  )
+}
+
 // ── Desktop Row Component ────────────────────────────────────────
 
 function AuditRow({
   item,
   expanded,
   onToggle,
+  onFilterIp,
 }: {
   item: AuditLogEntry
   expanded: boolean
   onToggle: () => void
+  onFilterIp: (ip: string) => void
 }) {
   const { t } = useTranslation()
   const { formatTimeAgo, formatDate } = useFormatters()
   const parsed = parseAction(item.action)
-  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || FileText
-  const resourceColor = RESOURCE_COLORS[parsed.resource] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || RESOURCE_ICONS[resourceStyleKey(parsed.resource)] || FileText
+  const resourceColor = RESOURCE_COLORS[parsed.resource] || RESOURCE_COLORS[resourceStyleKey(parsed.resource)] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
   const actionColor = getActionColor(parsed.action)
   const details = tryParseJSON(item.details)
   const description = getDescription(t, parsed.resource, parsed.action, item.resource_id, details)
@@ -643,13 +617,22 @@ function AuditRow({
               />
             </div>
           ) : (
-            <span className="text-xs text-dark-500">\u2014</span>
+            <span className="text-xs text-dark-500">{'\u2014'}</span>
           )}
         </TableCell>
 
-        {/* IP */}
+        {/* IP — клик ставит фильтр */}
         <TableCell className="text-dark-300 font-mono text-xs align-top">
-          {item.ip_address || '\u2014'}
+          {item.ip_address ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onFilterIp(item.ip_address as string) }}
+              className="hover:text-primary-400 hover:underline"
+              title={t('audit.filterByIp')}
+            >
+              {item.ip_address}
+            </button>
+          ) : '\u2014'}
         </TableCell>
       </TableRow>
 
@@ -684,8 +667,8 @@ function MobileAuditCard({ item }: { item: AuditLogEntry }) {
   const { t } = useTranslation()
   const { formatTimeAgo } = useFormatters()
   const parsed = parseAction(item.action)
-  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || FileText
-  const resourceColor = RESOURCE_COLORS[parsed.resource] || 'bg-gray-500/20 text-gray-400'
+  const ResourceIcon = RESOURCE_ICONS[parsed.resource] || RESOURCE_ICONS[resourceStyleKey(parsed.resource)] || FileText
+  const resourceColor = RESOURCE_COLORS[parsed.resource] || RESOURCE_COLORS[resourceStyleKey(parsed.resource)] || 'bg-gray-500/20 text-gray-400'
   const actionColor = getActionColor(parsed.action)
   const details = tryParseJSON(item.details)
   const description = getDescription(t, parsed.resource, parsed.action, item.resource_id, details)

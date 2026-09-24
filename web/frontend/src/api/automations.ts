@@ -13,11 +13,18 @@ export interface AutomationRule {
   conditions: Record<string, unknown>[]
   action_type: string
   action_config: Record<string, unknown>
+  extra_actions: ExtraAction[]
   last_triggered_at: string | null
   trigger_count: number
   created_by: number | null
   created_at: string | null
   updated_at: string | null
+}
+
+/** Действие после основного: «уведомить + урезать скорость» */
+export interface ExtraAction {
+  action_type: string
+  action_config: Record<string, unknown>
 }
 
 export interface AutomationRuleCreate {
@@ -30,6 +37,7 @@ export interface AutomationRuleCreate {
   conditions?: Record<string, unknown>[]
   action_type: string
   action_config: Record<string, unknown>
+  extra_actions?: ExtraAction[]
 }
 
 export interface AutomationRuleUpdate {
@@ -42,6 +50,7 @@ export interface AutomationRuleUpdate {
   conditions?: Record<string, unknown>[]
   action_type?: string
   action_config?: Record<string, unknown>
+  extra_actions?: ExtraAction[]
 }
 
 export interface AutomationLogEntry {
@@ -61,6 +70,7 @@ export interface AutomationTemplate {
   name: string
   description: string
   description_key?: string
+  name_key?: string
   category: string
   trigger_type: string
   trigger_config: Record<string, unknown>
@@ -69,12 +79,28 @@ export interface AutomationTemplate {
   action_config: Record<string, unknown>
 }
 
+/** Данные тестового прогона; текст собирает фронт. */
+export interface AutomationTestSummary {
+  error?: 'not_found'
+  trigger_type?: string
+  action_type?: string
+  event?: string
+  cron?: string
+  cron_matches_now?: boolean
+  interval_minutes?: number
+  metric?: string
+  operator?: string
+  value?: number
+  targets?: number
+}
+
 export interface AutomationTestResult {
   rule_id: number
   would_trigger: boolean
   matching_targets: Record<string, unknown>[]
   estimated_actions: number
   details: string
+  summary?: AutomationTestSummary
 }
 
 export interface PaginatedRules {
@@ -85,6 +111,8 @@ export interface PaginatedRules {
   pages: number
   total_active: number
   total_triggers: number
+  /** По всем правилам, а не по текущей странице */
+  last_triggered_at?: string | null
 }
 
 export interface PaginatedLogs {
@@ -157,6 +185,22 @@ export const automationsApi = {
 
   test: async (id: number): Promise<AutomationTestResult> => {
     const { data } = await client.post(`/automations/${id}/test`)
+    return data
+  },
+
+  /** Правило по расписанию — выполнить сейчас, с настоящим действием */
+  runNow: async (id: number): Promise<{ result: string; details: Record<string, unknown> }> => {
+    const { data } = await client.post(`/automations/${id}/run`)
+    return data
+  },
+
+  exportRules: async (): Promise<{ version: number; rules: Record<string, unknown>[] }> => {
+    const { data } = await client.get('/automations/export')
+    return data
+  },
+
+  importRules: async (rules: Record<string, unknown>[]): Promise<{ created: number; errors: { index: number; name?: string; error: string }[] }> => {
+    const { data } = await client.post('/automations/import', { rules })
     return data
   },
 }

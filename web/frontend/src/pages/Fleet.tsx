@@ -65,6 +65,7 @@ import AddServerDialog from '@/components/fleet/AddServerDialog'
 import type { Script } from '@/components/fleet/ScriptCatalog'
 import type { ScheduledTask as FleetScheduledTask } from '@/api/fleet'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { AuditHistory } from '@/components/AuditHistory'
 import { SortableSection } from '@/components/SortableSection'
 import { useOrderPreference } from '@/lib/useOrderPreference'
 import {
@@ -164,6 +165,7 @@ function NodeDetailPanel({
   const { t } = useTranslation()
   const { formatBytes, formatSpeed, formatTimeAgo } = useFormatters()
   const status = getNodeStatus(node)
+  const [showHistory, setShowHistory] = useState(false)
 
   const formatUptime = (seconds: number | null | undefined): string => {
     if (!seconds || seconds <= 0) return '-'
@@ -412,13 +414,36 @@ function NodeDetailPanel({
           )}
         </div>
       </div>
+      {!node.is_external && (
+        <div className="mt-4 pt-3 border-t border-[var(--glass-border)]">
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            aria-expanded={showHistory}
+            className="text-xs font-medium text-dark-200 uppercase tracking-wider hover:text-white"
+          >
+            {t('audit.history')} {showHistory ? '▴' : '▾'}
+          </button>
+          {showHistory && (
+            <div className="mt-3">
+              <AuditHistory resource="nodes" resourceId={node.uuid} limit={10} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Main Component ───────────────────────────────────────────────
 
-export default function Fleet() {
+export type FleetTab = 'monitoring' | 'scripts' | 'history' | 'scheduled' | 'bulk'
+
+/**
+ * embedded — вкладки страницы «Сервера»: заголовок и переключатель вкладок
+ * рисует она, а сюда приходит только выбранная вкладка.
+ */
+export default function Fleet({ embedded = false, tab }: { embedded?: boolean; tab?: FleetTab } = {}) {
   const { t } = useTranslation()
   const { formatSpeed } = useFormatters()
   const queryClient = useQueryClient()
@@ -429,7 +454,9 @@ export default function Fleet() {
   const canTerminal = hasPermission('fleet', 'terminal')
   const canScripts = hasPermission('fleet', 'scripts')
 
-  const [activeTab, setActiveTab] = useTabParam('monitoring', ['monitoring', 'scripts', 'history', 'scheduled', 'bulk'])
+  const [urlTab, setUrlTab] = useTabParam<FleetTab>('monitoring', ['monitoring', 'scripts', 'history', 'scheduled', 'bulk'])
+  const activeTab = embedded ? tab ?? 'monitoring' : urlTab
+  const setActiveTab = setUrlTab
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [expandedUuid, setExpandedUuid] = useState<string | null>(null)
@@ -447,7 +474,7 @@ export default function Fleet() {
 
   // ── Data ──────────────────────────────────────────────────────
 
-  const { data: fleet, isLoading, isError, refetch } = useQuery({
+  const { data: fleet, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['fleet'],
     queryFn: fetchFleet,
     refetchInterval: 60_000,
@@ -678,18 +705,20 @@ export default function Fleet() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-header-title">{t('fleet.title')}</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">{t('fleet.subtitle')}</p>
-        </div>
+      <div className={embedded ? 'flex justify-end' : 'page-header'}>
+        {!embedded && (
+          <div>
+            <h1 className="page-header-title">{t('fleet.title')}</h1>
+            <p className="text-dark-200 mt-1 text-sm md:text-base">{t('fleet.subtitle')}</p>
+          </div>
+        )}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <Button
             variant="secondary"
             onClick={() => refetch()}
-            disabled={isLoading}
+            disabled={isFetching}
           >
-            <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
+            <RefreshCw className={cn('w-4 h-4 mr-2', isFetching && 'animate-spin')} />
             <span className="hidden sm:inline">{t('fleet.actions.refresh')}</span>
           </Button>
           {canAddServer && (
@@ -775,7 +804,7 @@ export default function Fleet() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
-        <TabsList className="h-9">
+        <TabsList className={cn('h-9', embedded && 'hidden')}>
           <TabsTrigger value="monitoring" className="text-xs gap-1.5">
             <Activity className="w-3.5 h-3.5" />
             {t('fleet.tabs.monitoring')}

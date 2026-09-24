@@ -465,6 +465,22 @@ class ASNParser:
             return False
     
     async def sync_russian_asn_database(self, limit: Optional[int] = None) -> Dict[str, int]:
+        """Синхронизация базы ASN с записью статуса в sync_metadata.
+
+        Статус пишется здесь, а не у вызывающих: синхронизацию запускают и
+        «Настройки», и бот, и в «Настройках» должен быть виден итог любой.
+        """
+        try:
+            stats = await self._sync_russian_asn_database(limit)
+        except Exception as e:
+            await self.db.update_sync_metadata(key="asn", status="error", error_message=str(e))
+            raise
+        await self.db.update_sync_metadata(
+            key="asn", status="success", records_synced=stats["success"] + stats["skipped"],
+        )
+        return stats
+
+    async def _sync_russian_asn_database(self, limit: Optional[int] = None) -> Dict[str, int]:
         """
         Синхронизирует базу ASN по РФ из RIPE Database.
         

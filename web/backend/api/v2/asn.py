@@ -1,9 +1,9 @@
-"""ASN database management — local RIPE sync."""
-import logging
-from typing import Optional
+"""Справочник ASN (РФ, из RIPE) — поиск для разбора нарушений.
 
+Синхронизация живёт в «Настройки → Синхронизация» (/settings/sync/asn).
+"""
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 
 from shared.db_schema import ASN_RUSSIA_TABLE
 from shared.db_query import select_sql
@@ -14,14 +14,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-class ASNSyncRequest(BaseModel):
-    limit: Optional[int] = None
-
-
 @router.get("/search")
 async def search_asn(
     org_name: str = Query(..., min_length=2),
-    admin: AdminUser = Depends(require_permission("reports", "view")),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
 ):
     """Search ASN records by organization name."""
     try:
@@ -40,7 +36,7 @@ async def search_asn(
 @router.get("/by-type/{provider_type}")
 async def get_asn_by_type(
     provider_type: str,
-    admin: AdminUser = Depends(require_permission("reports", "view")),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
 ):
     """Get ASN records by provider type."""
     try:
@@ -66,7 +62,7 @@ async def get_asn_by_type(
 
 @router.get("/stats")
 async def get_asn_stats(
-    admin: AdminUser = Depends(require_permission("reports", "view")),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
 ):
     """Get ASN database statistics."""
     try:
@@ -97,7 +93,7 @@ async def get_asn_stats(
 @router.get("/{asn}")
 async def get_asn(
     asn: int,
-    admin: AdminUser = Depends(require_permission("reports", "view")),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
 ):
     """Get a single ASN record."""
     try:
@@ -113,25 +109,4 @@ async def get_asn(
         raise
     except Exception as e:
         logger.error("Failed to get ASN: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.post("/sync")
-async def sync_asn_database(
-    data: ASNSyncRequest,
-    admin: AdminUser = Depends(require_permission("reports", "create")),
-):
-    """Trigger ASN database synchronization from RIPE."""
-    try:
-        from shared.asn_parser import asn_parser
-        result = await asn_parser.sync_russian_asn_database(limit=data.limit)
-        return {
-            "status": "ok",
-            "total": result.get("total", 0),
-            "success": result.get("success", 0),
-            "failed": result.get("failed", 0),
-            "skipped": result.get("skipped", 0),
-        }
-    except Exception as e:
-        logger.error("Failed to sync ASN: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")

@@ -23,6 +23,7 @@ class ErrorCode(str, Enum):
     ADMIN_NOT_FOUND = "ADMIN_NOT_FOUND"
     NOT_AN_ADMIN = "NOT_AN_ADMIN"
     INVALID_PASSWORD = "INVALID_PASSWORD"
+    WEAK_PASSWORD = "WEAK_PASSWORD"
     PASSWORD_UPDATE_FAILED = "PASSWORD_UPDATE_FAILED"
     INVALID_USERNAME = "INVALID_USERNAME"
     FORBIDDEN = "FORBIDDEN"
@@ -96,6 +97,7 @@ class ErrorCode(str, Enum):
 
     # ── Violations ────────────────────────────────────────────
     VIOLATION_NOT_FOUND = "VIOLATION_NOT_FOUND"
+    TELEGRAM_NOT_CONFIGURED = "TELEGRAM_NOT_CONFIGURED"
     VIOLATION_UPDATE_FAILED = "VIOLATION_UPDATE_FAILED"
     WHITELIST_ADD_FAILED = "WHITELIST_ADD_FAILED"
     WHITELIST_USER_NOT_FOUND = "WHITELIST_USER_NOT_FOUND"
@@ -142,6 +144,9 @@ class ErrorCode(str, Enum):
 
     # ── Reports / ASN ─────────────────────────────────────────
     REPORT_NOT_FOUND = "REPORT_NOT_FOUND"
+    API_KEY_NOT_FOUND = "API_KEY_NOT_FOUND"
+    WEBHOOK_NOT_FOUND = "WEBHOOK_NOT_FOUND"
+    SCOPE_NOT_ALLOWED = "SCOPE_NOT_ALLOWED"
     ASN_NOT_FOUND = "ASN_NOT_FOUND"
 
     # ── Backups ─────────────────────────────────────────────────
@@ -149,6 +154,7 @@ class ErrorCode(str, Enum):
     BACKUP_CREATE_FAILED = "BACKUP_CREATE_FAILED"
     BACKUP_RESTORE_FAILED = "BACKUP_RESTORE_FAILED"
     BACKUP_DELETE_FAILED = "BACKUP_DELETE_FAILED"
+    BACKUP_S3_FAILED = "BACKUP_S3_FAILED"
     IMPORT_FAILED = "IMPORT_FAILED"
     INVALID_FILENAME = "INVALID_FILENAME"
 
@@ -176,6 +182,8 @@ E = ErrorCode
 # Default human-readable messages per code (English fallback)
 _DEFAULT_MESSAGES: dict[str, str] = {
     E.ADMIN_NOT_FOUND: "Admin not found",
+    E.TELEGRAM_NOT_CONFIGURED: "Telegram notifications are not configured: set the bot token and chat.",
+    E.WEAK_PASSWORD: "Password does not meet the requirements: 8+ characters, lowercase and uppercase Latin letters, a digit and a special character, no Cyrillic.",
     E.USERNAME_EXISTS: "Username already exists",
     E.ROLE_NOT_FOUND: "Role not found",
     E.CANNOT_MODIFY_SELF: "Cannot modify your own account",
@@ -219,6 +227,9 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.ATTACHMENT_NOT_FOUND: "Attachment not found",
     E.SUPPRESSION_NOT_FOUND: "Suppressed address not found",
     E.REPORT_NOT_FOUND: "Report not found",
+    E.API_KEY_NOT_FOUND: "API key not found",
+    E.WEBHOOK_NOT_FOUND: "Webhook not found",
+    E.SCOPE_NOT_ALLOWED: "You cannot grant an API key rights you do not have yourself.",
     E.ASN_NOT_FOUND: "ASN not found",
     E.BLOCKED_IP_NOT_FOUND: "Blocked IP not found",
     E.BLOCKED_IP_DUPLICATE: "IP already blocked",
@@ -228,6 +239,7 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.BACKUP_CREATE_FAILED: "Failed to create backup",
     E.BACKUP_RESTORE_FAILED: "Failed to restore backup",
     E.BACKUP_DELETE_FAILED: "Failed to delete backup",
+    E.BACKUP_S3_FAILED: "S3 storage operation failed",
     E.IMPORT_FAILED: "Import failed",
     E.INVALID_FILENAME: "Invalid filename",
     E.QUOTA_EXCEEDED: "Resource quota exceeded",

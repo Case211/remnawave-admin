@@ -1,10 +1,10 @@
 """Bedolaga promo codes — CRUD, stats."""
 import json
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Path, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from web.backend.api.deps import AdminUser, require_permission, get_client_ip
 from web.backend.core.audit import write_audit_log
@@ -18,22 +18,42 @@ router = APIRouter()
 
 # ── Schemas ──
 
+# Типы промокодов Bedolaga (PromoCodeType). Фронт предлагал «subscription» и
+# «mixed», которых у Bedolaga нет, — такие промокоды не создавались (422).
+# «discount» — разовая скидка: процент в balance_bonus_kopeks, срок действия в
+# часах — в subscription_days (так их хранит Бедолага). «promo_group» не
+# поддержан: веб-API Бедолаги не принимает promo_group_id, код вышел бы пустым.
+PromoType = Literal["balance", "subscription_days", "balance_and_days", "trial_subscription", "discount"]
+
+
+def _check_discount(data) -> None:
+    if data.type == "discount" and data.balance_bonus_kopeks is not None and not 1 <= data.balance_bonus_kopeks <= 100:
+        raise ValueError("discount percent must be 1..100")
+
+
 class PromoCreateRequest(BaseModel):
     code: str = Field(..., min_length=1, max_length=50)
-    type: str = "balance"
-    balance_bonus_kopeks: int = 0
-    subscription_days: int = 0
+    type: PromoType = "balance"
+    balance_bonus_kopeks: int = Field(0, ge=0)
+    subscription_days: int = Field(0, ge=0)
+    traffic_gb: int = Field(0, ge=0)
     max_uses: int = Field(default=1, ge=0)
     valid_from: Optional[str] = None
     valid_until: Optional[str] = None
     is_active: bool = True
 
+    @model_validator(mode="after")
+    def _discount(self):
+        _check_discount(self)
+        return self
+
 
 class PromoUpdateRequest(BaseModel):
     code: Optional[str] = Field(None, min_length=1, max_length=50)
-    type: Optional[str] = None
-    balance_bonus_kopeks: Optional[int] = None
-    subscription_days: Optional[int] = None
+    type: Optional[PromoType] = None
+    balance_bonus_kopeks: Optional[int] = Field(None, ge=0)
+    subscription_days: Optional[int] = Field(None, ge=0)
+    traffic_gb: Optional[int] = Field(None, ge=0)
     max_uses: Optional[int] = Field(None, ge=0)
     valid_from: Optional[str] = None
     valid_until: Optional[str] = None

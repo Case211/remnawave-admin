@@ -23,6 +23,7 @@ The basics: language, logs, access to the Remnawave panel, third-party service k
 | **🗂️ Log backup count** | `log_backup_count` | `5` | Number of compressed backup files kept after rotation |
 | **🌍 MaxMind GeoIP source** | `maxmind_source` | `auto` | auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required) (`MAXMIND_SOURCE`) |
 | **🏷️ Panel name** | `panel_name` | empty | Project name displayed in the sidebar (next to the logo) |
+| **🕒 Time zone** | `display_timezone` | `Europe/Moscow` | IANA zone. All times are shown in it: web panel, bot, notifications, exports, report and backup times. The database and the API keep time in UTC |
 | **🔗 Public panel URL** | `web_panel_public_url` | empty | https address of the web panel. Used by the bot's "Open panel" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL (`APP_PUBLIC_URL`) |
 | **Access token lifetime (minutes)** | `web_session_access_minutes` | `30` | Lifetime of the web panel access token. Applies to new logins and refreshes. Recommended: 30-120 min (`WEB_JWT_EXPIRE_MINUTES`) |
 | **Session lifetime (hours)** | `web_session_refresh_hours` | `6` | Total session lifetime (refresh token). While it is valid the user stays signed in; after that a new login with 2FA is required. Recommended: 12-24h (`WEB_JWT_REFRESH_HOURS`) |
@@ -196,8 +197,8 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| **Speed throttling** | `throttle_enabled` | `true` | Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.6.0+ on the nodes |
-| **Default speed (kbit/s)** | `throttle_default_kbit` | `1024` | How hard to throttle when no speed is given. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access |
+| **Speed throttling** | `throttle_enabled` | `true` | Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.7.0+ on the nodes; with agent 1.9.0 the node shaper does it, in both directions |
+| **Default speed (kbit/s)** | `throttle_default_kbit` | `1024` | How hard to throttle when no speed is given. 0 or empty means no limit: the bot button and automatic actions throttle nothing. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access |
 | **Default throttle duration (h)** | `throttle_default_hours` | `0` | How many hours before the throttle lifts itself when no expiry is given. 0 keeps it until lifted by hand |
 | **Reserve squad for violators** | `throttle_squad_uuid` | empty | UUID of the internal squad to move a punished user into on top of the throttle. Previous squads are remembered and restored when the throttle is lifted. Empty — leave squads alone and only cut the speed |
 | **Throttle speed automatically** | `violation_auto_soft_throttle` | `false` | Cut the speed as soon as the detector recommends a manual review (score 65-80). The measure is reversible and keeps the person online, but it is off by default: the call on punishment stays with the administrator |
@@ -303,13 +304,28 @@ Schedule, retention and the dead-man switch that warns when backups have stopped
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | **Scheduled backup** | `backup_auto_enabled` | `false` | Create a database backup automatically on a schedule |
-| **Backup time** | `backup_auto_time` | `03:00` | Time of the daily backup (HH:MM UTC) |
+| **Backup time** | `backup_auto_time` | `03:00` | Time of the daily backup (HH:MM, panel time zone) |
 | **Send to Telegram** | `backup_auto_telegram` | `false` | Send the created backup to Telegram (chat_id from the notification settings) |
 | **Keep backups (count)** | `backup_auto_keep_count` | `10` | How many recent automatic backups to keep |
 | **Keep backups (days)** | `backup_auto_keep_days` | `30` | Maximum age of automatic backups in days |
 | **Backup interval (hours)** | `backup_auto_interval_hours` | `0` | 0 — once a day at the configured time; N&gt;0 — every N hours starting from that time |
 | **Back up the config** | `backup_auto_config` | `false` | Store panel settings alongside the database backup |
 | **Alert if no backup for N hours** | `backup_deadman_hours` | `0` | Send an alert when there has been no successful backup for longer than N hours (0 = off) |
+| **S3: endpoint** | `backup_s3_endpoint` | — | For example `https://s3.timeweb.cloud` or `https://s3.storage.selcloud.ru` |
+| **S3: bucket** | `backup_s3_bucket` | — | Bucket that receives the backup files |
+| **S3: region** | `backup_s3_region` | `us-east-1` | Region used to sign requests: `us-east-1`, `ru-1`, `ru-central1`, etc. |
+| **S3: folder** | `backup_s3_prefix` | — | Key prefix inside the bucket; empty means the bucket root |
+| **S3: path-style addressing** | `backup_s3_path_style` | `true` | Uses `endpoint/bucket/key` — required by MinIO and most regional providers |
+| **S3: upload automatically** | `backup_s3_auto_upload` | `false` | Send every scheduled backup to the storage |
+| **S3: files to keep** | `backup_s3_keep_count` | `0` | How many recent files to keep in the bucket after an automatic upload (0 = keep everything) |
+| **S3: access keys** | `backup_s3_creds` | — | Access Key and Secret Key, encrypted; editable only on the Storage tab |
+| **Support: media cache** | `support_media_cache_enabled` | `true` | Keep downloaded attachments on disk instead of fetching them from the bot every time |
+| **Support: media retention** | `support_media_cache_days` | `14` | Days without access before a file is dropped; an old ticket downloads it again |
+| **Support: media cache limit (MB)** | `support_media_cache_max_mb` | `2048` | Above this the least recently used files are removed (0 — no limit) |
+| **Support: response deadline** | `support_sla_enabled` | `true` | Overdue queue, wait-time highlighting and breach alerts |
+| **Support: first reply target** | `support_sla_minutes` | `30` | Minutes of waiting after which a ticket counts as overdue |
+| **Support: alerts** | `support_alerts_enabled` | `true` | Notify about new tickets and missed first replies |
+| **Support: new ticket alert** | `support_alert_new_ticket` | `true` | Notify as soon as a customer opens a ticket |
 
 
 ## 📊 Reports
@@ -320,13 +336,13 @@ Periodic summaries: what to send, when and to whom.
 |---|---|---|---|
 | **📊 Reports enabled** | `reports_enabled` | `true` | Global toggle for automatic reports |
 | **📅 Daily reports** | `reports_daily_enabled` | `true` | Enable daily violation reports |
-| **🕐 Daily report time** | `reports_daily_time` | `09:00` | Daily report send time (HH:MM UTC) |
+| **🕐 Daily report time** | `reports_daily_time` | `09:00` | Daily report send time (HH:MM, panel time zone) |
 | **📆 Weekly reports** | `reports_weekly_enabled` | `true` | Enable weekly violation reports |
 | **📅 Weekly report day** | `reports_weekly_day` | `0` | Day of week for weekly report (0=Mon, 6=Sun) |
-| **🕐 Weekly report time** | `reports_weekly_time` | `10:00` | Weekly report send time (HH:MM UTC) |
+| **🕐 Weekly report time** | `reports_weekly_time` | `10:00` | Weekly report send time (HH:MM, panel time zone) |
 | **🗓️ Monthly reports** | `reports_monthly_enabled` | `true` | Enable monthly violation reports |
 | **📅 Monthly report day** | `reports_monthly_day` | `1` | Day of month for monthly report (1-28) |
-| **🕐 Monthly report time** | `reports_monthly_time` | `10:00` | Monthly report send time (HH:MM UTC) |
+| **🕐 Monthly report time** | `reports_monthly_time` | `10:00` | Monthly report send time (HH:MM, panel time zone) |
 | **📐 Minimum score** | `reports_min_score` | `30.0` | Minimum violation score to include in report |
 | **🏆 Top violators** | `reports_top_violators_count` | `10` | Number of users in top violators list |
 | **📭 Send empty reports** | `reports_send_empty` | `false` | Send report when there are no violations for the period |

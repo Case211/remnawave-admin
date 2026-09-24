@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -43,6 +43,9 @@ interface Campaign {
   balance_bonus_kopeks?: number
   balance_bonus_rubles?: number
   subscription_duration_days?: number
+  tariff_id?: number | null
+  tariff_duration_days?: number | null
+  tariff_name?: string | null
   is_active?: boolean
   registrations_count?: number
   created_at?: string
@@ -87,12 +90,6 @@ const statusColors: Record<string, string> = {
   failed: 'bg-red-500/20 text-red-400 border-red-500/30',
 }
 
-const bonusTypeLabels: Record<string, string> = {
-  balance: 'Баланс',
-  subscription: 'Подписка',
-  tariff: 'Тариф',
-  none: '—',
-}
 
 // ── Component ──
 
@@ -110,7 +107,7 @@ export default function BedolagaMarketing() {
   // Campaign dialog
   const [campaignDialog, setCampaignDialog] = useState(false)
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
-  const [campaignForm, setCampaignForm] = useState({ name: '', start_parameter: '', bonus_type: 'none', balance_bonus_kopeks: '', subscription_duration_days: '', is_active: true })
+  const [campaignForm, setCampaignForm] = useState({ name: '', start_parameter: '', bonus_type: 'none', balance_bonus_kopeks: '', subscription_duration_days: '', tariff_id: '', tariff_duration_days: '', is_active: true })
   const [deleteCampaign, setDeleteCampaign] = useState<Campaign | null>(null)
 
   // Broadcast dialog
@@ -126,6 +123,13 @@ export default function BedolagaMarketing() {
     placeholderData: (prev) => prev,
   })
   const campaigns: Campaign[] = Array.isArray(cData?.items) ? cData.items : []
+  // Списка тарифов в веб-API Бедолаги нет (он только в API кабинета) — подсказываем
+  // тарифы, которые уже встречаются в кампаниях
+  const knownTariffs = useMemo(() => {
+    const seen = new Map<number, string>()
+    for (const c of campaigns) if (c.tariff_id) seen.set(c.tariff_id, c.tariff_name || `#${c.tariff_id}`)
+    return Array.from(seen, ([tariffId, name]) => ({ id: tariffId, name }))
+  }, [campaigns])
   const cTotal = cData?.total || 0
   const cPages = Math.max(1, Math.ceil(cTotal / perPage))
 
@@ -181,18 +185,22 @@ export default function BedolagaMarketing() {
 
   const openCreateCampaign = () => {
     setEditingCampaign(null)
-    setCampaignForm({ name: '', start_parameter: '', bonus_type: 'none', balance_bonus_kopeks: '', subscription_duration_days: '', is_active: true })
+    setCampaignForm({ name: '', start_parameter: '', bonus_type: 'none', balance_bonus_kopeks: '', subscription_duration_days: '', tariff_id: '', tariff_duration_days: '', is_active: true })
     setCampaignDialog(true)
   }
   const openEditCampaign = (c: Campaign) => {
     setEditingCampaign(c)
-    setCampaignForm({ name: c.name, start_parameter: c.start_parameter || '', bonus_type: c.bonus_type || 'none', balance_bonus_kopeks: c.balance_bonus_kopeks?.toString() || '', subscription_duration_days: c.subscription_duration_days?.toString() || '', is_active: c.is_active ?? true })
+    setCampaignForm({ name: c.name, start_parameter: c.start_parameter || '', bonus_type: c.bonus_type || 'none', balance_bonus_kopeks: c.balance_bonus_kopeks?.toString() || '', subscription_duration_days: c.subscription_duration_days?.toString() || '', tariff_id: c.tariff_id?.toString() || '', tariff_duration_days: c.tariff_duration_days?.toString() || '', is_active: c.is_active ?? true })
     setCampaignDialog(true)
   }
   const submitCampaign = () => {
     const payload: Record<string, unknown> = { name: campaignForm.name, start_parameter: campaignForm.start_parameter, bonus_type: campaignForm.bonus_type, is_active: campaignForm.is_active }
     if (campaignForm.balance_bonus_kopeks) payload.balance_bonus_kopeks = parseInt(campaignForm.balance_bonus_kopeks)
     if (campaignForm.subscription_duration_days) payload.subscription_duration_days = parseInt(campaignForm.subscription_duration_days)
+    if (campaignForm.bonus_type === 'tariff') {
+      payload.tariff_id = parseInt(campaignForm.tariff_id)
+      payload.tariff_duration_days = parseInt(campaignForm.tariff_duration_days)
+    }
     if (editingCampaign) updateCampaignMut.mutate({ id: editingCampaign.id, p: payload })
     else createCampaignMut.mutate(payload)
   }
@@ -269,7 +277,7 @@ export default function BedolagaMarketing() {
                         {c.start_parameter && <p className="text-[10px] text-dark-400 font-mono mt-0.5">{c.start_parameter}</p>}
                       </td>
                       <td className="p-3 hidden sm:table-cell text-xs">
-                        <Badge className="text-[10px] bg-[var(--glass-bg-hover)]">{bonusTypeLabels[c.bonus_type || 'none'] || c.bonus_type}</Badge>
+                        <Badge className="text-[10px] bg-[var(--glass-bg-hover)]">{t(`bedolaga.marketing.bonusTypes.${c.bonus_type || 'none'}`, { defaultValue: c.bonus_type })}</Badge>
                         {c.balance_bonus_rubles ? <span className="ml-1 text-emerald-400">{c.balance_bonus_rubles} ₽</span> : null}
                         {c.subscription_duration_days ? <span className="ml-1">{c.subscription_duration_days}d</span> : null}
                       </td>
@@ -409,7 +417,7 @@ export default function BedolagaMarketing() {
               <input value={campaignForm.name} onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })} className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50" />
             </div>
             <div>
-              <label className="block text-xs text-dark-200 mb-1">Start parameter (deep-link)</label>
+              <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.marketing.startParameter')}</label>
               <input value={campaignForm.start_parameter} onChange={(e) => setCampaignForm({ ...campaignForm, start_parameter: e.target.value })} placeholder="summer2026" className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50" />
             </div>
             <div>
@@ -418,7 +426,7 @@ export default function BedolagaMarketing() {
                 <option value="none">—</option>
                 <option value="balance">{t('bedolaga.promo.typeBalance')}</option>
                 <option value="subscription">{t('bedolaga.promo.typeSubscription')}</option>
-                <option value="tariff">{t('bedolaga.marketing.tariff')}</option>
+                <option value="tariff">{t('bedolaga.marketing.bonusTypes.tariff')}</option>
               </select>
             </div>
             {campaignForm.bonus_type === 'balance' && (
@@ -433,6 +441,32 @@ export default function BedolagaMarketing() {
                 <input type="number" min="1" value={campaignForm.subscription_duration_days} onChange={(e) => setCampaignForm({ ...campaignForm, subscription_duration_days: e.target.value })} className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50" />
               </div>
             )}
+            {campaignForm.bonus_type === 'tariff' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.marketing.tariffId')}</label>
+                  <input
+                    type="number" min="1" list="bedolaga-known-tariffs"
+                    value={campaignForm.tariff_id}
+                    onChange={(e) => setCampaignForm({ ...campaignForm, tariff_id: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  />
+                  <datalist id="bedolaga-known-tariffs">
+                    {knownTariffs.map((tariff) => <option key={tariff.id} value={tariff.id}>{tariff.name}</option>)}
+                  </datalist>
+                  <p className="mt-1 text-[11px] text-dark-400">{t('bedolaga.marketing.tariffIdHint')}</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.marketing.tariffDays')}</label>
+                  <input
+                    type="number" min="1"
+                    value={campaignForm.tariff_duration_days}
+                    onChange={(e) => setCampaignForm({ ...campaignForm, tariff_duration_days: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  />
+                </div>
+              </div>
+            )}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={campaignForm.is_active} onChange={(e) => setCampaignForm({ ...campaignForm, is_active: e.target.checked })} className="rounded border-[var(--glass-border)]" />
               <span className="text-sm">{t('bedolaga.promo.isActive')}</span>
@@ -440,7 +474,11 @@ export default function BedolagaMarketing() {
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setCampaignDialog(false)}>{t('common.cancel')}</Button>
-            <Button onClick={submitCampaign} disabled={!campaignForm.name || !campaignForm.start_parameter || cSaving}>
+            <Button
+              onClick={submitCampaign}
+              disabled={!campaignForm.name || !campaignForm.start_parameter || cSaving
+                || (campaignForm.bonus_type === 'tariff' && !(parseInt(campaignForm.tariff_id) >= 1 && parseInt(campaignForm.tariff_duration_days) >= 1))}
+            >
               {cSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : editingCampaign ? t('common.save') : t('common.create')}
             </Button>
           </DialogFooter>

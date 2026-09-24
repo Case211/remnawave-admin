@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useCallback } from 'react'
 import i18n from '../i18n'
+import { getDisplayTimeZone, useDisplayTimeZone } from './timezone'
 
 /**
  * Get current locale string based on i18n language.
@@ -31,6 +32,7 @@ export function formatDateUtil(dateStr: string | null | undefined): string {
   const d = parseApiDate(dateStr)
   if (isNaN(d.getTime())) return '—'
   return d.toLocaleString(getLocale(), {
+    timeZone: getDisplayTimeZone(),
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -46,7 +48,7 @@ export function formatDateShortUtil(dateStr: string | null | undefined): string 
   if (!dateStr) return '—'
   const d = parseApiDate(dateStr)
   if (isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString(getLocale())
+  return d.toLocaleDateString(getLocale(), { timeZone: getDisplayTimeZone() })
 }
 
 /**
@@ -55,6 +57,8 @@ export function formatDateShortUtil(dateStr: string | null | undefined): string 
 export function useFormatters() {
   const { t, i18n } = useTranslation()
   const locale = (i18n.language || '').toLowerCase().startsWith('ru') ? 'ru-RU' : 'en-US'
+  // Время показываем в зоне панели, а не браузера; смена зоны перерисует компонент
+  const timeZone = useDisplayTimeZone()
 
   const formatDate = useCallback(
     (dateStr: string | null | undefined) => {
@@ -62,6 +66,7 @@ export function useFormatters() {
       const d = parseApiDate(dateStr)
       if (isNaN(d.getTime())) return '—'
       return d.toLocaleString(locale, {
+        timeZone,
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -69,7 +74,7 @@ export function useFormatters() {
         minute: '2-digit',
       })
     },
-    [locale],
+    [locale, timeZone],
   )
 
   const formatDateShort = useCallback(
@@ -77,9 +82,9 @@ export function useFormatters() {
       if (!dateStr) return '—'
       const d = parseApiDate(dateStr)
       if (isNaN(d.getTime())) return '—'
-      return d.toLocaleDateString(locale)
+      return d.toLocaleDateString(locale, { timeZone })
     },
-    [locale],
+    [locale, timeZone],
   )
 
   const formatTimeAgo = useCallback(
@@ -166,5 +171,6 @@ export function useFormatters() {
     formatSpeed,
     formatCurrency,
     locale,
+    timeZone,
   }
 }

@@ -13,6 +13,7 @@ from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime, format_provider_name
 from src.utils.i18n import tr
 from shared.analyzers.models import VIOLATION_ANALYZERS, dominant_analyzer  # noqa: F401
+from shared import timefmt
 from shared.logger import logger
 from shared.notification_config import (
     is_notification_type_enabled,
@@ -1085,9 +1086,7 @@ async def send_violation_notification(
         if violation_start_time:
             violation_duration_sec = int((now - violation_start_time).total_seconds())
 
-        # Время в Москве (UTC+3)
-        moscow_time = now + timedelta(hours=3)
-        moscow_time_str = moscow_time.strftime("%d.%m.%Y %H:%M:%S")
+        event_time = timefmt.fmt(now, "%d.%m.%Y %H:%M:%S")
 
         # Собираем уникальные IP и ноды
         unique_ips = set()
@@ -1252,7 +1251,7 @@ async def send_violation_notification(
         lines.append("")
         if violation_duration_sec > 0:
             lines.append(tr("notify.violation.duration", seconds=violation_duration_sec))
-        lines.append(tr("notify.violation.time_msk", time=moscow_time_str))
+        lines.append(tr("notify.violation.time", time=event_time))
 
         text = "\n".join(lines)
 
@@ -1266,6 +1265,10 @@ async def send_violation_notification(
                 InlineKeyboardButton(text=tr("notify.violation.btn.reset"), callback_data=f"vact:reset:{user_uuid}"),
             ],
             [
+                # Предупредить раньше, чем отключать: человек часто не знает,
+                # что нарушает, а доступ, пропавший без объяснений, приходит
+                # к нам же обращением в поддержку.
+                InlineKeyboardButton(text=tr("notify.violation.btn.warn"), callback_data=f"vact:warn:{user_uuid}"),
                 InlineKeyboardButton(text=tr("notify.violation.btn.annul"), callback_data=f"vact:dismiss:{user_uuid}"),
             ],
         ]

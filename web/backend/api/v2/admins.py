@@ -167,7 +167,7 @@ async def create_admin(
     if data.password:
         is_strong, error = validate_password_strength(data.password)
         if not is_strong:
-            raise api_error(400, E.INVALID_PASSWORD, error)
+            raise api_error(400, E.WEAK_PASSWORD, error)
         pw_hash = hash_password(data.password)
 
     account = await create_admin_account(
@@ -299,7 +299,7 @@ async def update_admin(
     if data.password is not None:
         is_strong, error = validate_password_strength(data.password)
         if not is_strong:
-            raise api_error(400, E.INVALID_PASSWORD, error)
+            raise api_error(400, E.WEAK_PASSWORD, error)
         fields["password_hash"] = hash_password(data.password)
         fields["is_generated_password"] = False
 

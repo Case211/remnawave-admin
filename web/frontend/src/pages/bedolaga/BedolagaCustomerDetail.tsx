@@ -49,6 +49,16 @@ import { cn } from '@/lib/utils'
 
 // ── Helpers ──
 
+// Наборы типов для ленты активности — те же, что использует админка кабинета.
+const ACTIVITY_FILTERS = [
+  { id: 'all', types: '' },
+  { id: 'subscription', types: 'event,promocode,coupon' },
+  { id: 'actions', types: 'button_click,cabinet_action,miniapp_action,wheel_spin,poll' },
+  { id: 'logins', types: 'cabinet_login' },
+] as const
+
+type ActivityFilterId = (typeof ACTIVITY_FILTERS)[number]['id']
+
 function getInitials(user: any): string {
   if (user.username) return user.username.charAt(0).toUpperCase()
   if (user.first_name) return user.first_name.charAt(0).toUpperCase()
@@ -132,6 +142,9 @@ export default function BedolagaCustomerDetail() {
   const [balanceReason, setBalanceReason] = useState('')
   const [extendDialog, setExtendDialog] = useState(false)
   const [extendDays, setExtendDays] = useState('7')
+  // Добавка к подписке: трафик (ГБ) или устройства
+  const [addDialog, setAddDialog] = useState<'traffic' | 'devices' | null>(null)
+  const [addAmount, setAddAmount] = useState('')
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [editDialog, setEditDialog] = useState(false)
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', username: '' })
@@ -151,6 +164,23 @@ export default function BedolagaCustomerDetail() {
     enabled: !!id,
     staleTime: 30_000,
   })
+
+  // Лента активности: бот без этой ручки отвечает available=false, и раздел
+  // просто не показывается — обновят бота, появится сам.
+  const [activityFilter, setActivityFilter] = useState<ActivityFilterId>('all')
+  const { data: activityData } = useQuery({
+    queryKey: ['bedolaga-customer-activity', id, activityFilter],
+    queryFn: () => {
+      const types = ACTIVITY_FILTERS.find((f) => f.id === activityFilter)?.types
+      const query = types ? `&types=${encodeURIComponent(types)}` : ''
+      return client.get(`/bedolaga/customers/${id}/activity?limit=50${query}`).then((r) => r.data)
+    },
+    enabled: !!id,
+    staleTime: 30_000,
+    retry: false,
+  })
+  const activityAvailable = activityData?.available !== false
+  const activityItems = Array.isArray(activityData?.items) ? activityData.items : []
 
   // Find users referred by this user — fetch all and filter by referred_by_id
   const { data: referralsData } = useQuery({
@@ -210,6 +240,24 @@ export default function BedolagaCustomerDetail() {
     onError: () => toast.error(t('common.error')),
   })
 
+  const addMutation = useMutation({
+    mutationFn: ({ kind, amount }: { kind: 'traffic' | 'devices'; amount: number }) =>
+      kind === 'traffic'
+        ? client.post(`/bedolaga/customers/subscriptions/${user?.subscription?.id}/traffic`, { traffic_gb: amount })
+        : client.post(`/bedolaga/customers/subscriptions/${user?.subscription?.id}/devices`, { count: amount }),
+    onSuccess: (_, { kind }) => {
+      queryClient.invalidateQueries({ queryKey: ['bedolaga-customer', id] })
+      toast.success(t(kind === 'traffic' ? 'bedolaga.customerDetail.trafficAdded' : 'bedolaga.customerDetail.devicesAdded'))
+      setAddDialog(null)
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const openAddDialog = (kind: 'traffic' | 'devices') => {
+    setAddAmount(kind === 'traffic' ? '50' : '1')
+    setAddDialog(kind)
+  }
+
   const resetDevicesMutation = useMutation({
     mutationFn: () =>
       client.post(`/bedolaga/customers/subscriptions/${user?.subscription?.id}/reset-devices`),
@@ -217,7 +265,10 @@ export default function BedolagaCustomerDetail() {
       queryClient.invalidateQueries({ queryKey: ['bedolaga-customer', id] })
       toast.success(t('bedolaga.customerDetail.devicesReset'))
     },
-    onError: () => toast.error(t('common.error')),
+    onError: (err: { response?: { status?: number } }) =>
+      toast.error(err.response?.status === 409
+        ? t('bedolaga.customerDetail.devicesResetAmbiguous')
+        : t('common.error')),
   })
 
   const updateMutation = useMutation({
@@ -545,7 +596,19 @@ export default function BedolagaCustomerDetail() {
                   <div>
                     <div className="flex items-center justify-between text-sm mb-1.5">
                       <span className="text-dark-300 flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5" />{t('bedolaga.customerDetail.traffic')}</span>
-                      <span>{trafficUsed.toFixed(1)} / {trafficLimit ?? '∞'} GB</span>
+                      <span className="flex items-center gap-1">
+                        {trafficUsed.toFixed(1)} / {trafficLimit ?? '∞'} GB
+                        {trafficLimit != null && (
+                          <Button
+                            variant="ghost" size="icon" className="h-6 w-6"
+                            aria-label={t('bedolaga.customerDetail.addTraffic')}
+                            title={t('bedolaga.customerDetail.addTraffic')}
+                            onClick={() => openAddDialog('traffic')}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </span>
                     </div>
                     {trafficPercent !== null && (
                       <div className="h-2 w-full rounded-full bg-dark-600 overflow-hidden">
@@ -567,6 +630,14 @@ export default function BedolagaCustomerDetail() {
                     <span className="text-dark-300 flex items-center gap-1.5"><Smartphone className="w-3.5 h-3.5" />{t('bedolaga.customerDetail.devices')}</span>
                     <div className="flex items-center gap-2">
                       <span>{sub.device_count ?? 0} / {sub.device_limit ?? '—'}</span>
+                      <Button
+                        variant="ghost" size="icon" className="h-6 w-6"
+                        aria-label={t('bedolaga.customerDetail.addDevices')}
+                        title={t('bedolaga.customerDetail.addDevices')}
+                        onClick={() => openAddDialog('devices')}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </Button>
                       {sub.device_count > 0 && (
                         <Button
                           variant="ghost" size="sm"
@@ -641,6 +712,70 @@ export default function BedolagaCustomerDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Activity timeline — прячется целиком, если бот ещё без этой ручки */}
+          {activityAvailable && (
+            <Card className="glass-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-cyan-400" />
+                  {t('bedolaga.customerDetail.activity.title')}
+                  {activityItems.length > 0 && (
+                    <span className="text-dark-400 text-xs font-normal">({activityData?.total ?? activityItems.length})</span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {ACTIVITY_FILTERS.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setActivityFilter(f.id)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors',
+                        activityFilter === f.id
+                          ? 'border-cyan-400/30 bg-cyan-400/15 text-cyan-300'
+                          : 'border-[var(--glass-border)] text-dark-400 hover:text-dark-200',
+                      )}
+                    >
+                      {t(`bedolaga.customerDetail.activity.filters.${f.id}`)}
+                    </button>
+                  ))}
+                </div>
+                {activityItems.length === 0 ? (
+                  <div className="text-center py-4">
+                    <Clock className="w-8 h-8 mx-auto text-dark-400 mb-2 opacity-40" />
+                    <p className="text-dark-400 text-sm">{t('bedolaga.customerDetail.activity.empty')}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 max-h-[320px] overflow-y-auto pr-1">
+                    {activityItems.map((item: any, index: number) => (
+                      <div
+                        key={`${item.type}-${item.timestamp}-${index}`}
+                        className="flex items-start gap-2.5 py-2 border-b border-[var(--glass-border)] last:border-0"
+                      >
+                        <span className="font-mono text-[10px] text-dark-400 leading-tight flex-shrink-0 w-9 pt-0.5">
+                          {formatDateShort(item.timestamp)}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-dark-100 truncate">
+                            {item.title || t(`bedolaga.customerDetail.activity.types.${item.type}`, { defaultValue: item.type })}
+                          </div>
+                          {item.subtype && <div className="text-[10px] text-dark-400 truncate">{item.subtype}</div>}
+                        </div>
+                        {typeof item.amount_kopeks === 'number' && item.amount_kopeks !== 0 && (
+                          <span className="text-xs font-bold tabular-nums text-emerald-400 flex-shrink-0">
+                            {(item.amount_kopeks / 100).toLocaleString()} ₽
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
         </div>
       </div>
@@ -815,6 +950,48 @@ export default function BedolagaCustomerDetail() {
             <Button variant="secondary" onClick={() => setExtendDialog(false)}>{t('common.cancel')}</Button>
             <Button onClick={handleExtendSubmit} disabled={!extendDays || extendMutation.isPending}>
               {extendMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : t('bedolaga.customerDetail.extend')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add traffic / devices dialog ── */}
+      <Dialog open={addDialog != null} onOpenChange={(open) => { if (!open) setAddDialog(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {t(addDialog === 'traffic' ? 'bedolaga.customerDetail.addTraffic' : 'bedolaga.customerDetail.addDevices')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="flex flex-wrap gap-2">
+              {(addDialog === 'traffic' ? [10, 50, 100, 500] : [1, 2, 3, 5]).map((n) => (
+                <Button
+                  key={n}
+                  variant={addAmount === String(n) ? 'default' : 'secondary'}
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setAddAmount(String(n))}
+                >
+                  +{n}{addDialog === 'traffic' ? ' GB' : ''}
+                </Button>
+              ))}
+            </div>
+            <input
+              type="number" min="1"
+              value={addAmount}
+              onChange={(e) => setAddAmount(e.target.value)}
+              aria-label={t('bedolaga.customerDetail.addAmount')}
+              className="w-full h-10 px-3 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setAddDialog(null)}>{t('common.cancel')}</Button>
+            <Button
+              onClick={() => addDialog && addMutation.mutate({ kind: addDialog, amount: parseInt(addAmount) })}
+              disabled={!(parseInt(addAmount) >= 1) || addMutation.isPending}
+            >
+              {addMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : t('common.add')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -18,13 +18,14 @@ from shared.db_query import select_sql, update_sql
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota, get_client_ip
 from web.backend.core.errors import api_error, E
-from web.backend.core.audit import write_audit_log
+from web.backend.core.audit import audit_changes, write_audit_log
 from web.backend.core.rbac import get_scope, check_access, resolve_allowed_actions_map
 from web.backend.core.api_helper import (
     fetch_nodes_from_api, fetch_nodes_realtime_usage,
     fetch_nodes_usage_by_range, _normalize,
 )
-from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
+from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeReorder, NodeUpdate
+from shared.exceptions import ValidationError as ApiValidationError
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
 logger = logging.getLogger(__name__)
@@ -228,6 +229,13 @@ def _ensure_node_snake_case(node: dict) -> dict:
             mem_used = stats.get("memoryUsed")
             if mem_total and mem_used and mem_total > 0:
                 result["memoryUsage"] = round(mem_used / mem_total * 100, 1)
+    # Профиль и inbound'ы ноды — для окна правки
+    profile = result.get("configProfile")
+    if isinstance(profile, dict):
+        result.setdefault("config_profile_uuid", profile.get("activeConfigProfileUuid"))
+        result.setdefault("active_inbound_uuids", [
+            ib.get("uuid") for ib in profile.get("activeInbounds") or [] if isinstance(ib, dict) and ib.get("uuid")
+        ])
     for camel, snake in mappings.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]
@@ -331,6 +339,15 @@ async def list_nodes(
                         n["agent_version"] = state.get("agent_version")
         except Exception as e:
             logger.debug("Agent state enrichment failed: %s", e)
+
+        # Шейпер ноды — для бейджа на карточке
+        try:
+            from web.backend.core import shaper_rollout
+            shaper_states = await shaper_rollout.node_states()
+            for n in nodes:
+                n["shaper_state"] = shaper_states.get(str(n.get("uuid", "")).lower())
+        except Exception as e:
+            logger.debug("Shaper state enrichment failed: %s", e)
 
         # Apply access-policy scope (whitelist by UUID/tag)
         scope = await get_scope(admin, "node", "view")
@@ -499,6 +516,13 @@ async def update_node(
         from shared.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True)
+        before = None
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                before = await db_service.get_node_by_uuid(node_uuid)
+        except Exception:
+            logger.debug("update_node: no previous state for %s", node_uuid)
         result = await api_client.update_node(node_uuid, **update_data)
 
         # Upstream API wraps data in 'response' key
@@ -510,7 +534,8 @@ async def update_node(
             action="node.update",
             resource="nodes",
             resource_id=node_uuid,
-            details=json.dumps({"fields": list(update_data.keys())}),
+            details=json.dumps({"name": (node or {}).get("name") if isinstance(node, dict) else None,
+                                "changes": audit_changes(before, update_data)}, default=str),
             ip_address=get_client_ip(request),
         )
 
@@ -518,8 +543,61 @@ async def update_node(
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
+    except ApiValidationError as e:
+        # Панель объяснила, что не так (занятый порт, чужой inbound…) — отдаём как есть
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error("Node %s update failed: %s", node_uuid, e)
         raise HTTPException(status_code=400, detail="Internal server error")
+
+
+@router.post("/reorder", response_model=SuccessResponse)
+async def reorder_nodes(
+    data: NodeReorder,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
+):
+    """Сохранить порядок нод в панели — он же порядок локаций в подписке.
+
+    Порядок общий для всех, поэтому менять его может только админ без
+    ограничений по нодам: иначе он переставил бы и ноды, которых не видит.
+    """
+    if await get_scope(admin, "node", "edit") is not None:
+        raise api_error(403, E.FORBIDDEN)
+    if len(set(data.uuids)) != len(data.uuids):
+        raise HTTPException(status_code=422, detail="Duplicate node uuids")
+    try:
+        from shared.api_client import api_client
+
+        result = await api_client.reorder_nodes(
+            [{"uuid": uuid, "viewPosition": i} for i, uuid in enumerate(data.uuids)]
+        )
+    except ApiValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Node reorder failed: %s", e)
+        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
+
+    # Панель вернула ноды с новым порядком — кладём их в базу сразу, не ждём синка
+    nodes = result.get("response") if isinstance(result, dict) else None
+    if isinstance(nodes, list):
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                await db_service.bulk_upsert_nodes(nodes)
+        except Exception as e:
+            logger.warning("Reordered nodes not stored locally, next sync will: %s", e)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="node.reorder",
+        resource="nodes",
+        resource_id="",
+        details=json.dumps({"count": len(data.uuids), "uuids": data.uuids[:100]}),
+        ip_address=get_client_ip(request),
+    )
+    return {"success": True}
 
 
 @router.delete("/{node_uuid}", response_model=SuccessResponse)

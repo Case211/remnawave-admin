@@ -14,6 +14,7 @@ NOTIFICATION_TYPES = (
     "violations",
     "finance",
     "backups",
+    "support",
 )
 
 

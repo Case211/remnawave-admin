@@ -56,9 +56,14 @@ class TestContent:
         assert "истекла" in card
 
     def test_unlinked_device_is_dated(self):
-        card = reuse_card(HWID, _user("new"),
-                          [_user("old", removed_at=datetime(2026, 8, 22, 12, 48))], [])
-        assert "Устройство отвязано: 22.08.2026 12:48" in card
+        """Время из базы (UTC) показывается в зоне панели и подписано."""
+        from unittest.mock import patch
+        from shared import timefmt
+
+        with patch.object(timefmt, "zone_name", return_value="Europe/Moscow"):
+            card = reuse_card(HWID, _user("new"),
+                              [_user("old", removed_at=datetime(2026, 8, 22, 12, 48))], [])
+        assert "Устройство отвязано: 22.08.2026 15:48 МСК" in card
 
     def test_active_connections_shown_when_present(self):
         card = revived_card(HWID, {}, [_user("who", active_connections=3)], True)

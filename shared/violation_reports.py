@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from shared import timefmt
 from shared.analyzers.models import ACTION_LABELS
 from shared.database import db_service
 from shared.logger import logger
@@ -58,6 +59,9 @@ class ViolationReportData:
 
     # Сгенерированный текст
     message_text: str = ""
+
+    # id сохранённого отчёта (None — не сохранялся)
+    id: Optional[int] = None
 
 
 class ViolationReportService:
@@ -104,6 +108,19 @@ class ViolationReportService:
         self._min_score_for_report = 30.0  # Минимальный скор для включения в отчёт
         self._top_violators_limit = 10     # Количество топ нарушителей
 
+    def configure_from_settings(self) -> None:
+        """Мин. скор и размер топа — из настроек: отчёт из веба и из бота
+        за один период должен выйти одинаковым."""
+        from shared.config_service import config_service
+        try:
+            self.set_min_score(float(config_service.get("reports_min_score", 30.0) or 30.0))
+        except (TypeError, ValueError):
+            pass
+        try:
+            self.set_top_violators_limit(int(config_service.get("reports_top_violators_count", 10) or 10))
+        except (TypeError, ValueError):
+            pass
+
     def set_min_score(self, min_score: float) -> None:
         """Установить минимальный скор для включения в отчёт."""
         self._min_score_for_report = max(0.0, min(100.0, min_score))
@@ -130,8 +147,11 @@ class ViolationReportService:
         if reference_date is None:
             reference_date = datetime.now(timezone.utc)
 
-        # Убираем время, оставляем только дату
-        ref_date = reference_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Сутки считаем по зоне отображения: «вчера» у админа в Москве — с полуночи
+        # до полуночи по Москве, а не с 03:00 до 03:00. Границы остаются
+        # aware-датами, в запросах к базе они сами пересчитываются в UTC.
+        local = timefmt.to_display(reference_date)
+        ref_date = local.replace(hour=0, minute=0, second=0, microsecond=0)
 
         if report_type == ReportType.DAILY:
             # Вчера
@@ -284,7 +304,19 @@ class ViolationReportService:
 
         # Сохраняем в БД
         if save_to_db:
-            await self._save_report_to_db(report)
+            report.id = await self._save_report_to_db(report)
+            if report.id:
+                from shared.webhook_outbox import enqueue_event
+                await enqueue_event("report.generated", {
+                    "report_id": report.id,
+                    "report_type": report.report_type.value,
+                    "period_start": report.period_start,
+                    "period_end": report.period_end,
+                    "total_violations": report.total_violations,
+                    "critical_count": report.critical_count,
+                    "unique_users": report.unique_users,
+                    "trend_percent": report.trend_percent,
+                })
 
         logger.info(
             "Generated %s report: %d violations, %d users",
@@ -315,8 +347,8 @@ class ViolationReportService:
         lines.append("")
 
         # Период
-        period_start_str = report.period_start.strftime("%d.%m.%Y")
-        period_end_str = (report.period_end - timedelta(seconds=1)).strftime("%d.%m.%Y")
+        period_start_str = timefmt.fmt_date(report.period_start)
+        period_end_str = timefmt.fmt_date(report.period_end - timedelta(seconds=1))
         if period_start_str == period_end_str:
             lines.append(f"📅 <b>Период:</b> {period_start_str}")
         else:
@@ -396,7 +428,7 @@ class ViolationReportService:
 
         # Футер
         lines.append("")
-        generated_at = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+        generated_at = timefmt.fmt(datetime.now(timezone.utc))
         lines.append(f"<i>Сгенерировано: {generated_at}</i>")
 
         return "\n".join(lines)
@@ -549,7 +581,7 @@ class ViolationReportService:
 
         # Заголовки CSV
         headers = [
-            "ID", "Дата", "Пользователь", "Email", "Telegram ID",
+            "ID", f"Дата ({timefmt.label()})", "Пользователь", "Email", "Telegram ID",
             "Скор", "Действие", "IP адреса", "Страны", "Провайдеры",
             "Одновременных подключений", "Причины"
         ]
@@ -559,7 +591,7 @@ class ViolationReportService:
         for v in violations:
             row = [
                 str(v.get('id', '')),
-                v.get('detected_at', '').strftime("%d.%m.%Y %H:%M") if v.get('detected_at') else '',
+                timefmt.fmt(v.get('detected_at'), "%d.%m.%Y %H:%M", with_label=False),
                 v.get('username', '') or '',
                 v.get('email', '') or '',
                 str(v.get('telegram_id', '') or ''),

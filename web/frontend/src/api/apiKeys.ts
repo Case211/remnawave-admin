@@ -11,6 +11,27 @@ export interface ApiKey {
   created_by_username: string | null
   description: string | null
   created_at: string
+  allowed_ips: string[]
+  user_squads: string[]
+  user_tag: string | null
+  /** До какого момента ещё принимается прошлый ключ после ротации */
+  prev_valid_until: string | null
+}
+
+export interface ApiKeyLimits {
+  allowed_ips?: string[]
+  user_squads?: string[]
+  user_tag?: string | null
+}
+
+export interface ApiKeyRequest {
+  id: number
+  method: string
+  path: string
+  status_code: number
+  ip_address: string | null
+  duration_ms: number | null
+  created_at: string
 }
 
 export interface ApiKeyCreated extends ApiKey {
@@ -43,6 +64,7 @@ export interface WebhookDelivery {
   error: string | null
   duration_ms: number | null
   sent_at: string
+  can_redeliver: boolean
 }
 
 export interface WebhookTestResult {
@@ -61,17 +83,22 @@ export const apiKeysApi = {
     const { data } = await client.get('/api-keys/scopes')
     return data?.scopes || []
   },
-  create: async (payload: { name: string; scopes: string[]; expires_at?: string; description?: string }): Promise<ApiKeyCreated> => {
+  create: async (payload: { name: string; scopes: string[]; expires_at?: string; description?: string } & ApiKeyLimits): Promise<ApiKeyCreated> => {
     const { data } = await client.post('/api-keys/', payload)
     return data
   },
-  update: async (id: number, payload: { name?: string; scopes?: string[]; is_active?: boolean; description?: string }): Promise<ApiKey> => {
+  update: async (id: number, payload: { name?: string; scopes?: string[]; is_active?: boolean; description?: string } & ApiKeyLimits): Promise<ApiKey> => {
     const { data } = await client.patch(`/api-keys/${id}`, payload)
     return data
   },
-  rotate: async (id: number): Promise<ApiKeyCreated> => {
-    const { data } = await client.post(`/api-keys/${id}/rotate`)
+  /** graceHours > 0 — старый ключ работает ещё столько часов */
+  rotate: async ({ id, graceHours = 0 }: { id: number; graceHours?: number }): Promise<ApiKeyCreated> => {
+    const { data } = await client.post(`/api-keys/${id}/rotate`, { grace_hours: graceHours })
     return data
+  },
+  requests: async (id: number, limit = 100): Promise<ApiKeyRequest[]> => {
+    const { data } = await client.get(`/api-keys/${id}/requests`, { params: { limit } })
+    return Array.isArray(data) ? data : []
   },
   delete: async (id: number): Promise<void> => {
     await client.delete(`/api-keys/${id}`)
@@ -105,8 +132,16 @@ export const webhooksApi = {
     const { data } = await client.post(`/webhooks/${id}/test`)
     return data
   },
-  deliveries: async (id: number, limit = 50): Promise<WebhookDelivery[]> => {
-    const { data } = await client.get(`/webhooks/${id}/deliveries`, { params: { limit } })
+  deliveries: async (
+    id: number,
+    filters: { event?: string; outcome?: 'ok' | 'failed' } = {},
+    limit = 50,
+  ): Promise<WebhookDelivery[]> => {
+    const { data } = await client.get(`/webhooks/${id}/deliveries`, { params: { limit, ...filters } })
     return Array.isArray(data) ? data : []
+  },
+  redeliver: async (id: number, deliveryId: number): Promise<WebhookTestResult> => {
+    const { data } = await client.post(`/webhooks/${id}/deliveries/${deliveryId}/redeliver`)
+    return data
   },
 }

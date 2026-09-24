@@ -22,6 +22,8 @@ export interface AuditLogParams {
   date_from?: string
   date_to?: string
   search?: string
+  admin_username?: string
+  ip_address?: string
 }
 
 export interface AuditStats {
@@ -29,6 +31,7 @@ export interface AuditStats {
   today: number
   by_resource: Record<string, number>
   by_admin: { username: string; count: number }[]
+  period_days?: number
 }
 
 export const auditApi = {
@@ -51,6 +54,26 @@ export const auditApi = {
       params: { limit },
     })
     return data
+  },
+
+  admins: async (): Promise<{ username: string; count: number }[]> => {
+    const { data } = await client.get('/audit/admins')
+    return data
+  },
+
+  /** Выгрузка всего, что попадает под фильтры (на сервере, до 50 000 строк) */
+  export: async (params: AuditLogParams, format: 'csv' | 'json'): Promise<void> => {
+    const { data, headers } = await client.get('/audit/export', {
+      params: { ...params, limit: undefined, offset: undefined, format },
+      responseType: 'blob',
+    })
+    const match = /filename="([^"]+)"/.exec(String(headers['content-disposition'] || ''))
+    const url = URL.createObjectURL(data as Blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = match?.[1] || `audit.${format}`
+    link.click()
+    URL.revokeObjectURL(url)
   },
 
   stats: async (): Promise<AuditStats> => {

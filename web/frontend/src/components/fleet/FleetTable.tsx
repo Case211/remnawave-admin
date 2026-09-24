@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { RotateCcw, Play, Square, Terminal } from '@/components/brand/icons'
 import { cn } from '@/lib/utils'
 import { Sparkline } from '@/components/charts/Sparkline'
+import { PanelNodeChip } from './PanelNodeChip'
 import { type FleetNode, getNodeStatus } from './NodeCard'
 
 /** Серии метрик за период для мини-графиков: uuid → cpu/memory/disk точки */
@@ -140,10 +141,12 @@ export function FleetTable({
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div className="font-medium text-white truncate max-w-[200px]">{node.name}</div>
-                    {node.is_external && (
+                    {node.is_external ? (
                       <span className="shrink-0 rounded border border-sky-500/40 bg-sky-500/10 px-1 text-[10px] leading-4 text-sky-300">
                         {t('fleet.server.badge')}
                       </span>
+                    ) : (
+                      <PanelNodeChip uuid={node.uuid} />
                     )}
                   </div>
                   <div className="text-xs text-dark-300 font-mono truncate max-w-[200px]">{node.address}:{node.port}</div>

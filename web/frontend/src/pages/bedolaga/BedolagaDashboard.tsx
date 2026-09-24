@@ -95,6 +95,12 @@ export default function BedolagaDashboard() {
     queryFn: () => client.get('/bedolaga/health').then((r) => r.data),
     enabled: isConfigured === true, staleTime: 60_000, retry: 1,
   })
+  // Что из разделов админки умеет эта версия бота
+  const { data: capabilities } = useQuery<{ activity: boolean }>({
+    queryKey: ['bedolaga-capabilities'],
+    queryFn: () => client.get('/bedolaga/capabilities').then((r) => r.data),
+    enabled: isConfigured === true && health?.status === 'ok', staleTime: 600_000, retry: 0,
+  })
   const { data: maintenance, refetch: refetchMaintenance } = useQuery<MaintenanceData>({
     queryKey: ['bedolaga-maintenance'],
     queryFn: () => client.get('/bedolaga/maintenance').then((r) => r.data),
@@ -166,6 +172,12 @@ export default function BedolagaDashboard() {
           </Button>
         </div>
       </div>
+
+      {capabilities && !capabilities.activity && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          {t('bedolaga.capabilities.noActivity', { version: health?.bot_version ?? '?' })}
+        </div>
+      )}
 
       {/* ── Top stat cards ── */}
       {isLoading ? (

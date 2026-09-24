@@ -65,7 +65,7 @@ class TestProcessEventRule:
             "action_config": {},
         }
 
-        with patch("web.backend.core.automation.try_acquire_trigger",
+        with patch("web.backend.core.automation.try_acquire_target",
                     new_callable=AsyncMock) as mock_acquire:
             await engine._process_event_rule(rule, "violation.detected", {"score": 50})
 
@@ -81,7 +81,7 @@ class TestProcessEventRule:
             "action_config": {},
         }
 
-        with patch("web.backend.core.automation.try_acquire_trigger",
+        with patch("web.backend.core.automation.try_acquire_target",
                     new_callable=AsyncMock) as mock_acquire:
             await engine._process_event_rule(
                 rule, "node.went_offline", {"offline_minutes": 3},
@@ -99,7 +99,7 @@ class TestProcessEventRule:
             "action_config": {},
         }
 
-        with patch("web.backend.core.automation.try_acquire_trigger",
+        with patch("web.backend.core.automation.try_acquire_target",
                     new_callable=AsyncMock) as mock_acquire:
             await engine._process_event_rule(
                 rule, "violation.detected", {"score": 30},
@@ -117,7 +117,7 @@ class TestProcessEventRule:
             "action_config": {},
         }
 
-        with patch("web.backend.core.automation.try_acquire_trigger",
+        with patch("web.backend.core.automation.try_acquire_target",
                     new_callable=AsyncMock, return_value=False), \
              patch.object(engine, "_execute_action", new_callable=AsyncMock) as mock_exec:
             await engine._process_event_rule(
@@ -136,7 +136,7 @@ class TestProcessEventRule:
             "action_config": {},
         }
 
-        with patch("web.backend.core.automation.try_acquire_trigger",
+        with patch("web.backend.core.automation.try_acquire_target",
                     new_callable=AsyncMock, return_value=True), \
              patch("web.backend.core.automation.write_automation_log",
                     new_callable=AsyncMock) as mock_log, \
@@ -158,7 +158,7 @@ class TestProcessEventRule:
             "action_config": {},
         }
 
-        with patch("web.backend.core.automation.try_acquire_trigger",
+        with patch("web.backend.core.automation.try_acquire_target",
                     new_callable=AsyncMock, return_value=True), \
              patch("web.backend.core.automation.write_automation_log",
                     new_callable=AsyncMock), \
@@ -240,11 +240,19 @@ class TestActionNotify:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("web.backend.core.automation_engine.httpx.AsyncClient",
-                    return_value=mock_client):
+                    return_value=mock_client),              patch("web.backend.core.webhook_security.check_url_safety", return_value=(True, None)):
             result = await engine._action_notify(config, "system", None, {})
 
         assert result["channel"] == "webhook"
         assert result["status"] == 200
+
+    async def test_webhook_to_private_address_is_refused(self):
+        engine = AutomationEngine()
+        config = {"channel": "webhook", "webhook_url": "http://127.0.0.1:8081/x", "message": "Test"}
+        with patch("web.backend.core.webhook_security.check_url_safety",
+                   return_value=(False, "blocked address 127.0.0.1")):
+            with pytest.raises(ValueError):
+                await engine._action_notify(config, "system", None, {})
 
     async def test_webhook_no_url(self):
         engine = AutomationEngine()
@@ -355,7 +363,7 @@ class TestDryRun:
             result = await engine.dry_run(999)
 
         assert result["would_trigger"] is False
-        assert "не найдено" in result["details"]
+        assert result["summary"] == {"error": "not_found"}
 
     async def test_event_trigger(self):
         engine = AutomationEngine()
@@ -369,7 +377,7 @@ class TestDryRun:
             result = await engine.dry_run(1)
 
         assert result["would_trigger"] is True
-        assert "событию" in result["details"]
+        assert result["summary"]["trigger_type"] == "event"
 
     async def test_schedule_trigger_with_cron(self):
         engine = AutomationEngine()
@@ -383,7 +391,7 @@ class TestDryRun:
             result = await engine.dry_run(2)
 
         assert result["would_trigger"] is True
-        assert "CRON" in result["details"]
+        assert result["summary"]["cron_matches_now"] is True
 
     async def test_schedule_trigger_with_interval(self):
         engine = AutomationEngine()
@@ -398,7 +406,7 @@ class TestDryRun:
             result = await engine.dry_run(3)
 
         assert result["would_trigger"] is True
-        assert "Интервал" in result["details"]
+        assert "interval_minutes" in result["summary"]
 
     async def test_threshold_trigger_user_traffic(self):
         engine = AutomationEngine()
@@ -413,7 +421,7 @@ class TestDryRun:
         ]
         with patch("web.backend.core.automation.get_automation_rule_by_id",
                     new_callable=AsyncMock, return_value=rule), \
-             patch("web.backend.core.api_helper.fetch_users_from_api",
+             patch("web.backend.core.automation.users_over_traffic",
                     new_callable=AsyncMock, return_value=users):
             result = await engine.dry_run(4)
 
