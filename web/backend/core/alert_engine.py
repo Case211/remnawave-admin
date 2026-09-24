@@ -32,10 +32,6 @@ _SMOOTHABLE_METRICS = {"cpu_usage_percent", "ram_usage_percent", "disk_usage_per
 _MAX_SAMPLES = 60
 
 
-# Сколько держать уведомления и журнал алертов
-_HISTORY_KEEP_DAYS = 90
-
-
 def _parse_ts(value) -> Optional[datetime]:
     if not value:
         return None
@@ -62,7 +58,6 @@ class AlertEngine:
         self._running = False
         # Ring buffer: metric_name -> deque of (timestamp, value)
         self._history: Dict[str, Deque[Tuple[float, float]]] = {}
-        self._last_cleanup: Optional[str] = None
 
     async def start(self):
         """Start the alert monitoring loop."""
@@ -133,27 +128,8 @@ class AlertEngine:
             logger.error("Rule check failed: %s", e)
 
     async def _cleanup_daily(self) -> None:
-        """Раз в сутки — уведомления и журнал алертов старше _HISTORY_KEEP_DAYS
-        прочь: чистки не было, таблицы росли без предела."""
-        today = timefmt.now().strftime("%Y-%m-%d")
-        if self._last_cleanup == today:
-            return
-        try:
-            from shared.database import db_service
-            if not db_service.is_connected:
-                return
-            async with db_service.acquire() as conn:
-                notes = await conn.execute(
-                    "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1", _HISTORY_KEEP_DAYS,
-                )
-                logs = await conn.execute(
-                    f"DELETE FROM {ALERT_RULE_LOG_TABLE} WHERE created_at < NOW() - INTERVAL '1 day' * $1",
-                    _HISTORY_KEEP_DAYS,
-                )
-            self._last_cleanup = today
-            logger.info("Notifications cleanup: %s, alert log: %s", notes, logs)
-        except Exception as e:
-            logger.warning("Notifications cleanup failed: %s", e)
+        from web.backend.core.retention import run_daily
+        await run_daily()
 
     async def _collect_metrics(self) -> Dict[str, Any]:
         """Collect current system metrics for rule evaluation.

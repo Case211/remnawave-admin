@@ -65,6 +65,7 @@ import AddServerDialog from '@/components/fleet/AddServerDialog'
 import type { Script } from '@/components/fleet/ScriptCatalog'
 import type { ScheduledTask as FleetScheduledTask } from '@/api/fleet'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { AuditHistory } from '@/components/AuditHistory'
 import { SortableSection } from '@/components/SortableSection'
 import { useOrderPreference } from '@/lib/useOrderPreference'
 import {
@@ -164,6 +165,7 @@ function NodeDetailPanel({
   const { t } = useTranslation()
   const { formatBytes, formatSpeed, formatTimeAgo } = useFormatters()
   const status = getNodeStatus(node)
+  const [showHistory, setShowHistory] = useState(false)
 
   const formatUptime = (seconds: number | null | undefined): string => {
     if (!seconds || seconds <= 0) return '-'
@@ -412,6 +414,23 @@ function NodeDetailPanel({
           )}
         </div>
       </div>
+      {!node.is_external && (
+        <div className="mt-4 pt-3 border-t border-[var(--glass-border)]">
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            aria-expanded={showHistory}
+            className="text-xs font-medium text-dark-200 uppercase tracking-wider hover:text-white"
+          >
+            {t('audit.history')} {showHistory ? '▴' : '▾'}
+          </button>
+          {showHistory && (
+            <div className="mt-3">
+              <AuditHistory resource="nodes" resourceId={node.uuid} limit={10} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

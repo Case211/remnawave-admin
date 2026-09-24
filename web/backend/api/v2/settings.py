@@ -269,7 +269,7 @@ async def update_setting(
         # Check if setting exists and is editable
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
-                select_sql(BOT_CONFIG_TABLE, "key, is_readonly, env_var_name, is_secret", "WHERE key = $1"),
+                select_sql(BOT_CONFIG_TABLE, "key, value, is_readonly, env_var_name, is_secret", "WHERE key = $1"),
                 key
             )
 
@@ -304,7 +304,11 @@ async def update_setting(
             action="setting.update",
             resource="settings",
             resource_id=key,
-            details=json.dumps({"key": key, "value": data.value if not row['is_secret'] else "***"}),
+            details=json.dumps({
+                "key": key,
+                "value": data.value if not row['is_secret'] else "***",
+                "old": row['value'] if not row['is_secret'] else "***",
+            }),
             ip_address=get_client_ip(request),
         )
 

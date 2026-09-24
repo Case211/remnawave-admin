@@ -2368,13 +2368,15 @@
       "totalRecords": "Всего записей",
       "today": "Сегодня",
       "activeAdmins": "Активных админов",
-      "resourceTypes": "Типов ресурсов"
+      "resourceTypes": "Типов ресурсов",
+      "resourceTypesPeriod": "Разделов за {{days}} дн."
     },
     "period": {
       "all": "Все",
       "24h": "24 часа",
       "7d": "7 дней",
-      "30d": "30 дней"
+      "30d": "30 дней",
+      "custom": "Свой период"
     },
     "table": {
       "date": "Дата",
@@ -2391,7 +2393,30 @@
       "settings": "Настройки",
       "violation": "Нарушение",
       "automation": "Автоматизация",
-      "system": "Система"
+      "system": "Система",
+      "finance": "Финансы",
+      "script": "Скрипты",
+      "squad": "Сквады",
+      "template": "Шаблоны",
+      "snippet": "Сниппеты",
+      "backup": "Бэкапы",
+      "support": "Обращения",
+      "notification": "Уведомления",
+      "api_key": "API-ключи",
+      "webhook": "Вебхуки",
+      "user_blacklist": "Чёрный список",
+      "user_preset": "Пресеты",
+      "report": "Отчёты",
+      "mailserver": "Почта",
+      "admin_plugin": "Плагины",
+      "internal": "Бот",
+      "diagnostic": "Диагностика",
+      "log": "Логи",
+      "auth": "Вход",
+      "fleet": "Флот",
+      "bedolaga_customer": "Клиенты Бедолаги",
+      "bedolaga_marketing": "Маркетинг Бедолаги",
+      "bedolaga_promo": "Промокоды Бедолаги"
     },
     "actions": {
       "create": "Создание",
@@ -2554,7 +2579,15 @@
         "update_smtp_credential": "Обновление SMTP",
         "delete_smtp_credential": "Удаление SMTP"
       }
-    }
+    },
+    "dateFrom": "С",
+    "dateTo": "По",
+    "clearIpFilter": "Сбросить фильтр по IP",
+    "filterByIp": "Показать действия с этого IP",
+    "history": "История",
+    "historyEmpty": "Действий с этим объектом в журнале нет",
+    "historyOpen": "Весь журнал",
+    "clearFilter": "Сбросить фильтр"
   },
   "logs": {
     "title": "Системные логи",
@@ -4704,6 +4737,14 @@
       "violations_warn_on_action": {
         "label": "Нарушения: предупреждать клиента при мере",
         "description": "Когда оператор блокирует или режет скорость, отправлять клиенту объяснение — иначе он приходит в поддержку с «у меня не работает»"
+      },
+      "audit_retention_days": {
+        "label": "Хранение журнала аудита (дни)",
+        "description": "Сколько дней хранить записи журнала аудита. 0 — бессрочно"
+      },
+      "notifications_retention_days": {
+        "label": "Хранение уведомлений (дни)",
+        "description": "Сколько дней хранить уведомления и журнал срабатываний алертов"
       }
     },
     "inDb": "В БД",

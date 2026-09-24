@@ -2372,13 +2372,15 @@
       "totalRecords": "Total records",
       "today": "Today",
       "activeAdmins": "Active admins",
-      "resourceTypes": "Resource types"
+      "resourceTypes": "Resource types",
+      "resourceTypesPeriod": "Sections in {{days}} days"
     },
     "period": {
       "all": "All",
       "24h": "24 hours",
       "7d": "7 days",
-      "30d": "30 days"
+      "30d": "30 days",
+      "custom": "Custom range"
     },
     "table": {
       "date": "Date",
@@ -2395,7 +2397,30 @@
       "settings": "Settings",
       "violation": "Violation",
       "automation": "Automation",
-      "system": "System"
+      "system": "System",
+      "finance": "Finance",
+      "script": "Scripts",
+      "squad": "Squads",
+      "template": "Templates",
+      "snippet": "Snippets",
+      "backup": "Backups",
+      "support": "Support",
+      "notification": "Notifications",
+      "api_key": "API keys",
+      "webhook": "Webhooks",
+      "user_blacklist": "Blacklist",
+      "user_preset": "Presets",
+      "report": "Reports",
+      "mailserver": "Mail",
+      "admin_plugin": "Plugins",
+      "internal": "Bot",
+      "diagnostic": "Diagnostics",
+      "log": "Logs",
+      "auth": "Sign-in",
+      "fleet": "Fleet",
+      "bedolaga_customer": "Bedolaga customers",
+      "bedolaga_marketing": "Bedolaga marketing",
+      "bedolaga_promo": "Bedolaga promo"
     },
     "actions": {
       "create": "Create",
@@ -2558,7 +2583,15 @@
         "update_smtp_credential": "SMTP credential updated",
         "delete_smtp_credential": "SMTP credential deleted"
       }
-    }
+    },
+    "dateFrom": "From",
+    "dateTo": "To",
+    "clearIpFilter": "Clear IP filter",
+    "filterByIp": "Show actions from this IP",
+    "history": "History",
+    "historyEmpty": "No audit entries for this object",
+    "historyOpen": "Full audit log",
+    "clearFilter": "Clear filter"
   },
   "logs": {
     "title": "System Logs",
@@ -4708,6 +4741,14 @@
       "violations_warn_on_action": {
         "label": "Violations: warn the customer on action",
         "description": "When an operator blocks or throttles, send the customer an explanation — otherwise they come to support with \"nothing works\""
+      },
+      "audit_retention_days": {
+        "label": "Audit log retention (days)",
+        "description": "How many days audit log records are kept. 0 — forever"
+      },
+      "notifications_retention_days": {
+        "label": "Notification retention (days)",
+        "description": "How many days notifications and the alert trigger log are kept"
       }
     },
     "inDb": "In DB",

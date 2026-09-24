@@ -36,6 +36,42 @@ _EXTRACT_FIELDS: dict[str, set[str]] = {
 
 # Sensitive fields that must never be logged
 _SENSITIVE_FIELDS = {"password", "password_hash", "token", "secret", "api_key", "subscription_url"}
+# Ключ, в имени которого есть такая часть, тоже секрет: smtp_password,
+# api_token, access_key, env_vars скрипта и т.п.
+_SENSITIVE_PARTS = ("password", "secret", "token", "api_key", "private", "credential", "access_key", "env_vars", "otp")
+_DETAILS_MAX = 4000
+_VALUE_MAX = 300
+
+# Общая запись аудита для маршрутов, которых нет в _ROUTE_MAP и чей обработчик
+# сам ничего не пишет. Исключены чтения под видом POST и служебный шум
+# (отметки «прочитано», присутствие в тикете, приём данных от агентов).
+_GENERIC_SKIP_MODULES = {"collector", "me_devices"}
+_GENERIC_SKIP = {
+    ("logs", "ingest_frontend_logs"),
+    ("users", "resolve_user"),
+    ("users", "get_hwid_device_counts"),
+    ("users", "fetch_user_ips"),
+    ("users", "fetch_users_ips_by_node"),
+    ("violations", "lookup_ips"),
+    ("automations", "test_automation"),
+    ("notifications", "mark_notifications_read"),
+    ("notifications", "create_notification_endpoint"),
+    ("support", "heartbeat"),
+    ("support", "mark_read"),
+    ("mailserver", "mark_inbox_read"),
+    ("mailserver", "check_domain_dns"),
+    ("scripts", "browse_github_repo"),
+    ("bscheck", "preview"),
+    ("bscheck", "scans_preview"),
+    ("bscheck", "save_history"),
+    ("reputation", "lookup"),
+}
+# Из auth — только то, что меняет способы входа; вход/выход пишутся отдельно
+_GENERIC_AUTH_ONLY = {
+    "wa_register_finish", "wa_delete_credential", "oauth_del_link",
+    "totp_regen_backup", "totp_confirm_setup",
+}
+_JSON_BODY_MAX = 256 * 1024
 
 # ── URL → resource/action mapping ─────────────────────────────────
 # Maps URL patterns to (resource, action) tuples.
@@ -211,37 +247,91 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         # Match the route
         match = _match_route(request.method, path)
-        if not match:
-            return await call_next(request)
+        if match:
+            resource, action, _ = match
+            # Skip actions already logged manually
+            if (resource, action) in _SKIP_DUPLICATES or _logged_by_handler(path, resource, action):
+                return await call_next(request)
 
-        resource, action, resource_id = match
+        request_body = await _read_json_body(request)
 
-        # Skip actions already logged manually
-        if (resource, action) in _SKIP_DUPLICATES or _logged_by_handler(path, resource, action):
-            return await call_next(request)
-
-        # Capture request body before forwarding (body is cached by Starlette)
-        request_body = None
+        from web.backend.core.audit import request_audit_state
+        state = {"written": False}
+        token = request_audit_state.set(state)
         try:
-            body_bytes = await request.body()
-            if body_bytes:
-                request_body = json.loads(body_bytes)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
-        except Exception as e:
-            logging.getLogger(__name__).debug("Failed to read request body for audit: %s", e)
+            response = await call_next(request)
+        finally:
+            request_audit_state.reset(token)
 
-        # Execute the actual request
-        response = await call_next(request)
+        # Only log successful actions, and only if the handler wrote nothing itself
+        if not 200 <= response.status_code < 300 or state["written"]:
+            return response
 
-        # Only log successful actions (2xx status codes)
-        if 200 <= response.status_code < 300:
-            # Fire-and-forget audit log write
+        if match:
+            resource, action, resource_id = match
             asyncio.create_task(
                 _write_audit_entry(request, resource, action, resource_id, request_body)
             )
+        else:
+            target = _generic_target(request)
+            if target:
+                resource, action, resource_id = target
+                asyncio.create_task(
+                    _write_audit_entry(request, resource, action, resource_id, request_body, require_actor=True)
+                )
 
         return response
+
+
+async def _read_json_body(request: Request) -> Optional[dict]:
+    """Тело запроса для деталей аудита — только небольшой JSON: загрузки
+    файлов (бэкапы, плагины) в память целиком не читаем."""
+    if "json" not in request.headers.get("content-type", ""):
+        return None
+    try:
+        if int(request.headers.get("content-length") or 0) > _JSON_BODY_MAX:
+            return None
+        body_bytes = await request.body()
+        if body_bytes:
+            parsed = json.loads(body_bytes)
+            return parsed if isinstance(parsed, dict) else {"items": parsed}
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        pass
+    except Exception as e:
+        logger.debug("Failed to read request body for audit: %s", e)
+    return None
+
+
+def _generic_target(request: Request) -> Optional[Tuple[str, str, Optional[str]]]:
+    """(раздел, действие, id) для маршрута без собственного аудита — по
+    обработчику FastAPI: «finance.create_payment», id — первый параметр пути."""
+    endpoint = request.scope.get("endpoint")
+    if endpoint is None:
+        return None
+    module_path = getattr(endpoint, "__module__", "") or ""
+    module = module_path.rsplit(".", 1)[-1]
+    name = getattr(endpoint, "__name__", "")
+    if module in _GENERIC_SKIP_MODULES or (module, name) in _GENERIC_SKIP:
+        return None
+    if module == "auth" and name not in _GENERIC_AUTH_ONLY:
+        return None
+    resource = f"bedolaga_{module}" if ".bedolaga." in module_path else module
+    params = request.scope.get("path_params") or {}
+    resource_id = str(next(iter(params.values()))) if params else None
+    return resource, name, resource_id
+
+
+def _is_sensitive(key: str) -> bool:
+    low = key.lower()
+    return low in _SENSITIVE_FIELDS or any(part in low for part in _SENSITIVE_PARTS)
+
+
+def _clip(value):
+    if isinstance(value, str) and len(value) > _VALUE_MAX:
+        return value[:_VALUE_MAX] + "…"
+    if isinstance(value, list) and len(value) > 50:
+        return value[:50] + [f"… +{len(value) - 50}"]
+    return value
 
 
 def _build_details(
@@ -264,8 +354,8 @@ def _build_details(
         else:
             # Unknown resource: capture all non-sensitive fields
             result.update({
-                k: v for k, v in body.items()
-                if k.lower() not in _SENSITIVE_FIELDS
+                k: _clip(v) for k, v in body.items()
+                if not _is_sensitive(k)
             })
 
         # Always try to capture a name-like identifier
@@ -275,7 +365,8 @@ def _build_details(
 
     if not result:
         return None
-    return json.dumps(result, ensure_ascii=False, default=str)
+    details = json.dumps(result, ensure_ascii=False, default=str)
+    return details if len(details) <= _DETAILS_MAX else details[:_DETAILS_MAX] + "…"
 
 
 async def _write_audit_entry(
@@ -284,6 +375,7 @@ async def _write_audit_entry(
     action: str,
     resource_id: Optional[str],
     request_body: Optional[dict] = None,
+    require_actor: bool = False,
 ) -> None:
     """Write an audit log entry from middleware context."""
     try:
@@ -325,6 +417,11 @@ async def _write_audit_entry(
         if api_key_user is not None:
             admin_id = None
             admin_username = f"apikey:{getattr(api_key_user, 'key_name', None) or getattr(api_key_user, 'key_id', '?')}"
+
+        # Общая запись — только за опознанного админа или ключ: запросы
+        # агентов и анонимные ручки журнал не засоряют
+        if require_actor and admin_id is None and api_key_user is None and admin_username == "unknown":
+            return
 
         # Get client IP (unified logic from deps.get_client_ip)
         from web.backend.api.deps import get_client_ip

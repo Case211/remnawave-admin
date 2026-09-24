@@ -18,7 +18,7 @@ from shared.db_query import select_sql, update_sql
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota, get_client_ip
 from web.backend.core.errors import api_error, E
-from web.backend.core.audit import write_audit_log
+from web.backend.core.audit import audit_changes, write_audit_log
 from web.backend.core.rbac import get_scope, check_access, resolve_allowed_actions_map
 from web.backend.core.api_helper import (
     fetch_nodes_from_api, fetch_nodes_realtime_usage,
@@ -516,6 +516,13 @@ async def update_node(
         from shared.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True)
+        before = None
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                before = await db_service.get_node_by_uuid(node_uuid)
+        except Exception:
+            logger.debug("update_node: no previous state for %s", node_uuid)
         result = await api_client.update_node(node_uuid, **update_data)
 
         # Upstream API wraps data in 'response' key
@@ -527,7 +534,8 @@ async def update_node(
             action="node.update",
             resource="nodes",
             resource_id=node_uuid,
-            details=json.dumps({"fields": list(update_data.keys())}),
+            details=json.dumps({"name": (node or {}).get("name") if isinstance(node, dict) else None,
+                                "changes": audit_changes(before, update_data)}, default=str),
             ip_address=get_client_ip(request),
         )
 
@@ -586,7 +594,7 @@ async def reorder_nodes(
         action="node.reorder",
         resource="nodes",
         resource_id="",
-        details=json.dumps({"count": len(data.uuids)}),
+        details=json.dumps({"count": len(data.uuids), "uuids": data.uuids[:100]}),
         ip_address=get_client_ip(request),
     )
     return {"success": True}

@@ -1,5 +1,6 @@
 """Audit log database operations — extracted from rbac.py."""
 import re
+from contextvars import ContextVar
 from typing import Optional, List, Tuple
 
 import logging
@@ -8,6 +9,41 @@ logger = logging.getLogger(__name__)
 from shared import timefmt
 from shared.db_schema import AUDIT_TABLE
 from shared.db_query import select_sql, insert_sql
+
+
+# Мидлварь кладёт сюда словарь на время запроса; запись аудита из обработчика
+# ставит в нём флаг, и мидлварь не пишет вторую запись о той же операции.
+# Словарь, а не bool: обработчик работает в копии контекста, и новое значение
+# переменной до мидлвари не дошло бы, а изменение общего объекта доходит.
+request_audit_state: ContextVar[Optional[dict]] = ContextVar("request_audit_state", default=None)
+
+
+_SECRET_PARTS = ("password", "secret", "token", "api_key", "private", "credential")
+
+
+def _camel(key: str) -> str:
+    head, *rest = key.split("_")
+    return head + "".join(part.title() for part in rest)
+
+
+def audit_changes(before: Optional[dict], after: dict) -> dict:
+    """«Было → стало» для журнала: {поле: [старое, новое]} по изменённым полям.
+
+    Старое ищется и в snake_case, и в camelCase — данные панели в базе лежат
+    в camelCase. Если старого состояния нет, пишутся все поля со старым None.
+    Секреты маскируются.
+    """
+    changes = {}
+    for key, new in after.items():
+        old = None
+        if before:
+            old = before.get(key, before.get(_camel(key)))
+        if before is not None and str(old) == str(new):
+            continue
+        if any(part in key.lower() for part in _SECRET_PARTS):
+            old, new = ("***" if old is not None else None), "***"
+        changes[key] = [old, new]
+    return changes
 
 
 async def write_audit_log(
@@ -19,6 +55,9 @@ async def write_audit_log(
     details: Optional[str] = None,
     ip_address: Optional[str] = None,
 ) -> None:
+    state = request_audit_state.get()
+    if state is not None:
+        state["written"] = True
     try:
         from shared.database import db_service
         if not db_service.is_connected:
@@ -51,6 +90,8 @@ async def get_audit_logs(
     date_to: Optional[str] = None,
     search: Optional[str] = None,
     cursor: Optional[int] = None,
+    admin_username: Optional[str] = None,
+    ip_address: Optional[str] = None,
 ) -> Tuple[List[dict], int]:
     try:
         from shared.database import db_service
@@ -69,6 +110,14 @@ async def get_audit_logs(
         if admin_id is not None:
             where_parts.append(f"admin_id = ${idx}")
             params.append(admin_id)
+            idx += 1
+        if admin_username:
+            where_parts.append(f"admin_username = ${idx}")
+            params.append(admin_username)
+            idx += 1
+        if ip_address:
+            where_parts.append(f"ip_address = ${idx}")
+            params.append(ip_address)
             idx += 1
         if action:
             # «.create» — точное действие у любого раздела; иначе — вхождение

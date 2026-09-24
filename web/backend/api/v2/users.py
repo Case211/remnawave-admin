@@ -33,7 +33,7 @@ from web.backend.api.deps import (  # noqa: F401  get_current_admin — точк
     get_current_admin,
 )
 from web.backend.core.api_helper import fetch_users_from_api
-from web.backend.core.audit import write_audit_log
+from web.backend.core.audit import audit_changes, write_audit_log
 from web.backend.core.admin_accounts import get_admin_account_by_id
 from web.backend.core.rbac import check_access, get_visible_user_uuids, get_scope
 from web.backend.core.webhook_security import fire_event
@@ -1207,10 +1207,12 @@ async def update_user(
         # a higher-access admin (e.g. superadmin) edits a user that was created
         # by a less-privileged admin.
         from shared.database import db_service
+        before = None
         if db_service.is_connected:
             try:
                 existing = await db_service.get_user_by_uuid(user_uuid)
                 if existing:
+                    before = existing
                     creator_admin_id = existing.get("createdByAdminId")
             except Exception:
                 logger.debug("Failed to fetch user for owner lookup user_uuid=%s", user_uuid)
@@ -1321,7 +1323,7 @@ async def update_user(
             action="user.update",
             resource="users",
             resource_id=str(user_uuid),
-            details=json.dumps({k: str(v) for k, v in update_data.items()}),
+            details=json.dumps({"changes": audit_changes(before, update_data)}, default=str),
             ip_address=get_client_ip(request),
         )
 
@@ -2039,7 +2041,7 @@ async def bulk_enable_users(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="user.bulk_enable", resource="users", resource_id="bulk",
-        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        details=json.dumps({"count": len(body.uuids), "uuids": body.uuids[:100], "success": success, "failed": failed}),
         ip_address=get_client_ip(request),
     )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
@@ -2074,7 +2076,7 @@ async def bulk_disable_users(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="user.bulk_disable", resource="users", resource_id="bulk",
-        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        details=json.dumps({"count": len(body.uuids), "uuids": body.uuids[:100], "success": success, "failed": failed}),
         ip_address=get_client_ip(request),
     )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
@@ -2134,7 +2136,7 @@ async def bulk_delete_users(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="user.bulk_delete", resource="users", resource_id="bulk",
-        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        details=json.dumps({"count": len(body.uuids), "uuids": body.uuids[:100], "success": success, "failed": failed}),
         ip_address=get_client_ip(request),
     )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
@@ -2175,7 +2177,7 @@ async def bulk_reset_traffic(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="user.bulk_reset_traffic", resource="users", resource_id="bulk",
-        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        details=json.dumps({"count": len(body.uuids), "uuids": body.uuids[:100], "success": success, "failed": failed}),
         ip_address=get_client_ip(request),
     )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
@@ -2245,7 +2247,7 @@ async def bulk_reassign_users(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="user.bulk_reassign", resource="users", resource_id="bulk",
-        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed, "new_admin_id": body.new_admin_id}),
+        details=json.dumps({"count": len(body.uuids), "uuids": body.uuids[:100], "success": success, "failed": failed, "new_admin_id": body.new_admin_id}),
         ip_address=get_client_ip(request),
     )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
@@ -2483,7 +2485,7 @@ async def bulk_unassign_admin(
         await write_audit_log(
             admin_id=admin.account_id, admin_username=admin.username,
             action="user.bulk_unassign_admin", resource="users", resource_id="bulk",
-            details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+            details=json.dumps({"count": len(body.uuids), "uuids": body.uuids[:100], "success": success, "failed": failed}),
             ip_address=get_client_ip(request),
         )
         return BulkOperationResult(success=success, failed=failed, errors=errors)

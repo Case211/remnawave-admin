@@ -290,7 +290,7 @@ async def bulk_enable_hosts_ep(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="host.bulk_enable", resource="hosts", resource_id="",
-        details=json.dumps({"count": len(uuids)}), ip_address=get_client_ip(request),
+        details=json.dumps({"count": len(uuids), "uuids": uuids[:100]}), ip_address=get_client_ip(request),
     )
     return {"status": "ok", "count": len(uuids)}
 
@@ -309,7 +309,7 @@ async def bulk_disable_hosts_ep(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="host.bulk_disable", resource="hosts", resource_id="",
-        details=json.dumps({"count": len(uuids)}), ip_address=get_client_ip(request),
+        details=json.dumps({"count": len(uuids), "uuids": uuids[:100]}), ip_address=get_client_ip(request),
     )
     return {"status": "ok", "count": len(uuids)}
 
@@ -328,7 +328,7 @@ async def bulk_delete_hosts_ep(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="host.bulk_delete", resource="hosts", resource_id="",
-        details=json.dumps({"count": len(uuids)}), ip_address=get_client_ip(request),
+        details=json.dumps({"count": len(uuids), "uuids": uuids[:100]}), ip_address=get_client_ip(request),
     )
     return {"status": "ok", "count": len(uuids)}
 
@@ -358,7 +358,7 @@ async def bulk_update_hosts_ep(
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="host.bulk_update", resource="hosts", resource_id="",
-        details=json.dumps({"count": len(uuids), "fields": list(fields.keys())}),
+        details=json.dumps({"count": len(uuids), "uuids": uuids[:100], "fields": list(fields.keys())}),
         ip_address=get_client_ip(request),
     )
     return {"status": "ok", "count": len(uuids)}
