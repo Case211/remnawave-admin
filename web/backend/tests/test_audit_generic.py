@@ -4,6 +4,7 @@
 маршрут, чей обработчик сам вызвал write_audit_log, второй записи не получает.
 """
 import asyncio
+import sys
 
 import pytest
 from fastapi import FastAPI
@@ -82,15 +83,32 @@ def test_sensitive_keys_dropped_from_details():
     assert len(details) < 500
 
 
-def test_exclusions_point_to_real_routes():
-    """Исключение без живого маршрута — опечатка, из-за которой шум попадёт в журнал."""
+def _app_endpoints():
+    """(модуль, функция) всех ручек приложения.
+
+    С 0.130 FastAPI держит включённые роутеры лениво, и обход app.routes видит
+    только верхний уровень. Ручки собираются с самих роутеров модулей — после
+    импорта приложения они все лежат в sys.modules.
+    """
+    from fastapi import APIRouter
     from web.backend.main import app
 
+    routers = [app.router]
+    for module in list(sys.modules.values()):
+        if getattr(module, "__name__", "").startswith("web.backend."):
+            routers += [value for value in vars(module).values() if isinstance(value, APIRouter)]
     endpoints = set()
-    for route in app.routes:
-        endpoint = getattr(route, "endpoint", None)
-        if endpoint is not None:
-            endpoints.add((endpoint.__module__.rsplit(".", 1)[-1], endpoint.__name__))
+    for router in routers:
+        for route in router.routes:
+            endpoint = getattr(route, "endpoint", None)
+            if endpoint is not None:
+                endpoints.add((endpoint.__module__.rsplit(".", 1)[-1], endpoint.__name__))
+    return endpoints
+
+
+def test_exclusions_point_to_real_routes():
+    """Исключение без живого маршрута — опечатка, из-за которой шум попадёт в журнал."""
+    endpoints = _app_endpoints()
     missing = [pair for pair in audit_middleware._GENERIC_SKIP if pair not in endpoints]
     assert missing == []
     auth_names = {name for module, name in endpoints if module == "auth"}
