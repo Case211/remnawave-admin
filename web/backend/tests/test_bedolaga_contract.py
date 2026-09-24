@@ -154,3 +154,30 @@ def test_dead_campaign_detail_route_removed():
     assert not any(
         route.path == "/campaigns/{campaign_id}" and "GET" in route.methods for route in marketing.router.routes
     )
+
+
+@pytest.mark.asyncio
+async def test_media_upload_goes_to_bot_upload_route():
+    """Роутер медиа у бота без префикса: загрузка — POST /upload.
+
+    На /media/upload бот отвечал 405 — вложение из «Обращений» не уходило.
+    """
+    from shared.bedolaga_client import BedolagaClient
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"], seen["path"], seen["body"] = request.method, request.url.path, request.read()
+        return httpx.Response(201, json={"media_type": "photo", "file_id": "F1"})
+
+    client = BedolagaClient()
+    client.configure("http://bot", "token")
+    client._client = httpx.AsyncClient(base_url="http://bot", transport=httpx.MockTransport(handler))
+    try:
+        result = await client.upload_media(b"png", "shot.png", "photo")
+    finally:
+        await client._client.aclose()
+
+    assert (seen["method"], seen["path"]) == ("POST", "/upload")
+    assert b'name="media_type"' in seen["body"] and b"photo" in seen["body"]
+    assert result["file_id"] == "F1"

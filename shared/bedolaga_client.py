@@ -209,10 +209,14 @@ class BedolagaClient:
         return await self._post(f"/tickets/{ticket_id}/reply", json=payload)
 
     async def upload_media(self, content: bytes, filename: str, media_type: str = "document") -> dict:
-        """Залить файл в Telegram через бота и получить его file_id."""
+        """Залить файл в Telegram через бота и получить его file_id.
+
+        Роутер медиа у бота подключён без префикса: загрузка — ``/upload``,
+        а скачивание — ``/media/{file_id}``.
+        """
         client = self._get_client()
         response = await client.post(
-            "/media/upload",
+            "/upload",
             files={"file": (filename, content)},
             data={"media_type": media_type},
         )
