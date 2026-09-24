@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from web.backend.api.deps import (
     AdminUser,
@@ -510,3 +511,38 @@ async def test_smtp_endpoint(
     from web.backend.core.notification_service import test_smtp
     result = await test_smtp(data.to_email)
     return result
+
+
+# ══════════════════════════════════════════════════════════════════
+# Do not disturb (per admin)
+# ══════════════════════════════════════════════════════════════════
+
+class DndSettings(BaseModel):
+    """Окно «не беспокоить» по часам панели; пусто — выключено."""
+    dnd_from: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    dnd_to: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+@router.get("/notification-dnd", response_model=DndSettings)
+async def get_dnd(admin: AdminUser = Depends(get_current_admin)):
+    if admin.account_id is None:
+        return DndSettings()
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(f"SELECT dnd_from, dnd_to FROM {ADMIN_TABLE} WHERE id = $1", admin.account_id)
+    return DndSettings(**dict(row)) if row else DndSettings()
+
+
+@router.put("/notification-dnd", response_model=DndSettings)
+async def set_dnd(data: DndSettings, admin: AdminUser = Depends(get_current_admin)):
+    if admin.account_id is None:
+        raise api_error(400, E.INVALID_ACTION, "Legacy admin has no account to store settings")
+    if bool(data.dnd_from) != bool(data.dnd_to):
+        raise api_error(400, E.INVALID_INPUT, "Set both dnd_from and dnd_to or neither")
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        await conn.execute(
+            f"UPDATE {ADMIN_TABLE} SET dnd_from = $2, dnd_to = $3 WHERE id = $1",
+            admin.account_id, data.dnd_from or None, data.dnd_to or None,
+        )
+    return DndSettings(dnd_from=data.dnd_from or None, dnd_to=data.dnd_to or None)

@@ -56,16 +56,23 @@ def notification_resource(notification_type: Optional[str]) -> Optional[str]:
     return _TYPE_RESOURCE.get(notification_type or "")
 
 
-async def _recipient_admin_ids(conn, notification_type: Optional[str]) -> List[int]:
+# Уведомления про конкретного юзера: source_id у них — uuid юзера
+_USER_SUBJECT_TYPES = {"violation", "torrent", "traffic_rate"}
+
+
+async def _recipient_admin_ids(conn, notification_type: Optional[str],
+                               user_uuid: Optional[str] = None) -> List[int]:
     """Активные админы, которым положено это уведомление.
 
     Суперадмин и админ без роли (легаси, полный доступ) — всегда; остальные —
-    если у роли есть право на просмотр раздела уведомления.
+    если у роли есть право на просмотр раздела уведомления. Уведомление про
+    конкретного юзера получают только те, кому этот юзер виден: админ с
+    ограниченной областью видимости не узнаёт о нарушениях чужих юзеров.
     """
     resource = notification_resource(notification_type)
     rows = await conn.fetch(
         f"""
-        SELECT a.id FROM {ADMIN_TABLE} a
+        SELECT a.id, r.name AS role_name FROM {ADMIN_TABLE} a
         LEFT JOIN admin_roles r ON r.id = a.role_id
         WHERE a.is_active = true
           AND ($1::text IS NULL OR r.id IS NULL OR r.name = 'superadmin' OR EXISTS (
@@ -75,7 +82,16 @@ async def _recipient_admin_ids(conn, notification_type: Optional[str]) -> List[i
         """,
         resource,
     )
-    return [r["id"] for r in rows]
+    if not user_uuid:
+        return [r["id"] for r in rows]
+    from shared.rbac import get_visible_user_uuids
+    wanted = str(user_uuid).lower()
+    result = []
+    for r in rows:
+        visible = await get_visible_user_uuids(r["id"], r["role_name"])
+        if visible is None or wanted in {str(u).lower() for u in visible}:
+            result.append(r["id"])
+    return result
 
 
 def _plain_text(markup: str) -> str:
@@ -470,6 +486,7 @@ async def create_notification(
     telegram_body: Optional[str] = None,
     reply_markup: Optional[Dict[str, Any]] = None,
     event: Optional[str] = None,
+    user_uuid: Optional[str] = None,
     **kwargs,
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
@@ -484,6 +501,9 @@ async def create_notification(
     channels = channels or ["in_app"]
     body, telegram_body = _split_body(body, telegram_body)
     notification_id = None
+    # Про какого юзера уведомление — чтобы не показать его тем, кому он не виден
+    subject_user = user_uuid or (source_id if type in _USER_SUBJECT_TYPES else None)
+    recipient_ids: List[int] = []
 
     try:
         from shared.database import db_service
@@ -511,7 +531,8 @@ async def create_notification(
             # Broadcast to all admins
             all_deduplicated = True
             async with db_service.acquire() as conn:
-                admin_ids = await _recipient_admin_ids(conn, type)
+                admin_ids = await _recipient_admin_ids(conn, type, subject_user)
+                recipient_ids = admin_ids
                 for aid in admin_ids:
 
                     # Deduplication: skip if same group_key exists within last 15 min
@@ -560,6 +581,9 @@ async def create_notification(
             }
             if admin_id is not None:
                 await manager.send_to_account(admin_id, ws_message)
+            elif subject_user:
+                for aid in recipient_ids:
+                    await manager.send_to_account(aid, ws_message)
             else:
                 resource = notification_resource(type)
                 await manager.broadcast(ws_message, permission=(resource, "view") if resource else None)
@@ -579,9 +603,6 @@ async def create_notification(
         else:
             # For broadcasts, dispatch to all admins' external channels
             try:
-                async with db_service.acquire() as conn:
-                    recipient_ids = await _recipient_admin_ids(conn, type)
-
                 if recipient_ids:
                     logger.debug("Broadcasting external channels to %d admin accounts", len(recipient_ids))
                     for recipient_id in recipient_ids:
@@ -654,6 +675,20 @@ async def create_notification(
     return notification_id
 
 
+async def _admin_in_dnd(admin_id: int) -> bool:
+    """Сейчас окно «не беспокоить» админа (часы панели)?"""
+    try:
+        from shared.database import db_service
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(f"SELECT dnd_from, dnd_to FROM {ADMIN_TABLE} WHERE id = $1", admin_id)
+    except Exception as e:
+        logger.debug("DND lookup failed for admin %s: %s", admin_id, e)
+        return False
+    if not row:
+        return False
+    return timefmt.quiet_window_end(row["dnd_from"], row["dnd_to"], timefmt.now()) is not None
+
+
 async def _collect_telegram_chat_ids(admin_id: int) -> set:
     """Return the set of Telegram chat_ids configured for this admin."""
     try:
@@ -717,6 +752,9 @@ async def _dispatch_external(
     """Dispatch notification to external channels based on admin's channel config."""
     try:
         from shared.database import db_service
+        if severity != "critical" and await _admin_in_dnd(admin_id):
+            logger.debug("Admin %s is in do-not-disturb, external channels skipped", admin_id)
+            return
         async with db_service.acquire() as conn:
             channels = await conn.fetch(
                 select_sql(NOTIFICATION_CHANNELS_TABLE, "channel_type, config", "WHERE admin_id = $1 AND is_enabled = true"),

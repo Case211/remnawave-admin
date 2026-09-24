@@ -5044,7 +5044,15 @@
       "description": "Description"
     },
     "alertsMoved": "Threshold alerts (CPU, memory, disk, node offline) are now automation rules.",
-    "alertsMovedLink": "Open automations"
+    "alertsMovedLink": "Open automations",
+    "dnd": {
+      "title": "Do not disturb",
+      "hint": "During this window Telegram, email and webhooks stay silent except for critical ones; the bell keeps collecting as usual. Time zone: {{tz}}.",
+      "from": "From",
+      "to": "To",
+      "saved": "Saved",
+      "off": "Turn off"
+    }
   },
   "mailServer": {
     "title": "Mail Server",

@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from shared import timefmt
+from shared.timefmt import quiet_window_end
 
 logger = logging.getLogger(__name__)
 
@@ -145,34 +146,6 @@ def _cooldown_seconds(trigger_config: dict, default: int) -> int:
     except (TypeError, ValueError):
         minutes = 0
     return minutes * 60 if minutes > 0 else default
-
-
-def _parse_hhmm(value) -> Optional[Tuple[int, int]]:
-    try:
-        hours, minutes = str(value).strip().split(":")
-        h, m = int(hours), int(minutes)
-    except (ValueError, AttributeError):
-        return None
-    return (h, m) if 0 <= h < 24 and 0 <= m < 60 else None
-
-
-def quiet_window_end(quiet_from, quiet_to, now_local: datetime) -> Optional[datetime]:
-    """Конец тихих часов, если сейчас внутри окна; иначе None.
-
-    Окно может переходить через полночь (23:00–08:00). Время — часы панели.
-    """
-    start, end = _parse_hhmm(quiet_from), _parse_hhmm(quiet_to)
-    if not start or not end or start == end:
-        return None
-    now_min = now_local.hour * 60 + now_local.minute
-    start_min, end_min = start[0] * 60 + start[1], end[0] * 60 + end[1]
-    inside = start_min <= now_min < end_min if start_min < end_min else (now_min >= start_min or now_min < end_min)
-    if not inside:
-        return None
-    end_at = now_local.replace(hour=end[0], minute=end[1], second=0, microsecond=0)
-    if end_at <= now_local:
-        end_at += timedelta(days=1)
-    return end_at
 
 
 # Пороги по юзерам — выборки по всей базе; проверяются раз в 5 минут
@@ -1368,6 +1341,7 @@ class AutomationEngine:
                 source="automation",
                 source_id=str(context.get("rule_id", "")),
                 group_key=f"automation:{context.get('rule_id', '')}:{target_id}",
+                user_uuid=target_id if target_type == "user" else None,
                 channels=channels,
                 topic_type=topic_type,
                 telegram_body=message,

@@ -35,6 +35,7 @@ import {
 import { cn } from '@/lib/utils'
 import { QueryError } from '@/components/QueryError'
 import { useFormatters } from '@/lib/useFormatters'
+import { useDisplayTimeZone } from '@/lib/timezone'
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -314,6 +315,50 @@ function NotificationsTab() {
 // Tab: Channels (per-admin) + SMTP config (superadmin)
 // ══════════════════════════════════════════════════════════════════
 
+/** Окно «не беспокоить»: внешние каналы молчат, кроме критичного */
+function DndSection() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const displayTimeZone = useDisplayTimeZone()
+  const { data } = useQuery({ queryKey: ['notification-dnd'], queryFn: notificationsApi.getDnd })
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  useEffect(() => {
+    setFrom(data?.dnd_from ?? '')
+    setTo(data?.dnd_to ?? '')
+  }, [data])
+  const save = useMutation({
+    mutationFn: () => notificationsApi.setDnd({ dnd_from: from || null, dnd_to: to || null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notification-dnd'] })
+      toast.success(t('notifications.dnd.saved'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+  const incomplete = Boolean(from) !== Boolean(to)
+  return (
+    <Card className="bg-[var(--glass-bg)] border-[var(--glass-border)]">
+      <CardContent className="p-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium text-white">{t('notifications.dnd.title')}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t('notifications.dnd.hint', { tz: displayTimeZone })}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input type="time" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={t('notifications.dnd.from')} className="w-28" />
+          <span className="text-muted-foreground">{'—'}</span>
+          <Input type="time" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t('notifications.dnd.to')} className="w-28" />
+          <Button size="sm" onClick={() => save.mutate()} disabled={incomplete || save.isPending}>{t('common.save')}</Button>
+          {(data?.dnd_from || data?.dnd_to) && (
+            <Button size="sm" variant="ghost" onClick={() => { setFrom(''); setTo(''); notificationsApi.setDnd({ dnd_from: null, dnd_to: null }).then(() => queryClient.invalidateQueries({ queryKey: ['notification-dnd'] })) }}>
+              {t('notifications.dnd.off')}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function ChannelsTab() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -352,6 +397,8 @@ function ChannelsTab() {
 
   return (
     <div className="space-y-6">
+      <DndSection />
+
       {/* Per-admin channels */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">

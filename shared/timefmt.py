@@ -166,3 +166,31 @@ def filter_bounds(date_from: Optional[str], date_to: Optional[str]) -> tuple:
             logger.warning("Фильтр по времени отброшен: %r", value)
             bounds.append(None)
     return bounds[0], bounds[1]
+
+
+def _parse_hhmm(value) -> Optional[tuple]:
+    try:
+        hours, minutes = str(value).strip().split(":")
+        h, m = int(hours), int(minutes)
+    except (ValueError, AttributeError):
+        return None
+    return (h, m) if 0 <= h < 24 and 0 <= m < 60 else None
+
+
+def quiet_window_end(quiet_from, quiet_to, now_local: datetime) -> Optional[datetime]:
+    """Конец окна «тихих часов», если сейчас внутри него; иначе None.
+
+    Окно может переходить через полночь (23:00–08:00). Время — часы панели.
+    """
+    start, end = _parse_hhmm(quiet_from), _parse_hhmm(quiet_to)
+    if not start or not end or start == end:
+        return None
+    now_min = now_local.hour * 60 + now_local.minute
+    start_min, end_min = start[0] * 60 + start[1], end[0] * 60 + end[1]
+    inside = start_min <= now_min < end_min if start_min < end_min else (now_min >= start_min or now_min < end_min)
+    if not inside:
+        return None
+    end_at = now_local.replace(hour=end[0], minute=end[1], second=0, microsecond=0)
+    if end_at <= now_local:
+        end_at += timedelta(days=1)
+    return end_at

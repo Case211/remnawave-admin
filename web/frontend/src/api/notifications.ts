@@ -142,5 +142,20 @@ export const notificationsApi = {
     const { data } = await client.post('/smtp-config/test', { to_email })
     return data
   },
+
+  /** «Не беспокоить» текущего админа — окно по часам панели */
+  getDnd: async (): Promise<DndSettings> => {
+    const { data } = await client.get('/notification-dnd')
+    return data
+  },
+  setDnd: async (payload: DndSettings): Promise<DndSettings> => {
+    const { data } = await client.put('/notification-dnd', payload)
+    return data
+  },
+}
+
+export interface DndSettings {
+  dnd_from: string | null
+  dnd_to: string | null
 }
 
