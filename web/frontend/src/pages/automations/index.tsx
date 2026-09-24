@@ -187,18 +187,20 @@ export default function Automations() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      {/* Header: на телефоне кнопки уходят под заголовок и переносятся */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-display font-bold text-white">{t('automations.title')}</h1>
           <p className="text-sm text-dark-400 mt-1">
             {t('automations.subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleExport}>{t('automations.export')}</Button>
+        <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
+          {section === 'rules' && (
+            <Button variant="outline" onClick={handleExport}>{t('automations.export')}</Button>
+          )}
           <PermissionGate resource="automation" action="create">
-            <label className="inline-flex">
+            <label className={section === 'rules' ? 'inline-flex' : 'hidden'}>
               <input
                 type="file"
                 accept="application/json,.json"
@@ -263,13 +265,13 @@ export default function Automations() {
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Filters: на телефоне — сетка на всю ширину */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
             <Select
               value={categoryFilter}
               onValueChange={(v) => { setCategoryFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-40 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+              <SelectTrigger className="col-span-2 w-full sm:w-40 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
                 <SelectValue placeholder={t('automations.filters.category')} />
               </SelectTrigger>
               <SelectContent>
@@ -284,7 +286,7 @@ export default function Automations() {
               value={triggerFilter}
               onValueChange={(v) => { setTriggerFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+              <SelectTrigger className="w-full sm:w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
                 <SelectValue placeholder={t('automations.filters.trigger')} />
               </SelectTrigger>
               <SelectContent>
@@ -299,7 +301,7 @@ export default function Automations() {
               value={enabledFilter}
               onValueChange={(v) => { setEnabledFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-32 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+              <SelectTrigger className="w-full sm:w-32 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
                 <SelectValue placeholder={t('automations.filters.status')} />
               </SelectTrigger>
               <SelectContent>

@@ -213,7 +213,7 @@ export default function AdminPlugins() {
           <h1 className="text-2xl font-bold text-white">{t('adminPlugins.title')}</h1>
           <p className="mt-1 text-sm text-dark-300">{t('adminPlugins.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"

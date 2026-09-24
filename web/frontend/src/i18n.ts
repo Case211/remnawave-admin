@@ -15,7 +15,10 @@ i18n
     },
     fallbackLng: 'ru',
     interpolation: {
-      escapeValue: true,
+      // React сам экранирует текст при выводе; с escapeValue: true значения
+      // экранировались дважды — «Europe/Moscow» показывалось как
+      // «Europe&#x2F;Moscow», «A&B» как «A&amp;B». Сырого HTML из t() нет.
+      escapeValue: false,
     },
     detection: {
       order: ['localStorage', 'navigator'],

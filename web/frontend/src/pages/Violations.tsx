@@ -2267,7 +2267,8 @@ export default function Violations() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[var(--glass-bg)] rounded-lg p-1 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+      {/* На телефоне вкладки переносятся: семь в одну строку не влезают */}
+      <div className="flex flex-wrap gap-1 bg-[var(--glass-bg)] rounded-lg p-1 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
         {([
           { key: 'all' as Tab, label: t('violations.tabs.all'), count: stats?.total },
           { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
@@ -2281,7 +2282,7 @@ export default function Violations() {
             key={tabItem.key}
             onClick={() => handleTabChange(tabItem.key)}
             className={cn(
-              'flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-md font-medium transition-all',
+              'flex-auto sm:flex-none whitespace-nowrap px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-md font-medium transition-all',
               tab === tabItem.key
                 ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
                 : 'text-dark-200 hover:text-white hover:bg-[var(--glass-bg)]'

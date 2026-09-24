@@ -26,7 +26,6 @@ import { automationsApi, type AutomationRule } from '../../api/automations'
 import {
   resultBadgeClass,
   resultLabel,
-  actionTypeLabel,
   categoryColor,
   categoryLabel,
   describeTrigger,
@@ -68,17 +67,16 @@ function RuleLog({ ruleId }: { ruleId: number }) {
   return (
     <ul className="mt-2 space-y-1.5">
       {items.map((entry) => (
-        <li key={entry.id} className="flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="text-dark-400">{entry.triggered_at ? formatDateTime(entry.triggered_at) : ''}</span>
+        <li key={entry.id} className="flex items-center gap-2 text-[11px]">
+          <span className="text-dark-400 whitespace-nowrap">{entry.triggered_at ? formatDateTime(entry.triggered_at) : ''}</span>
           <Badge variant="outline" className={`text-[10px] ${resultBadgeClass(entry.result)}`}>{resultLabel(entry.result)}</Badge>
-          <span className="text-dark-300">{actionTypeLabel(entry.action_taken)}</span>
           {entry.target_type === 'user' && entry.target_id && (
-            <Link to={`/users/${entry.target_id}`} className="text-primary-400 hover:underline">
+            <Link to={`/users/${entry.target_id}`} className="ml-auto whitespace-nowrap text-primary-400 hover:underline">
               {t('automations.ruleCard.openUser')}
             </Link>
           )}
           {entry.target_type === 'node' && entry.target_id && (
-            <Link to="/servers?tab=nodes" className="text-primary-400 hover:underline">
+            <Link to="/servers?tab=nodes" className="ml-auto whitespace-nowrap text-primary-400 hover:underline">
               {t('automations.ruleCard.openNode')}
             </Link>
           )}
@@ -115,8 +113,8 @@ export function RuleCard({
         {/* Header: name + actions */}
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-medium text-white truncate">{rule.name}</h3>
+            <div className="flex items-start gap-2">
+              <h3 className="min-w-0 text-sm font-medium text-white line-clamp-2 break-words">{rule.name}</h3>
               {!rule.is_enabled && (
                 <Badge variant="outline" className="text-[9px] text-dark-400 border-[var(--glass-border)] flex-shrink-0">
                   {t('automations.ruleCard.off')}

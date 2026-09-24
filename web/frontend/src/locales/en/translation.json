@@ -2915,7 +2915,7 @@
   },
   "automations": {
     "title": "Automations",
-    "subtitle": "All automations in one place: rules, alerts, scripts, schedules",
+    "subtitle": "All automations in one place: rules, scripts, schedules",
     "hub": {
       "open": "Open",
       "sections": {
@@ -2924,8 +2924,8 @@
         "scripts": "Node scripts",
         "schedules": "Schedules"
       },
-      "nodeScriptsHint": "Shell-script catalog, run history and scheduled jobs live on the Fleet page. Jump straight to the section you need.",
-      "schedulesHint": "Scheduled jobs run scripts on nodes by cron expression. Create and edit them on Fleet → Scheduled.",
+      "nodeScriptsHint": "Shell-script catalog, run history and scheduled jobs live on the Servers page. Jump straight to the section you need.",
+      "schedulesHint": "Scheduled jobs run scripts on nodes by cron expression. Create and edit them on Servers → Schedules.",
       "scripts": {
         "catalog": "Script catalog",
         "catalogDesc": "Built-in and custom shell scripts. Run manually or on a schedule.",
@@ -2935,7 +2935,7 @@
         "terminalDesc": "Direct SSH terminal into a node through the panel."
       },
       "schedules": {
-        "fleet": "Scheduled jobs (Fleet)",
+        "fleet": "Node scheduled jobs",
         "fleetDesc": "CRON schedule for scripts on nodes. History, enable/disable.",
         "rules": "Schedule-triggered rules",
         "rulesDesc": "Rules with schedule trigger (cron/interval) — managed under the «Rules» tab."
@@ -3299,7 +3299,8 @@
       "from": "From",
       "to": "To",
       "noLogs": "No log entries",
-      "page": "Page {{page}} of {{pages}} ({{total}} entries)"
+      "page": "Page {{page}} of {{pages}} ({{total}} entries)",
+      "allRules": "All rules"
     },
     "cronBuilder": {
       "presets": "Presets",
@@ -3436,7 +3437,7 @@
       "categoryHint": "Category helps group rules for easy search and filtering.",
       "categoryAutoHint": " Suggested automatically, but you can change it.",
       "conditionsTitle": "Additional conditions",
-      "conditionsHint": "Optional step. Add conditions for more precise filtering. Rule fires only if ALL specified conditions are met simultaneously (AND logic). Without conditions, the rule fires on every trigger event.",
+      "conditionsHint": "Optional step. Add conditions for more precise filtering: the rule fires when all conditions or any of them are met — choose below. Without conditions, the rule fires on every trigger event.",
       "conditionN": "Condition {{n}}",
       "field": "Field",
       "selectField": "Select field",
@@ -3538,7 +3539,7 @@
         "title": "Extra",
         "blockHours": "Block for, hours",
         "blockHoursHint": "0 — forever. Otherwise the user is re-enabled automatically.",
-        "alsoSend": "Besides Telegram, send",
+        "alsoSend": "Send to",
         "channel": {
           "in_app": "to the bell",
           "email": "by email"
@@ -3589,7 +3590,8 @@
         "hint": "During this window notifications pile up and go out as one digest at its end. Critical ones go right away. Time zone: {{tz}}."
       },
       "forMinutes": "Holds for at least, min",
-      "forMinutesHint": "A single spike is not worth waking anyone — fires only if the value holds this long."
+      "forMinutesHint": "A single spike is not worth waking anyone — fires only if the value holds this long.",
+      "conditionsAnyLabel": "WITH CONDITIONS (any one is enough)"
     },
     "testResult": {
       "title": "Test result",

@@ -469,7 +469,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const isSaving = createMutation.isPending || updateMutation.isPending
 
   const addCondition = () => {
-    setConditions((prev) => [...prev, { field: '', operator: '>=', value: '' }])
+    setConditions((prev) => [...prev, { field: fieldsForTrigger[0]?.value ?? '', operator: '>=', value: '' }])
   }
 
   const removeCondition = (idx: number) => {
@@ -548,7 +548,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         </DialogHeader>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-1 pb-2 border-b border-[var(--glass-border)]/50 mb-1">
+        <div className="flex flex-wrap items-center gap-1 gap-y-2 pb-2 border-b border-[var(--glass-border)]/50 mb-1">
           {[1, 2, 3, 4].map((s) => (
             <div key={s} className="flex items-center">
               <button
@@ -573,7 +573,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               )}
             </div>
           ))}
-          <div className="ml-3">
+          <div className="basis-full sm:basis-auto sm:ml-3">
             <span className="text-xs font-medium text-dark-300">
               {STEP_LABELS[step - 1]}
             </span>
@@ -658,7 +658,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       type="number"
                       value={minScore}
                       onChange={(e) => setMinScore(e.target.value)}
-                      className="bg-[var(--glass-bg)] border-[var(--glass-border)] text-white w-32"
+                      className="bg-[var(--glass-bg)] border-[var(--glass-border)] text-white w-full sm:w-40"
                       placeholder={t('automations.constructor.minScorePlaceholder')}
                     />
                     <p className="text-[11px] text-dark-500 italic">{t('automations.constructor.optionalField')}</p>
@@ -908,8 +908,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-                <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
-                  <div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-start">
+                  <div className="col-span-2 sm:col-span-1 min-w-0">
                     <Label className="text-[11px] text-dark-400">{t('automations.constructor.field')}</Label>
                     <Select
                       value={cond.field || '_custom'}
@@ -935,7 +935,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       />
                     )}
                   </div>
-                  <div className="w-36">
+                  <div className="min-w-0 sm:w-36">
                     <Label className="text-[11px] text-dark-400">{t('automations.constructor.comparisonLabel')}</Label>
                     <Select
                       value={cond.operator}
@@ -951,7 +951,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className={cond.operator === 'in' || cond.operator === 'not_in' ? 'w-40' : 'w-24'}>
+                  <div className={`min-w-0 ${cond.operator === 'in' || cond.operator === 'not_in' ? 'sm:w-40' : 'sm:w-24'}`}>
                     <Label className="text-[11px] text-dark-400">{t('automations.constructor.valueLabel')}</Label>
                     <Input
                       value={cond.value}
@@ -966,15 +966,15 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             ))}
 
             {conditions.length > 1 && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-dark-400">{t('automations.constructor.matchLabel')}</span>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="w-full sm:w-auto text-dark-400">{t('automations.constructor.matchLabel')}</span>
                 {(['all', 'any'] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
                     aria-pressed={conditionsMatch === m}
                     onClick={() => setConditionsMatch(m)}
-                    className={`px-2.5 py-1 rounded-full border transition-colors ${
+                    className={`px-2.5 py-1 rounded-full border whitespace-nowrap transition-colors ${
                       conditionsMatch === m
                         ? 'bg-primary/20 text-primary-400 border-primary/40'
                         : 'bg-[var(--glass-bg)] text-dark-300 border-[var(--glass-border)]'
@@ -1081,10 +1081,11 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   <Label className="text-[11px] text-dark-400">
                     {t('automations.constructor.messageText')} <span className="text-red-400">*</span>
                   </Label>
-                  <Input
+                  <textarea
                     value={notifyMessage}
                     onChange={(e) => setNotifyMessage(e.target.value)}
-                    className="mt-1 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                    rows={3}
+                    className="mt-1 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-base sm:text-sm text-white placeholder:text-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                     placeholder={t('automations.constructor.messagePlaceholder')}
                   />
                   <div className="mt-1.5 p-2 rounded-md bg-[var(--glass-bg)] border border-[var(--glass-border)]">
@@ -1371,26 +1372,33 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 <Label className="text-[11px] text-dark-400">{t('automations.constructor.chain.title')}</Label>
                 <div className="mt-1.5 space-y-2">
                   {extraActions.map((step, idx) => (
-                    <div key={idx} className="flex flex-wrap items-center gap-2">
-                      <Select
-                        value={step.action_type}
-                        onValueChange={(v) => setExtraActions((prev) => prev.map((s, i) => (i === idx ? { action_type: v, action_config: {} } : s)))}
-                      >
-                        <SelectTrigger className="w-52 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {EXTRA_ACTION_TYPES.map((a) => (
-                            <SelectItem key={a} value={a}>{t(`automations.actionTypes.${a}`)}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div key={idx} className="space-y-2 rounded-md border border-[var(--glass-border)] p-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-dark-400 w-4 text-center">{idx + 2}</span>
+                        <Select
+                          value={step.action_type}
+                          onValueChange={(v) => setExtraActions((prev) => prev.map((s, i) => (i === idx ? { action_type: v, action_config: {} } : s)))}
+                        >
+                          <SelectTrigger className="min-w-0 flex-1 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EXTRA_ACTION_TYPES.map((a) => (
+                              <SelectItem key={a} value={a}>{t(`automations.actionTypes.${a}`)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0" aria-label={t('common.delete')}
+                          onClick={() => setExtraActions((prev) => prev.filter((_, i) => i !== idx))}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                       {step.action_type === 'notify' && (
                         <Input
                           value={String(step.action_config.message ?? '')}
                           onChange={(e) => setExtraActions((prev) => prev.map((s, i) => (i === idx ? { ...s, action_config: { channel: 'telegram', message: e.target.value } } : s)))}
                           placeholder={t('automations.constructor.chain.message')}
-                          className="flex-1 min-w-[180px] bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                          className="w-full bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
                         />
                       )}
                       {(step.action_type === 'throttle_user' || step.action_type === 'block_user' || step.action_type === 'disable_user') && (
@@ -1401,13 +1409,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                             ? { ...s, action_config: parseFloat(e.target.value) > 0 ? { ...s.action_config, duration_hours: parseFloat(e.target.value) } : {} }
                             : s)))}
                           placeholder={t('automations.constructor.chain.hours')}
-                          className="w-32 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                          className="w-full sm:w-40 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
                         />
                       )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('common.delete')}
-                        onClick={() => setExtraActions((prev) => prev.filter((_, i) => i !== idx))}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
                     </div>
                   ))}
                   {extraActions.length < 5 && (
@@ -1645,7 +1649,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               {/* Conditions */}
               {conditions.filter((c) => c.field && c.value).length > 0 && (
                 <div className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] space-y-1.5">
-                  <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">{t('automations.constructor.conditionsAllLabel')}</p>
+                  <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">
+                    {conditionsMatch === 'any' ? t('automations.constructor.conditionsAnyLabel') : t('automations.constructor.conditionsAllLabel')}
+                  </p>
                   {conditions.filter((c) => c.field && c.value).map((c, i) => {
                     const fieldLabel = CONDITION_FIELDS.find((f) => f.value === c.field)?.label || c.field
                     const opLabel = CONDITION_OPERATORS.find((o) => o.value === c.operator)?.label || c.operator
@@ -1673,6 +1679,14 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     })}
                   </span>
                 </div>
+                {extraActions.map((step, i) => (
+                  <div key={i} className="flex items-center gap-2 pl-5">
+                    <span className="text-[11px] text-dark-500">{i + 2}.</span>
+                    <span className="text-xs text-primary-300">
+                      {describeAction({ action_type: step.action_type, action_config: step.action_config })}
+                    </span>
+                  </div>
+                ))}
                 {/* Target info */}
                 {['restart_node', 'enable_node', 'disable_node'].includes(actionType) && (
                   <div className="flex items-center gap-2 mt-1">
@@ -1702,7 +1716,11 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         )}
 
         {/* Footer navigation */}
-        <DialogFooter className="flex justify-between sm:justify-between pt-4 border-t border-[var(--glass-border)]/50">
+        <DialogFooter className="sticky -bottom-4 sm:-bottom-6 z-10 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 flex-col gap-2 sm:flex-col sm:space-x-0 px-4 sm:px-6 py-3 border-t border-[var(--glass-border)]/50 bg-[var(--surface-card)]">
+          {validationHint && (
+            <p className="text-[11px] text-yellow-400/80 sm:text-right">{validationHint}</p>
+          )}
+          <div className="flex items-center justify-between gap-2">
           <div>
             {step > 1 && (
               <Button variant="outline" size="sm" onClick={() => setStep((s) => s - 1)} className="border-[var(--glass-border)]">
@@ -1711,11 +1729,6 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             )}
           </div>
           <div className="flex items-center gap-2">
-            {validationHint && (
-              <span className="text-[11px] text-yellow-400/80 max-w-[200px] text-right hidden sm:block">
-                {validationHint}
-              </span>
-            )}
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
               {t('automations.constructor.cancel')}
             </Button>
@@ -1742,6 +1755,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     : t('automations.constructor.createRuleBtn')}
               </Button>
             )}
+          </div>
           </div>
         </DialogFooter>
       </DialogContent>

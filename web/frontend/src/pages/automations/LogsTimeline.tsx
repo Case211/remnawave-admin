@@ -45,6 +45,12 @@ export function LogsTimeline() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
+  const { data: rulesData } = useQuery({
+    queryKey: ['automation-rule-names'],
+    queryFn: () => automationsApi.list({ per_page: 100 }),
+    staleTime: 60_000,
+  })
+
   const { data, isLoading } = useQuery({
     queryKey: ['automation-logs', page, ruleIdFilter, resultFilter, dateFrom, dateTo],
     queryFn: () =>
@@ -80,26 +86,34 @@ export function LogsTimeline() {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
+      {/* Filters: на телефоне — сетка на всю ширину */}
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="hidden sm:flex items-center gap-2">
           <Filter className="w-4 h-4 text-dark-400" />
           <span className="text-sm text-dark-400">{t('automations.logsTab.filters')}</span>
         </div>
 
-        <Input
-          placeholder={t('automations.logsTab.ruleId')}
-          value={ruleIdFilter}
-          onChange={(e) => { setRuleIdFilter(e.target.value); setPage(1) }}
-          className="w-28 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]"
-          type="number"
-        />
+        {/* Правило — по названию, а не по номеру */}
+        <Select
+          value={ruleIdFilter || 'all'}
+          onValueChange={(v) => { setRuleIdFilter(v === 'all' ? '' : v); setPage(1) }}
+        >
+          <SelectTrigger className="col-span-2 w-full sm:w-56 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+            <SelectValue placeholder={t('automations.logsTab.allRules')} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('automations.logsTab.allRules')}</SelectItem>
+            {(rulesData?.items ?? []).map((r) => (
+              <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Select
           value={resultFilter}
           onValueChange={(v) => { setResultFilter(v === 'all' ? '' : v); setPage(1) }}
         >
-          <SelectTrigger className="w-32 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
+          <SelectTrigger className="col-span-2 w-full sm:w-32 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]">
             <SelectValue placeholder={t('automations.logsTab.resultPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
@@ -114,18 +128,20 @@ export function LogsTimeline() {
           type="date"
           value={dateFrom}
           onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-          className="w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]"
+          aria-label={t('automations.logsTab.from')}
+          className="w-full sm:w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]"
           placeholder={t('automations.logsTab.from')}
         />
         <Input
           type="date"
           value={dateTo}
           onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-          className="w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]"
+          aria-label={t('automations.logsTab.to')}
+          className="w-full sm:w-36 h-8 text-xs bg-[var(--glass-bg)] border-[var(--glass-border)]"
           placeholder={t('automations.logsTab.to')}
         />
 
-        <div className="ml-auto flex gap-2">
+        <div className="col-span-2 flex justify-end gap-2 sm:ml-auto">
           <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!data?.items?.length}>
             <Download className="w-3.5 h-3.5 mr-1" /> CSV
           </Button>
@@ -171,7 +187,9 @@ export function LogsTimeline() {
                       {resultLabel(entry.result)}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-dark-400">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-dark-400">
+                    {/* На телефоне дата — в строке с деталями: справа ей нет места */}
+                    <span className="sm:hidden text-dark-500">{formatDateTime(entry.triggered_at)}</span>
                     <span>{actionTypeLabel(entry.action_taken)}</span>
                     {entry.target_type && (
                       <>
@@ -185,7 +203,7 @@ export function LogsTimeline() {
                   </div>
                 </div>
 
-                <div className="text-xs text-dark-500 flex-shrink-0">
+                <div className="hidden sm:block text-xs text-dark-500 flex-shrink-0">
                   {formatDateTime(entry.triggered_at)}
                 </div>
               </div>
