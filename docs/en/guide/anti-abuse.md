@@ -126,3 +126,89 @@ A separate story: [torrent detection](/en/guide/torrents), the Xray routing tag 
 3. Raise the minimum score — fewer notifications, but weak signals disappear too
 4. Turn off an analyzer that does not suit your audience
 5. The whitelist settles the question for a specific user or address for good
+
+## Client warnings
+
+A violation is not yet a reason to cut access. People often do not know they are breaking the rules: they shared a key with a relative, left a torrent client running, or moved and log in from two countries within an hour. Access cut without explanation comes back to you as a “my VPN is broken” ticket, and sorting it out takes longer than the violation itself.
+
+That is why you can write to the customer: from the violation card, from the Telegram notification with the **“⚠️ Warn”** button, or automatically together with the applied action.
+
+### Texts
+
+**Violations → Warnings tab.** One template per violation type: someone who shares a subscription and someone who downloads torrents need different words. Every template has a switch, an email subject and a text.
+
+The type is determined by the analyzer that contributed the most — the same one the whitelist buttons are based on. If there is no template for it or it is off, the general one is used; if that one is off too, nothing is sent.
+
+::: warning Do not tell the customer what the detector saw
+No countries, device counts or scores. A list of triggered signals in the hands of the violator is a ready-made bypass guide: they will simply spread connections across networks and devices. Give the customer the fact and the consequence; the details stay in the panel.
+:::
+
+The **score threshold** in a template applies only to automatic sending together with an action. Pressing “Warn” sends the message at any score: the operator sees the whole violation, and refusing them because of a weak score means arguing with them.
+
+Sending requires the `violations:resolve` permission — the same as blocking: the message goes to a person on behalf of the service and cannot be taken back. Sending again for the same violation happens only on explicit request, so an accidental double click does not write to the customer.
+
+### Delivery
+
+The warning goes through the Bedolaga bot — to Telegram, and to email if the address is known. This way the message comes from the same place the customer gets everything else from, and the panel needs neither its own bot token nor SMTP.
+
+Channels report separately: a customer who blocked the bot still gets the email.
+
+This requires a bot with the `POST /users/{id}/notify` endpoint in its external API and `BEDOLAGA_API_URL` with `BEDOLAGA_API_TOKEN` filled in — the same ones tickets and customer cards work with.
+
+## Violations in the Bedolaga cabinet
+
+The cabinet can show the customer a warning, and the operator the verdict and the violation history. The panel stays the source of data; the cabinet only displays it.
+
+### How it fits together
+
+```
+cabinet (customer's browser) ──► bot (Web API) ──► panel (API v3)
+                                   the key lives here
+```
+
+The cabinet **does not talk to the panel directly**: its frontend runs in the user's browser, and any key that ends up there is available to the customer. Only the bot's server knows the key.
+
+### Setup
+
+**1. Enable the panel's external API.** A web backend variable:
+
+```
+EXTERNAL_API_ENABLED=true
+```
+
+Without it `/api/v3/*` does not respond. The state is shown in **Settings → API**.
+
+**2. Create a key.** **API & Webhooks → API keys → Create**, scope — **only `violations:read`**. The bot only reads the verdict and the history and needs no write permissions. The key is shown once and looks like `rwa_…`.
+
+**3. Set four variables for the bot:**
+
+| Variable | Example | What it does |
+|----------|---------|--------------|
+| `ABUSE_API_ENABLED` | `true` | the main switch of the integration |
+| `ABUSE_API_URL` | `https://panel.example.com/api/v3` | the panel's external API address |
+| `ABUSE_API_KEY` | `rwa_…` | the key from the previous step |
+| `ABUSE_API_TIMEOUT` | `5` | how many seconds to wait for a response |
+
+If the panel and the bot share a docker network, the address can be internal: `http://remnawave-web-backend:8081/api/v3`. On different servers use public https.
+
+### What appears
+
+**The customer** sees a banner on the home page with the very warning that was sent to them and a button to contact support. Only the latest one and only while it is relevant: the customer sees neither history nor scores nor violation types — this data is not in the response their browser gets.
+
+**The operator** sees a level chip next to the name on the customer card (“Flagged”, “Limited”) and a “Violations” tab with the history: date, reason, score, the action taken, whether a warning was sent. The tab is read-only; warning, blocking or annulling is done in the panel and its notifications.
+
+### If it is not connected
+
+Nothing breaks. The tab honestly says the service is not connected, there is no banner, and the other screens work as before. An unavailable panel or a slow response is treated the same way: **no questions to the customer**. A mistake in this direction costs nothing, while one in the other direction refuses an honest person and shows them a warning about a violation that never happened.
+
+### Levels
+
+| Level | When | What it means |
+|-------|------|---------------|
+| `clean` | no violations in the window, or the customer is whitelisted | no questions |
+| `warned` | there are violations, but no action was taken | worth keeping an eye on |
+| `limited` | a block or a speed limit was applied for the latest violation | access is already limited |
+
+Annulled violations are not counted: the detector was wrong, and the person has nothing to do with it. The whitelist overrides everything — it is set by hand, already knowing about the violations.
+
+The verdict is served by `GET /api/v3/violations/summary?telegram_id=…`; any integration of your own can use it too — for example, to deny trials to limited customers.

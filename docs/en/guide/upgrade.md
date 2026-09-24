@@ -33,7 +33,7 @@ The agent version is shown on the node card in the panel. If it is too old for a
 
 ## Before a big upgrade
 
-- Read the [release notes](https://github.com/Case211/remnawave-admin/releases) — the "Important" section is exactly the list of things you have to do by hand
+- Read the [release notes](/en/releases/) — the "Important" section is exactly the list of things you have to do by hand
 - Take a [database backup](/en/guide/backups); the panel can do it from the interface
 - Keep the previous image tag handy: rolling back is a tag change plus `docker compose up -d`
 

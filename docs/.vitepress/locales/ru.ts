@@ -7,10 +7,12 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
     nav: [
       { text: 'Руководство', link: '/guide/overview', activeMatch: '/guide/' },
       { text: 'Справочник', link: '/reference/env', activeMatch: '/reference/' },
+      { text: 'Релизы', link: '/releases/', activeMatch: '/releases/' },
       {
         text: 'Ссылки',
         items: [
-          { text: 'Релизы', link: 'https://github.com/Case211/remnawave-admin/releases' },
+          { text: 'Релизы на GitHub', link: 'https://github.com/Case211/remnawave-admin/releases' },
+          { text: 'Обновления в Telegram', link: 'https://t.me/remnawave_admin/3032' },
           { text: 'Чат в Telegram', link: 'https://t.me/remnawave_admin' },
           { text: 'Issues', link: 'https://github.com/Case211/remnawave-admin/issues' },
         ],
@@ -95,6 +97,16 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
             { text: 'Подписки и доставка', link: '/reference/webhooks' },
             { text: 'Каталог событий', link: '/reference/webhook-events' },
             { text: 'Проверка подписи', link: '/reference/webhook-signatures' },
+          ],
+        },
+      ],
+
+      '/releases/': [
+        {
+          text: 'Релизы',
+          items: [
+            { text: 'Все релизы', link: '/releases/' },
+            { text: '5.0.0', link: '/releases/5.0.0' },
           ],
         },
       ],
