@@ -132,11 +132,42 @@ async def test_empty_text_means_silence(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_no_telegram_no_notice(monkeypatch):
-    """Клиента в боте нет — писать некуда, и это не ошибка."""
-    result = await notices.send_notice({"id": 1, "telegram_id": None})
+async def test_no_recipient_no_notice(monkeypatch):
+    """Без Telegram и почты адресата нет, и это не ошибка доставки."""
+    result = await notices.send_notice({"id": 1, "telegram_id": None, "email": None})
 
-    assert result == {"sent": False, "reason": "no_telegram_id"}
+    assert result == {"sent": False, "reason": "no_recipient"}
+
+
+@pytest.mark.asyncio
+async def test_email_only_notice_is_delivered_and_recorded(monkeypatch):
+    conn = _Conn({"default": _template(kind="default", min_score=0, send_email=False)})
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+
+    async def fake_user(email):
+        assert email == "person@example.com"
+        return {"id": 7, "telegram_id": None, "email": email}
+
+    async def fake_notify(user_id, **kwargs):
+        assert user_id == 7
+        assert kwargs["channels"] == ["email"]
+        return {"telegram": {"sent": False}, "email": {"sent": True}}
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_user_by_email", fake_user)
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.notify_user", fake_notify)
+
+    result = await notices.send_notice({
+        "id": 1,
+        "telegram_id": None,
+        "email": "person@example.com",
+        "user_uuid": "11111111-2222-3333-4444-555555555555",
+        "score": 90,
+    })
+
+    assert result["sent"] is True
+    assert result["email"]["sent"] is True
+    assert any("violation_notices" in sql for sql in conn.executed)
 
 
 @pytest.mark.asyncio
