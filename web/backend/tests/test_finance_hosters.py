@@ -1,5 +1,6 @@
 """Тесты нативных адаптеров хостеров: Timeweb, Aeza, Hetzner, Selectel."""
 import json
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -389,8 +390,13 @@ class TestRegru:
         from web.backend.core.finance.adapters.regru import RegruAdapter
 
         def handler(request: httpx.Request) -> httpx.Response:
-            params = dict(request.url.params)
+            # как настоящий reg.ru: только POST, креды формой в теле, а не в URL
+            if request.method != "POST":
+                return httpx.Response(200, json={"result": "error", "error_code": "ONLY_POST_ALLOWED",
+                                                 "error_text": "Only HTTP method POST allowed"})
+            params = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
             assert params.get("username") == "u" and params.get("password") == "p"
+            assert b"password" not in request.url.query
             if request.url.path.endswith("/service/get_list"):
                 return httpx.Response(200, json={"result": "success", "answer": {"services": [{
                     "service_id": "1", "servname": "mydomain.ru", "servtype": "domain",

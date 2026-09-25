@@ -1,5 +1,6 @@
 """Тесты DNS-провайдеров (core/dns/*): Cloudflare, Timeweb, reg.ru + реестр/креды."""
 import json
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -136,25 +137,37 @@ class TestTimeweb:
 # ── reg.ru ───────────────────────────────────────────────────────
 
 
+def _regru(handler):
+    """Мок API reg.ru: как настоящий, принимает только POST с формой в теле."""
+    def h(request: httpx.Request) -> httpx.Response:
+        if request.method != "POST":
+            return httpx.Response(200, json={
+                "result": "error", "error_code": "ONLY_POST_ALLOWED",
+                "error_text": "Only HTTP method POST allowed"})
+        form = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
+        return handler(request.url.path, form)
+    return h
+
+
 class TestRegru:
     @pytest.mark.asyncio
     async def test_zones_records_synthetic_id(self):
         from web.backend.core.dns.regru import RegruProvider, _unid
 
-        def h(request: httpx.Request) -> httpx.Response:
-            p = request.url.path
-            assert dict(request.url.params).get("username") == "u"
-            if p.endswith("/domain/get_list"):
+        def h(path, form):
+            assert form["username"] == "u"
+            if path.endswith("/domain/get_list"):
                 return httpx.Response(200, json={"result": "success",
                                                  "answer": {"domains": [{"dname": "a.com"}]}})
-            if p.endswith("/zone/get_resource_records"):
+            if path.endswith("/zone/get_resource_records"):
                 return httpx.Response(200, json={"result": "success", "answer": {"domains": [
-                    {"dname": "a.com", "rrs": [
+                    {"dname": "a.com", "result": "success", "rrs": [
                         {"subname": "www", "rectype": "A", "content": "1.2.3.4"}]}]}})
             return httpx.Response(404)
 
         prov = RegruProvider()
-        with patch("httpx.AsyncClient", _patched_client(h)):
+        with patch("httpx.AsyncClient", _patched_client(_regru(h))):
+            assert await prov.verify({"username": "u", "password": "p"}) is True
             zs = await prov.list_zones({"username": "u", "password": "p"})
             rs = await prov.list_records({"username": "u", "password": "p"}, "a.com")
         assert zs[0].name == "a.com"
@@ -163,19 +176,52 @@ class TestRegru:
         assert _unid(r.id) == ("www", "A", "1.2.3.4")
 
     @pytest.mark.asyncio
+    async def test_credentials_go_in_post_body_not_url(self):
+        from web.backend.core.dns.regru import RegruProvider
+
+        seen = []
+
+        def h(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(200, json={"result": "success", "answer": {"domains": []}})
+
+        with patch("httpx.AsyncClient", _patched_client(h)):
+            await RegruProvider().list_zones({"username": "u", "password": "secret"})
+
+        req = seen[0]
+        form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
+        assert req.method == "POST"
+        assert req.headers["content-type"].startswith("application/x-www-form-urlencoded")
+        assert form["password"] == "secret" and json.loads(form["input_data"]) == {}
+        assert b"secret" not in req.url.query
+
+    @pytest.mark.asyncio
+    async def test_domain_level_error_raises(self):
+        from web.backend.core.dns.regru import RegruProvider
+        from web.backend.core.dns import DnsProviderError
+
+        def h(path, form):
+            return httpx.Response(200, json={"result": "success", "answer": {"domains": [
+                {"dname": "a.com", "result": "error", "error_code": "DOMAIN_NOT_FOUND",
+                 "error_text": "Domain not found"}]}})
+
+        with patch("httpx.AsyncClient", _patched_client(_regru(h))):
+            with pytest.raises(DnsProviderError, match="Domain not found"):
+                await RegruProvider().create_record({"username": "u", "password": "p"}, "a.com", {
+                    "type": "MX", "name": "@", "content": "mx.a.com", "priority": 10})
+
+    @pytest.mark.asyncio
     async def test_create_a_then_delete(self):
         from web.backend.core.dns.regru import RegruProvider
 
         calls = []
 
-        def h(request):
-            p = request.url.path
-            input_data = json.loads(dict(request.url.params).get("input_data", "{}"))
-            calls.append((p.split("/")[-1], input_data))
+        def h(path, form):
+            calls.append((path.split("/")[-1], json.loads(form.get("input_data", "{}"))))
             return httpx.Response(200, json={"result": "success", "answer": {}})
 
         prov = RegruProvider()
-        with patch("httpx.AsyncClient", _patched_client(h)):
+        with patch("httpx.AsyncClient", _patched_client(_regru(h))):
             rec = await prov.create_record({"username": "u", "password": "p"}, "a.com", {
                 "type": "A", "name": "www", "content": "9.9.9.9"})
             await prov.delete_record({"username": "u", "password": "p"}, "a.com", rec.id)

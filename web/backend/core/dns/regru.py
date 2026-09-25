@@ -45,7 +45,9 @@ class RegruProvider(DnsProvider):
         }
         try:
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, follow_redirects=True) as client:
-                resp = await client.get(f"{_BASE}{path}", params=params)
+                # reg.ru принимает только POST (на GET отвечает ONLY_POST_ALLOWED);
+                # логин и пароль уходят формой в теле, а не в строке URL
+                resp = await client.post(f"{_BASE}{path}", data=params)
             data = resp.json()
         except httpx.HTTPError as e:
             raise DnsProviderError(f"Сеть/HTTP ({path}): {e}")
@@ -54,7 +56,15 @@ class RegruProvider(DnsProvider):
         if isinstance(data, dict) and str(data.get("result")).lower() == "error":
             raise DnsProviderError(
                 f"reg.ru: {data.get('error_text') or data.get('error_code') or 'ошибка'}")
-        return data.get("answer") if isinstance(data, dict) else None
+        answer = data.get("answer") if isinstance(data, dict) else None
+        # Операции над списком доменов отвечают общим result=success,
+        # а ошибка конкретного домена лежит в нём самом
+        for dom in (answer.get("domains") if isinstance(answer, dict) else None) or []:
+            if isinstance(dom, dict) and str(dom.get("result")).lower() == "error":
+                raise DnsProviderError(
+                    f"reg.ru ({dom.get('dname') or path}): "
+                    f"{dom.get('error_text') or dom.get('error_code') or 'ошибка'}")
+        return answer
 
     async def verify(self, creds: Dict[str, str]) -> bool:
         try:
