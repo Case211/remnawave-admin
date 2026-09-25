@@ -1,7 +1,8 @@
 """reg.ru — регистратор доменов и услуги (логин + пароль API).
 
 База: https://api.reg.ru/api/regru2
-- услуги: GET /service/get_list -> answer.services[] (домены/VPS с датой продления)
+- услуги: POST /service/get_list -> answer.services[] (домены/VPS с датой продления);
+  API принимает только POST (на GET — ONLY_POST_ALLOWED), параметры — формой в теле
 Ответ: {result: "success"|"error", answer|error_text}. Цена/срок из услуги.
 Пароль — рекомендуется отдельный API-пароль (Настройки → Управление доступом).
 Баланс через API нестабилен — не запрашиваем (домены/даты — главное).
@@ -45,7 +46,7 @@ class RegruAdapter(HosterAdapter):
 
     async def _call(self, client: httpx.AsyncClient, path: str, params: Dict[str, str]) -> Any:
         try:
-            resp = await client.get(f"{_BASE}{path}", params=params)
+            resp = await client.post(f"{_BASE}{path}", data=params)
         except httpx.HTTPError as e:
             raise AdapterError(f"Сеть/HTTP ({path}): {e}")
         try:
