@@ -135,7 +135,12 @@ That is why you can write to the customer: from the violation card, from the Tel
 
 ### Texts
 
-**Violations → Warnings tab.** One template per violation type: someone who shares a subscription and someone who downloads torrents need different words. Every template has a switch, an email subject and a text.
+**Violations → Warnings tab.** One template per violation type: someone who shares a subscription and someone who downloads torrents need different words. Every template has a switch, a score threshold and channels — **Telegram** and **Email**: the warning goes strictly through the checked ones, and at least one always stays on.
+
+The channels have separate texts; the **Telegram / Email** switch in the template changes the editor:
+
+- **Telegram** — HTML in Telegram's reduced markup: `<b>`, `<i>`, `<u>`, `<s>`, `<a href>`, `<code>`, `<pre>`, `<blockquote>`, `<tg-spoiler>`; a line break is just Enter. Telegram rejects the whole message because of one extra tag or a bare `&`, so the editor highlights such places as you type, and a template with errors will not save. Next to it is a preview styled as a message. The customer sees the same text in the cabinet, without the tags.
+- **Email** — the subject and ordinary email HTML with a preview. Empty — the email is built from the Telegram text: line breaks, bold, links. The “Start from the Telegram text” button puts that layout into the editor so you can edit it.
 
 The type is determined by the analyzer that contributed the most — the same one the whitelist buttons are based on. If there is no template for it or it is off, the general one is used; if that one is off too, nothing is sent.
 
@@ -149,11 +154,27 @@ Sending requires the `violations:resolve` permission — the same as blocking: t
 
 ### Delivery
 
-The warning goes through the Bedolaga bot — to Telegram, and to email if the address is known. This way the message comes from the same place the customer gets everything else from, and the panel needs neither its own bot token nor SMTP.
+Telegram goes through the Bedolaga bot — the same bot the customer already talks to. Email goes through it too, and if the bot did not deliver it (not connected, did not find the customer, the customer has no email in the bot), it is sent by the panel's **built-in mail server**, provided a sending domain is set up. Any customer with an email gets the letter, whether they have Telegram or not.
 
-Channels report separately: a customer who blocked the bot still gets the email.
+Channels report separately: a customer who blocked the bot still gets the email. If the customer has no contacts for the enabled channels, the warning is not sent, and the operator sees why.
 
-This requires a bot with the `POST /users/{id}/notify` endpoint in its external API and `BEDOLAGA_API_URL` with `BEDOLAGA_API_TOKEN` filled in — the same ones tickets and customer cards work with.
+Telegram requires a bot with the `POST /users/{id}/notify` endpoint in its external API and `BEDOLAGA_API_URL` with `BEDOLAGA_API_TOKEN` filled in — the same ones tickets and customer cards work with.
+
+### Warn first, act later
+
+A soft scenario for violation types where the detector is wrong more often: the customer is warned right away, and the action is applied only if nothing has changed within the allotted time. It is built as a rule in **Automations**: the “Violation detected” (or “Torrent detected”) event, the “Warn user” action, then a “Limit speed” or “Block user” step with the **“Run after N h after the trigger”** field.
+
+A delayed step waits in the database and survives a restart. Before running, it re-checks the case and is skipped if:
+
+- the violation was annulled or already resolved by an operator;
+- the customer is whitelisted;
+- the action is already in place — otherwise a delayed one-day block would unblock someone blocked forever, and a limit would override a manual one;
+- the customer contacted support in the meantime (Bedolaga tickets or [external support events](/en/reference/api-endpoints#external-support-contact)) — then the operator decides; the check can be turned off for the step;
+- the rule was turned off — this cancels all waiting steps.
+
+If the warning in the chain did not reach the customer, the delayed action is not applied at all: punishing without explanation is exactly what the chain protects against. A repeated trigger for the same customer does not add a second action while the first one is waiting. What is waiting, what ran and why a step was skipped is in the automations log.
+
+The detector's built-in auto-block (hard_block, e.g. for trial abuse) fires immediately. To route it through a warning too, turn off `violation_auto_hard_block` and create a rule: “Violation detected” with the condition `recommended_action = hard_block` → “Warn user” → after N hours “Block user” with the **“Also trial-abuse accomplices on the same HWID”** checkbox. Like the built-in auto-block, the action reaches other subscriptions with a live trial on the same device — otherwise the bundle keeps working; it does not touch customers who are already blocked, limited or whitelisted.
 
 ## Violations in the Bedolaga cabinet
 

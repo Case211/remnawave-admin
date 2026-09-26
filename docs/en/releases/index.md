@@ -4,6 +4,7 @@ Detailed notes for Remnawave Admin versions: what is new, what is fixed and what
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [5.1.0](/en/releases/5.1.0) | 2026-09-26 | Delayed action in automations (“warn, limit after N h”), HWID accomplices, external support events, channels and editors in warning templates |
 | [5.0.0](/en/releases/5.0.0) | 2026-09-24 | Tickets, node speed shaper, violation warnings, S3 backups, alerts in automations |
 
 Notes for versions before 5.0.0 are on [GitHub](https://github.com/Case211/remnawave-admin/releases). How to upgrade is described in [Upgrade](/en/guide/upgrade).
