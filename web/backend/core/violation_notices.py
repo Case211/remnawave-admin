@@ -21,6 +21,13 @@ import json
 import logging
 from typing import Optional
 
+from web.backend.core.notice_markup import (
+    describe_issue,
+    telegram_markup_issues,
+    telegram_to_email_html,
+    telegram_to_text,
+)
+
 logger = logging.getLogger(__name__)
 
 # Порядок важен: сюда же смотрит интерфейс шаблонов.
@@ -30,9 +37,18 @@ NOTICE_KINDS = (
 )
 
 _TEMPLATE_FIELDS = (
-    "kind", "enabled", "min_score", "send_email",
-    "subject_ru", "body_ru", "subject_en", "body_en", "updated_at", "updated_by",
+    "kind", "enabled", "min_score", "send_telegram", "send_email",
+    "subject_ru", "body_ru", "email_html_ru", "subject_en", "body_en", "updated_at", "updated_by",
 )
+
+
+class NoticeTemplateError(ValueError):
+    """Шаблон в таком виде сохранять нельзя; ``code`` — код ошибки для API."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
 
 
 async def list_templates() -> list[dict]:
@@ -51,30 +67,52 @@ async def list_templates() -> list[dict]:
 
 
 async def update_template(kind: str, data: dict, *, updated_by: str | None = None) -> Optional[dict]:
-    """Правка шаблона. Возвращает обновлённую строку либо None, если вида нет."""
+    """Правка шаблона. Возвращает обновлённую строку либо None, если вида нет.
+
+    ``NoticeTemplateError`` — текст не пройдёт в Telegram или у шаблона не
+    осталось ни одного канала.
+    """
     from shared.database import db_service
 
     if kind not in NOTICE_KINDS or not db_service.is_connected:
         return None
 
-    allowed = ("enabled", "min_score", "send_email", "subject_ru", "body_ru", "subject_en", "body_en")
+    allowed = (
+        "enabled", "min_score", "send_telegram", "send_email",
+        "subject_ru", "body_ru", "email_html_ru", "subject_en", "body_en",
+    )
     updates = {key: data[key] for key in allowed if key in data}
     if not updates:
         return None
 
+    # Telegram отвергает сообщение целиком из-за одного лишнего тега — узнать
+    # об этом надо сейчас, а не от клиента, которому ничего не пришло.
+    body = updates.get("body_ru") or ""
+    issues = telegram_markup_issues(body)
+    if issues:
+        raise NoticeTemplateError(
+            "NOTICE_MARKUP_INVALID",
+            "Telegram markup: " + "; ".join(describe_issue(body, issue) for issue in issues[:5]),
+        )
+
     columns = ", ".join(f"{key} = ${i + 2}" for i, key in enumerate(updates))
     args = [kind, *updates.values()]
     async with db_service.acquire() as conn:
-        row = await conn.fetchrow(
-            f"""
-            UPDATE violation_notice_templates
-               SET {columns}, updated_at = NOW(), updated_by = ${len(args) + 1}
-             WHERE kind = $1
-            RETURNING id, {', '.join(_TEMPLATE_FIELDS)}
-            """,
-            *args,
-            updated_by,
-        )
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                f"""
+                UPDATE violation_notice_templates
+                   SET {columns}, updated_at = NOW(), updated_by = ${len(args) + 1}
+                 WHERE kind = $1
+                RETURNING id, {', '.join(_TEMPLATE_FIELDS)}
+                """,
+                *args,
+                updated_by,
+            )
+            # Шаблон без каналов молча ничего не отправит — это не настройка,
+            # а ошибка; выключают предупреждение переключателем «Включено».
+            if row and not (row["send_telegram"] or row["send_email"]):
+                raise NoticeTemplateError("NOTICE_NO_CHANNEL", "At least one delivery channel is required")
     return dict(row) if row else None
 
 
@@ -181,25 +219,31 @@ async def send_notice(
     if not template:
         return {"sent": False, "reason": "no_template", "kind": kind}
 
+    # Каналы — строго отмеченные в шаблоне: выключил оператор почту — письма
+    # нет, даже если Telegram не дошёл.
+    want_telegram = bool(template.get("send_telegram", True)) and bool(telegram_id)
+    want_email = bool(template.get("send_email")) and bool(email)
+    if not (want_telegram or want_email):
+        return {"sent": False, "reason": "no_channel", "kind": kind}
+
     body = str(template.get("body_ru") or "")
     subject = str(template.get("subject_ru") or "Использование подписки")
-    html = "<p>" + body.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
-    want_email = bool(template.get("send_email"))
+    # Своё письмо у шаблона необязательно: пусто — собираем из текста Telegram
+    email_html = str(template.get("email_html_ru") or "").strip() or telegram_to_email_html(body)
+    plain = telegram_to_text(body)
 
     # Сначала бот Bedolaga: Telegram от сервисного бота и письмо её почтой
     result, reason = await _deliver_via_bedolaga(
-        violation_id, telegram_id, email, want_email, subject, body, html,
+        violation_id, telegram_id, email, want_telegram, want_email, subject, body, plain, email_html,
     )
     telegram_ok = bool(((result or {}).get("telegram") or {}).get("sent"))
     email_ok = bool(((result or {}).get("email") or {}).get("sent"))
     email_result = (result or {}).get("email")
 
-    # Главное — чтобы дошло письмо, если у клиента есть почта. Бот не доставил
-    # ничего (не настроен, без ручки /notify, клиента не нашёл) — пишем своим
-    # почтовым сервером любому клиенту с email; доставил только Telegram, а
-    # шаблон просит «и на почту» — досылаем письмо сами.
-    if email and not email_ok and (not telegram_ok or want_email):
-        if await _send_own_email(email, subject, body, html):
+    # Письмо бот не доставил (не настроен, без ручки /notify, клиента не нашёл,
+    # у клиента в боте нет почты) — отправляем своим почтовым сервером.
+    if want_email and not email_ok:
+        if await _send_own_email(email, subject, plain, email_html):
             email_ok = True
             email_result = {"sent": True, "via": "mail_server"}
         elif not telegram_ok:
@@ -244,9 +288,21 @@ async def send_notice(
 
 
 async def _deliver_via_bedolaga(
-    violation_id: int, telegram_id, email: str, want_email: bool, subject: str, body: str, html: str,
+    violation_id: int,
+    telegram_id,
+    email: str,
+    want_telegram: bool,
+    want_email: bool,
+    subject: str,
+    body: str,
+    plain: str,
+    email_html: str,
 ) -> tuple[Optional[dict], Optional[str]]:
-    """Доставка ботом Bedolaga. Возвращает (ответ бота или None, причина неудачи или None)."""
+    """Доставка ботом Bedolaga. Возвращает (итоги по каналам или None, причина неудачи или None).
+
+    Каналы — отдельными вызовами: текст бот кладёт и в Telegram, и в текстовую
+    часть письма, а у Telegram в нём теги.
+    """
     from shared.bedolaga_client import bedolaga_client
     from web.backend.api.v2.bedolaga import ensure_configured
 
@@ -269,17 +325,24 @@ async def _deliver_via_bedolaga(
     if not bot_user_id:
         return None, "user_not_found"
 
-    if telegram_id:
-        channels = ["telegram", "email"] if want_email else ["telegram"]
-    else:
-        # Без Telegram письмо — единственный канал
-        channels = ["email"]
-    try:
-        result = await bedolaga_client.notify_user(
-            bot_user_id, text=body, channels=channels, email_subject=subject, email_html=html,
-        )
-    except Exception as exc:  # noqa: BLE001 — бот недоступен или без ручки /notify (#3270)
-        logger.warning("Предупреждение по нарушению %s ботом не доставлено: %s", violation_id, exc)
+    calls = []
+    if want_telegram:
+        calls.append(("telegram", {"text": body, "channels": ["telegram"]}))
+    if want_email:
+        calls.append(("email", {
+            "text": plain or subject, "channels": ["email"],
+            "email_subject": subject, "email_html": email_html,
+        }))
+
+    result: dict = {}
+    for channel, payload in calls:
+        try:
+            answer = await bedolaga_client.notify_user(bot_user_id, **payload)
+        except Exception as exc:  # noqa: BLE001 — бот недоступен или без ручки /notify (#3270)
+            logger.warning("Предупреждение по нарушению %s ботом не доставлено (%s): %s", violation_id, channel, exc)
+            continue
+        result[channel] = (answer or {}).get(channel)
+    if not result:
         return None, "delivery_failed"
     return result, None
 

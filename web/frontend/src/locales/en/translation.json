@@ -2031,12 +2031,13 @@
       "no_recipient": "The user has neither Telegram nor email — nowhere to send the warning",
       "already_notified": "The user has already been warned about this violation",
       "no_template": "No enabled warning template for this kind of violation",
-      "bedolaga_not_configured": "Bedolaga is not connected and the user has no email",
-      "user_not_found": "The user was not found in the Bedolaga bot and has no email",
-      "delivery_failed": "The Bedolaga bot did not accept the warning and the user has no email",
+      "bedolaga_not_configured": "Bedolaga is not connected, and there will be no email: the customer has no email or Email is off in the template",
+      "user_not_found": "The customer is not found in the Bedolaga bot, and there will be no email: no email address or Email is off in the template",
+      "delivery_failed": "The Bedolaga bot rejected the warning, and there will be no email: no email address or Email is off in the template",
       "mail_failed": "The bot did not deliver and our mail server could not send the email — check its settings",
       "not_delivered": "Neither Telegram nor email delivered the warning",
-      "unknown": "The warning was not sent"
+      "unknown": "The warning was not sent",
+      "no_channel": "Nothing to deliver with: the customer has no Telegram or email for the channels enabled in the template"
     },
     "toast": {
       "warned": "Warning sent",
@@ -2199,11 +2200,10 @@
       "hint": "The customer gets these texts when an operator warns them or applies an action. Do not spell out what the detector saw: such hints are simply worked around.",
       "saved": "Template saved",
       "enabled": "Warn",
-      "alsoEmail": "and by email",
       "minScore": "Auto-send threshold",
       "off": "off",
       "updatedBy": "edited by {{name}}",
-      "subjectPlaceholder": "Email subject",
+      "subjectPlaceholder": "Default: «{{subject}}»",
       "bodyPlaceholder": "Warning text",
       "kinds": {
         "default": "General (subscription sharing)",
@@ -2217,7 +2217,56 @@
         "torrent": "Torrent (P2P traffic)",
         "traffic_rate": "Traffic usage (excessive consumption)"
       },
-      "minScoreHint": "Applies to auto-sending only: the «Warn» button sends regardless of the score"
+      "minScoreHint": "Applies to auto-sending only: the «Warn» button sends regardless of the score",
+      "telegram": "Telegram",
+      "email": "Email",
+      "lastChannel": "At least one channel has to stay on — to stop warnings, use the «Warn» switch",
+      "channelOff": "off",
+      "editorFor": "Text for the channel",
+      "emptyBody": "The Telegram text is empty — this template sends nothing: the email and the cabinet banner are built from it too",
+      "telegramHint": "Telegram markup: <b>, <i>, <u>, <s>, <a href>, <code>, <pre>, <blockquote>, <tg-spoiler>. A line break is just Enter. The customer sees the same text in the cabinet, and the email is built from it unless it has its own.",
+      "previewTelegram": "What the customer sees in Telegram",
+      "previewEmpty": "Nothing yet",
+      "issuesTitle": "Telegram will reject this text",
+      "fixSpecialChars": "Escape special characters",
+      "saveBlocked": "Telegram will not accept a message with markup errors — fix the highlighted spots",
+      "subject": "Email subject",
+      "emailPlaceholder": "Empty — the email is built from the Telegram text",
+      "fillFromTelegram": "Start from the Telegram text",
+      "useTelegramText": "Build the email from the Telegram text again",
+      "emailAutoHint": "No custom HTML — the email is built from the Telegram text: line breaks, bold, links. To lay it out differently, start from the Telegram text and edit.",
+      "emailOwnHint": "The email goes out exactly like this. Its plain-text version comes from the Telegram text.",
+      "previewEmail": "What the email looks like",
+      "format": {
+        "toolbar": "Formatting",
+        "bold": "Bold",
+        "italic": "Italic",
+        "underline": "Underline",
+        "strike": "Strikethrough",
+        "spoiler": "Spoiler",
+        "code": "Monospace",
+        "link": "Link",
+        "quote": "Quote"
+      },
+      "markup": {
+        "line": "Line {{line}}:",
+        "more": "…and {{count}} more",
+        "raw_lt": "write «<» as &lt;",
+        "raw_gt": "write «>» as &gt;",
+        "raw_amp": "write «&» as &amp;",
+        "unknown_entity": "Telegram does not know {{entity}} — only &lt; &gt; &amp; &quot; and numeric ones like &#169;",
+        "unknown_tag": "Telegram does not support <{{tag}}>",
+        "line_break": "<{{tag}}> does not work in Telegram — a line break is just Enter",
+        "self_closing": "<{{tag}}/> must be opened and closed: <{{tag}}>…</{{tag}}>",
+        "bad_attr": "<{{tag}}> has no {{attr}} attribute",
+        "missing_attr": "<{{tag}}> needs the {{attr}} attribute",
+        "mismatched": "</{{tag}}> closes the wrong tag — close <{{expected}}> first",
+        "unexpected_close": "extra </{{tag}}>: this tag is not open",
+        "unclosed": "<{{tag}}> is not closed",
+        "inside_code": "formatting does not work inside <{{parent}}>: <{{tag}}>",
+        "nested_link": "a link inside a link does not work",
+        "nested_quote": "a quote inside a quote does not work"
+      }
     }
   },
   "admins": {
@@ -6080,7 +6129,9 @@
     "tokenParseFailed": "Failed to parse token",
     "API_KEY_NOT_FOUND": "API key not found",
     "WEBHOOK_NOT_FOUND": "Webhook not found",
-    "SCOPE_NOT_ALLOWED": "You cannot grant an API key rights you do not have yourself"
+    "SCOPE_NOT_ALLOWED": "You cannot grant an API key rights you do not have yourself",
+    "NOTICE_MARKUP_INVALID": "Telegram will not accept this markup — fix the spots highlighted in the editor",
+    "NOTICE_NO_CHANNEL": "A template needs at least one delivery channel"
   },
   "backup": {
     "title": "Backups",

@@ -227,8 +227,11 @@ class TestNotifyScope:
         conn = MagicMock()
         conn.fetchrow = AsyncMock(return_value={"id": 7, "user_uuid": "dead-beef", "telegram_id": 42})
         send = AsyncMock(return_value={"sent": True})
-        with patch("shared.database.db_service", _db_service_with(conn)),              patch("web.backend.core.rbac.get_visible_user_uuids",
-                   new_callable=AsyncMock, return_value={"other-uuid"}),              patch("web.backend.core.violation_notices.send_notice", send):
+        with (
+            patch("shared.database.db_service", _db_service_with(conn)),
+            patch("web.backend.core.rbac.get_visible_user_uuids", new_callable=AsyncMock, return_value={"other-uuid"}),
+            patch("web.backend.core.violation_notices.send_notice", send),
+        ):
             resp = await client.post("/api/v2/violations/7/notify", json={})
         assert resp.status_code == 403
         send.assert_not_called()
@@ -238,7 +241,11 @@ class TestNotifyScope:
         conn = MagicMock()
         conn.fetchrow = AsyncMock(return_value={"id": 7, "user_uuid": "dead-beef", "telegram_id": 42})
         send = AsyncMock(return_value={"sent": False, "reason": "no_template"})
-        with patch("shared.database.db_service", _db_service_with(conn)),              patch("web.backend.core.rbac.get_visible_user_uuids", new_callable=AsyncMock, return_value=None),              patch("web.backend.core.violation_notices.send_notice", send):
+        with (
+            patch("shared.database.db_service", _db_service_with(conn)),
+            patch("web.backend.core.rbac.get_visible_user_uuids", new_callable=AsyncMock, return_value=None),
+            patch("web.backend.core.violation_notices.send_notice", send),
+        ):
             resp = await client.post("/api/v2/violations/7/notify", json={})
         assert resp.status_code == 200
         assert resp.json() == {"sent": False, "reason": "no_template"}
@@ -249,6 +256,37 @@ class TestNotifyScope:
         """Без тела FastAPI отвечает 422 — поэтому веб-кнопка шлёт {} (#285)."""
         resp = await client.post("/api/v2/violations/7/notify")
         assert resp.status_code == 422
+
+
+class TestNoticeTemplatePatch:
+    """Шаблон, который Telegram не примет, не сохраняется — и оператор видит почему."""
+
+    @pytest.mark.asyncio
+    async def test_rejected_template_is_400_with_code(self, app, client):
+        from web.backend.core.violation_notices import NoticeTemplateError
+
+        update = AsyncMock(side_effect=NoticeTemplateError("NOTICE_MARKUP_INVALID", "Telegram markup: line_break at 1:6"))
+        with patch("web.backend.core.violation_notices.update_template", update):
+            resp = await client.patch("/api/v2/violations/notice-templates/default", json={"body_ru": "текст<br>"})
+
+        assert resp.status_code == 400
+        assert "NOTICE_MARKUP_INVALID" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_channel_and_letter_fields_reach_storage(self, app, client):
+        update = AsyncMock(return_value={"kind": "default"})
+        with (
+            patch("web.backend.core.violation_notices.update_template", update),
+            patch("web.backend.api.v2.violations.write_audit_log", new_callable=AsyncMock),
+        ):
+            resp = await client.patch(
+                "/api/v2/violations/notice-templates/default",
+                json={"send_telegram": False, "email_html_ru": ""},
+            )
+
+        assert resp.status_code == 200
+        # Пустое письмо — осознанная очистка, а не «поле не прислали»
+        assert update.await_args.args[1] == {"send_telegram": False, "email_html_ru": ""}
 
 
 class TestRowToListItem:

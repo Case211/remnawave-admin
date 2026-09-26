@@ -141,7 +141,7 @@ async def test_no_recipient_no_notice(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_only_notice_is_delivered_and_recorded(monkeypatch):
-    conn = _Conn({"default": _template(kind="default", min_score=0, send_email=False)})
+    conn = _Conn({"default": _template(kind="default", min_score=0, body_ru="<b>Важно</b>: текст")})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
     monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
 
@@ -152,6 +152,9 @@ async def test_email_only_notice_is_delivered_and_recorded(monkeypatch):
     async def fake_notify(user_id, **kwargs):
         assert user_id == 7
         assert kwargs["channels"] == ["email"]
+        # Текстовая часть письма — без тегов Telegram, вёрстка — отдельно
+        assert kwargs["text"] == "Важно: текст"
+        assert "<b>Важно</b>" in kwargs["email_html"]
         return {"telegram": {"sent": False}, "email": {"sent": True}}
 
     monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_user_by_email", fake_user)
@@ -261,8 +264,8 @@ _VIOLATION = {"id": 1, "user_uuid": "11111111-2222-3333-4444-555555555555", "sco
 
 @pytest.mark.asyncio
 async def test_without_bedolaga_email_goes_via_own_server(monkeypatch):
-    """Главное — почта: бота нет, а письмо клиент всё равно получает."""
-    conn = _Conn({"default": _template(kind="default", min_score=0, send_email=False)})
+    """Бота нет, а письмо клиент всё равно получает — нашим почтовым сервером."""
+    conn = _Conn({"default": _template(kind="default", min_score=0)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
     _no_bedolaga(monkeypatch)
     mails = _own_mail(monkeypatch)
@@ -300,7 +303,7 @@ async def test_bot_without_notify_falls_back_to_email(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_template_email_is_completed_when_bot_sent_only_telegram(monkeypatch):
-    """Шаблон «и на почту», бот дослал только Telegram — письмо досылаем сами."""
+    """Канал Email включён, бот доставил только Telegram — письмо досылаем сами."""
     conn = _Conn({"default": _template(kind="default", min_score=0, send_email=True)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
     monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
@@ -324,7 +327,7 @@ async def test_template_email_is_completed_when_bot_sent_only_telegram(monkeypat
 
 @pytest.mark.asyncio
 async def test_no_extra_email_when_template_does_not_ask(monkeypatch):
-    """Telegram дошёл, «и на почту» выключено — лишнего письма нет."""
+    """Telegram дошёл, канал Email выключен — лишнего письма нет."""
     conn = _Conn({"default": _template(kind="default", min_score=0, send_email=False)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
     monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
@@ -368,3 +371,152 @@ async def test_without_email_bot_reason_is_kept(monkeypatch):
     result = await notices.send_notice({**_VIOLATION, "telegram_id": 42})
 
     assert result["reason"] == "bedolaga_not_configured" and mails == []
+
+
+# ── Каналы шаблона ──
+
+
+@pytest.mark.asyncio
+async def test_email_channel_off_means_no_letter(monkeypatch):
+    """Оператор выключил Email — клиенту без Telegram писать нечем, и это не сбой."""
+    conn = _Conn({"default": _template(kind="default", min_score=0, send_email=False)})
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+    mails = _own_mail(monkeypatch)
+
+    result = await notices.send_notice({**_VIOLATION, "telegram_id": None, "email": "person@example.com"})
+
+    assert result == {"sent": False, "reason": "no_channel", "kind": "default"}
+    assert mails == []
+
+
+@pytest.mark.asyncio
+async def test_telegram_channel_off_sends_only_email(monkeypatch):
+    conn = _Conn({"default": _template(kind="default", min_score=0, send_telegram=False)})
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    calls = []
+
+    async def fake_user(telegram_id):
+        return {"id": 7}
+
+    async def fake_notify(user_id, **kwargs):
+        calls.append(kwargs["channels"])
+        return {"email": {"sent": True}}
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_user_by_telegram", fake_user)
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.notify_user", fake_notify)
+
+    result = await notices.send_notice({**_VIOLATION, "telegram_id": 42, "email": "person@example.com"})
+
+    assert result["sent"] is True
+    assert calls == [["email"]], "в Telegram при выключенном канале не пишем"
+
+
+@pytest.mark.asyncio
+async def test_each_channel_gets_its_own_text(monkeypatch):
+    """Telegram получает разметку, письмо — простой текст и свою вёрстку."""
+    body = "<b>Внимание</b>\nТекст"
+    conn = _Conn({"default": _template(kind="default", min_score=0, body_ru=body)})
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    calls = {}
+
+    async def fake_user(telegram_id):
+        return {"id": 7}
+
+    async def fake_notify(user_id, **kwargs):
+        channel = kwargs["channels"][0]
+        calls[channel] = kwargs
+        return {channel: {"sent": True}}
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_user_by_telegram", fake_user)
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.notify_user", fake_notify)
+
+    result = await notices.send_notice({**_VIOLATION, "telegram_id": 42, "email": "person@example.com"})
+
+    assert result["sent"] is True
+    assert calls["telegram"]["text"] == body
+    assert calls["email"]["text"] == "Внимание\nТекст"
+    assert "<b>Внимание</b><br>" in calls["email"]["email_html"]
+
+
+@pytest.mark.asyncio
+async def test_template_letter_replaces_generated_one(monkeypatch):
+    conn = _Conn({"default": _template(kind="default", min_score=0, email_html_ru="<h1>Своё письмо</h1>")})
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+    _no_bedolaga(monkeypatch)
+    mails = _own_mail(monkeypatch)
+
+    await notices.send_notice({**_VIOLATION, "telegram_id": None, "email": "person@example.com"})
+
+    assert mails[0]["body_html"] == "<h1>Своё письмо</h1>"
+    assert mails[0]["body_text"] == "Текст предупреждения"
+
+
+# ── Сохранение шаблона ──
+
+
+class _TxConn:
+    """Соединение с транзакцией: UPDATE отдаёт заранее заданную строку."""
+
+    def __init__(self, row):
+        self.row = row
+        self.rolled_back = False
+        self.updates = []
+
+    def transaction(self):
+        conn = self
+
+        class _Tx:
+            async def __aenter__(self):
+                return None
+
+            async def __aexit__(self, exc_type, *exc):
+                conn.rolled_back = exc_type is not None
+                return False
+
+        return _Tx()
+
+    async def fetchrow(self, sql, *args):
+        self.updates.append(args)
+        return self.row
+
+
+@pytest.mark.asyncio
+async def test_markup_telegram_rejects_is_not_saved(monkeypatch):
+    conn = _TxConn(_template(kind="default", send_telegram=True))
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+
+    with pytest.raises(notices.NoticeTemplateError) as err:
+        await notices.update_template("default", {"body_ru": "строка<br>строка"})
+
+    assert err.value.code == "NOTICE_MARKUP_INVALID"
+    assert "line_break" in err.value.detail
+    assert conn.updates == [], "до базы невалидный текст не доходит"
+
+
+@pytest.mark.asyncio
+async def test_template_without_channels_is_not_saved(monkeypatch):
+    conn = _TxConn(_template(kind="default", send_telegram=False, send_email=False))
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+
+    with pytest.raises(notices.NoticeTemplateError) as err:
+        await notices.update_template("default", {"send_email": False})
+
+    assert err.value.code == "NOTICE_NO_CHANNEL"
+    assert conn.rolled_back, "правка откатывается целиком"
+
+
+@pytest.mark.asyncio
+async def test_valid_template_is_saved(monkeypatch):
+    row = _template(kind="default", send_telegram=True, body_ru="<b>Ок</b>")
+    conn = _TxConn(row)
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+
+    saved = await notices.update_template(
+        "default", {"body_ru": "<b>Ок</b>", "email_html_ru": "<table><tr><td>письмо</td></tr></table>"},
+        updated_by="operator",
+    )
+
+    assert saved == row
+    assert not conn.rolled_back

@@ -997,6 +997,7 @@ async def violations_summary(
 
     notice = None
     if not whitelisted and (data.get("telegram_id") or telegram_id):
+        from web.backend.core.notice_markup import telegram_to_text
         from web.backend.core.violation_notices import last_notice_for_user
 
         raw_notice = await last_notice_for_user(int(data.get("telegram_id") or telegram_id or 0))
@@ -1006,7 +1007,8 @@ async def violations_summary(
                 violation_id=int(raw_notice["violation_id"]),
                 kind=str(raw_notice.get("kind") or "default"),
                 subject=raw_notice.get("subject"),
-                body=raw_notice.get("body"),
+                # Кабинет показывает текст как есть — теги Telegram ему не нужны
+                body=telegram_to_text(raw_notice.get("body")) or None,
                 sent_at=sent_at.isoformat() if sent_at else None,
             )
 

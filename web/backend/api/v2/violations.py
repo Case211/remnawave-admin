@@ -1139,9 +1139,12 @@ class NoticeTemplateUpdate(BaseModel):
 
     enabled: Optional[bool] = None
     min_score: Optional[float] = Field(None, ge=0, le=100)
+    send_telegram: Optional[bool] = None
     send_email: Optional[bool] = None
     subject_ru: Optional[str] = Field(None, max_length=200)
     body_ru: Optional[str] = Field(None, max_length=4000)
+    # Своё письмо: пустая строка — снова собирать его из текста Telegram
+    email_html_ru: Optional[str] = Field(None, max_length=100_000)
     subject_en: Optional[str] = Field(None, max_length=200)
     body_en: Optional[str] = Field(None, max_length=4000)
 
@@ -1171,13 +1174,16 @@ async def patch_notice_template(
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
 ):
     """Изменить шаблон. Правку текста, который уходит клиентам, пишем в аудит."""
-    from web.backend.core.violation_notices import update_template
+    from web.backend.core.violation_notices import NoticeTemplateError, update_template
 
-    updated = await update_template(
-        kind,
-        data.model_dump(exclude_none=True),
-        updated_by=admin.username,
-    )
+    try:
+        updated = await update_template(
+            kind,
+            data.model_dump(exclude_none=True),
+            updated_by=admin.username,
+        )
+    except NoticeTemplateError as exc:
+        raise api_error(400, exc.code, exc.detail)
     if not updated:
         raise api_error(404, E.NOT_FOUND, "Notice template not found")
 

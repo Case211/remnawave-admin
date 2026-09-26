@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, memo } from 'react'
+import { useState, useCallback, useEffect, useRef, memo, lazy, Suspense } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -47,7 +47,6 @@ import {
 import client from '../api/client'
 import { UserTimelineDialog } from '@/components/violations/UserTimelineDialog'
 import { DetectorTuningTab } from '@/components/violations/DetectorTuningTab'
-import { NoticeTemplatesTab } from '@/components/violations/NoticeTemplatesTab'
 import { AsnDirectory } from '@/components/violations/AsnDirectory'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -70,6 +69,11 @@ import type {
   TopViolator,
   IPInfo,
 } from '@/types/violations'
+
+// Редакторы шаблонов тянут CodeMirror — грузим их, только когда открыли вкладку
+const NoticeTemplatesTab = lazy(() =>
+  import('@/components/violations/NoticeTemplatesTab').then((m) => ({ default: m.NoticeTemplatesTab })),
+)
 
 const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid', 'traffic_rate', 'torrent'] as const
 
@@ -332,7 +336,7 @@ export interface NoticeResult {
 }
 
 const NOTICE_REASONS = new Set([
-  'no_violation', 'no_recipient', 'already_notified', 'no_template',
+  'no_violation', 'no_recipient', 'already_notified', 'no_template', 'no_channel',
   'bedolaga_not_configured', 'user_not_found', 'delivery_failed', 'mail_failed', 'not_delivered',
 ])
 
@@ -2361,7 +2365,9 @@ export default function Violations() {
 
       {/* Content based on tab */}
       {tab === 'notices' ? (
-        <NoticeTemplatesTab />
+        <Suspense fallback={<Skeleton className="h-28 w-full" />}>
+          <NoticeTemplatesTab />
+        </Suspense>
       ) : tab === 'tuning' ? (
         <DetectorTuningTab />
       ) : tab === 'asn' ? (
