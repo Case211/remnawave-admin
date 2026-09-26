@@ -1894,6 +1894,9 @@
       "low": "Score 0–39. Informational notices, no action needed."
     },
     "actions": {
+      "warn": "Warn",
+      "warned": "Warning sent",
+      "warnTooltip": "Send the configured warning to the user without applying restrictions.",
       "block": "Block",
       "blockShort": "Block",
       "blockTooltip": "Block user in the panel. VPN access will be disabled.",
@@ -2024,6 +2027,7 @@
     "allProcessed": "All violations processed",
     "noRecords": "No violation records for the selected period",
     "toast": {
+      "warned": "Warning sent",
       "resolved": "Violation processed",
       "annulled": "Violation annulled",
       "annulledAll": "All user violations annulled",

@@ -325,11 +325,12 @@ const ScoreCircle = memo(function ScoreCircle({ score, size = 'md' }: { score: n
 
 // ── Violation card ───────────────────────────────────────────────
 
-const ViolationCard = memo(function ViolationCard({
+export const ViolationCard = memo(function ViolationCard({
   violation,
   canResolve,
   isResolving,
   onBlock,
+  onWarn,
   onDismiss,
   onAnnul,
   onWhitelist,
@@ -340,6 +341,7 @@ const ViolationCard = memo(function ViolationCard({
   canResolve: boolean
   isResolving?: boolean
   onBlock: () => void
+  onWarn: () => void
   onDismiss: () => void
   onAnnul: () => void
   onWhitelist: () => void
@@ -462,6 +464,15 @@ const ViolationCard = memo(function ViolationCard({
           <div className="mt-4 pt-3 border-t border-[var(--glass-border)] flex flex-wrap gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
+                <Button variant="secondary" size="sm" onClick={onWarn} disabled={isResolving || violation.notified} aria-label={t('violations.actions.warn')} className="gap-1">
+                  <MessageCircle className="w-4 h-4" />
+                  {violation.notified ? t('violations.actions.warned') : t('violations.actions.warn')}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.warnTooltip')}</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button variant="destructive" size="sm" onClick={onBlock} disabled={isResolving} aria-label={t('violations.actions.block')} className="gap-1">
                   <Ban className="w-4 h-4" />
                   <span className="hidden sm:inline">{t('violations.actions.block')}</span>
@@ -561,6 +572,7 @@ function ViolationDetailPanel({
   canResolve,
   onClose,
   onBlock,
+  onWarn,
   onDismiss,
   onAnnul,
   onAnnulAll,
@@ -572,6 +584,7 @@ function ViolationDetailPanel({
   canResolve: boolean
   onClose: () => void
   onBlock: (id: number) => void
+  onWarn: (id: number) => void
   onDismiss: (id: number) => void
   onAnnul: (id: number) => void
   onAnnulAll: (userUuid: string) => void
@@ -1089,6 +1102,15 @@ function ViolationDetailPanel({
               {t('violations.actions.resolve')}
             </h3>
             <div className="flex flex-wrap gap-3">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="secondary" onClick={() => onWarn(detail.id)} disabled={Boolean(detail.notified_at)} className="gap-2">
+                    <MessageCircle className="w-4 h-4" />
+                    {detail.notified_at ? t('violations.actions.warned') : t('violations.actions.warn')}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.warnTooltip')}</p></TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="destructive" onClick={() => onBlock(detail.id)} className="gap-2">
@@ -1843,6 +1865,18 @@ export default function Violations() {
 
   const { mutate: resolveMutate, isPending: isResolvePending } = resolveViolation
 
+  const notifyViolation = useMutation({
+    mutationFn: (id: number) => client.post(`/violations/${id}/notify`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['violations'] })
+      queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
+      toast.success(t('violations.toast.warned'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
   // Comment dialog state
   const [commentDialog, setCommentDialog] = useState<{
     open: boolean
@@ -1969,6 +2003,7 @@ export default function Violations() {
           canResolve={canResolve}
           onClose={() => setSelectedViolationId(null)}
           onBlock={handleBlock}
+          onWarn={(id) => notifyViolation.mutate(id)}
           onDismiss={handleDismiss}
           onAnnul={handleAnnul}
           onAnnulAll={handleAnnulAll}
@@ -2362,6 +2397,7 @@ export default function Violations() {
                     canResolve={canResolve}
                     isResolving={isResolvePending}
                     onBlock={() => handleBlock(violation.id)}
+                    onWarn={() => notifyViolation.mutate(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}
                     onAnnul={() => handleAnnul(violation.id)}
                     onWhitelist={() => handleWhitelist(violation.user_uuid)}
