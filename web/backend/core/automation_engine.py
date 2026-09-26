@@ -1271,11 +1271,12 @@ class AutomationEngine:
         if whitelisted:
             return "whitelisted"
 
-        if payload.get("unless_support", True) and violation["telegram_id"]:
+        if payload.get("unless_support", True):
             from web.backend.core.automation import support_contact_since
 
             started_at = datetime.fromisoformat(payload["started_at"])
-            if await support_contact_since(int(violation["telegram_id"]), started_at):
+            telegram_id = int(violation["telegram_id"]) if violation["telegram_id"] else None
+            if await support_contact_since(telegram_id, started_at, user_uuid=user_uuid):
                 return "support_contacted"
         return None
 

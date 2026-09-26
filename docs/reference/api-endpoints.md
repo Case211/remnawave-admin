@@ -245,6 +245,29 @@
 
 Область: `violations:read`. Отдаёт полную раскладку по анализаторам (`temporal_score`, `geo_score`, `asn_score`, `profile_score`, `device_score`, `hwid_score`, `user_agent_score`), собранные свидетельства (`cities`, `asn_types`, `os_list`, `client_list`), флаги (`impossible_travel`, `is_mobile`, `is_datacenter`, `is_vpn`) и разбор (`action_taken`, `action_taken_at`, `admin_comment`).
 
+## Обращение во внешнюю поддержку
+
+### `POST /support-events`
+
+Область: `enforcement:support`. Бот или helpdesk сообщает, что клиент написал в поддержку. Если для его нарушения ждёт отложенный шаг с включённой проверкой поддержки, при наступлении срока шаг будет пропущен с причиной `support_contacted`.
+
+Заголовок `Idempotency-Key` обязателен и должен быть уникальным для события в пределах API-ключа. Повтор с тем же значением безопасно возвращает `202` и `duplicate: true`.
+
+```json
+{
+  "source": "telegram-support",
+  "kind": "customer_message",
+  "occurred_at": "2026-09-26T10:30:00Z",
+  "user": { "telegram_id": 123456789 },
+  "ticket_id": "ticket-42",
+  "metadata": { "queue": "billing" }
+}
+```
+
+В `user` нужен хотя бы один идентификатор: `user_uuid`, `telegram_id`, `email` или `username`. Если передано несколько, все должны указывать на одного пользователя. Ответы: `404` — пользователь не найден, `409` — идентификатор неоднозначен, `422` — некорректный запрос или время события более чем на пять минут в будущем.
+
+Для отдельного Telegram-бота обычно достаточно `telegram_id`. Событие хранится в Admin; внешней системе не нужен доступ к базе или тикетам Bedolaga.
+
 ## Статистика
 
 `GET /stats`, область `stats:read`:
