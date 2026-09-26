@@ -27,6 +27,7 @@ import type { AutomationLogEntry } from '../../api/automations'
 import { resultBadgeClass, resultLabel, formatDateTime, actionTypeLabel } from './helpers'
 
 type ChainStepResult = { action?: string; result?: string; details?: { run_at?: string; reason?: string } }
+type AccompliceResult = { user_uuid: string; result: string; reason?: string }
 // Причины, по которым отложенный шаг не встал в очередь
 const NOT_QUEUED = ['already_scheduled', 'warning_not_delivered']
 
@@ -183,6 +184,7 @@ export function LogsTimeline() {
             const Icon = RESULT_ICON[entry.result] || AlertTriangle
             const iconColor = RESULT_ICON_COLOR[entry.result] || 'text-dark-400'
             const reason = skipReason(entry, t)
+            const accomplices = (entry.details?.accomplices as AccompliceResult[] | undefined) ?? []
             // Отложенные шаги этого срабатывания: что и когда выполнится, а что не поставлено и почему
             const waiting = ((entry.details?.then as ChainStepResult[] | undefined) ?? []).filter(
               (s) => s.result === 'scheduled' || (s.result === 'skipped' && NOT_QUEUED.includes(s.details?.reason ?? '')),
@@ -230,6 +232,14 @@ export function LogsTimeline() {
                       </>
                     )}
                   </div>
+                  {accomplices.length > 0 && (
+                    <div className="mt-1 text-xs text-dark-300">
+                      {t('automations.accomplices.summary', {
+                        done: accomplices.filter((a) => a.result === 'success').length,
+                        skipped: accomplices.filter((a) => a.result !== 'success').length,
+                      })}
+                    </div>
+                  )}
                   {waiting.map((step, i) => (
                     <div key={i} className="mt-1 flex items-center gap-1.5 text-xs text-dark-300">
                       <Clock className="h-3 w-3 flex-shrink-0" aria-hidden="true" />

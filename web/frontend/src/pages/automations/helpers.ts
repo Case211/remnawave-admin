@@ -267,7 +267,7 @@ function actionLabel(action: string): string {
 
 export function describeAction(rule: { action_type: string; action_config: Record<string, unknown> }): string {
   const cfg = rule.action_config as AnyConfig
-  const base = actionLabel(rule.action_type)
+  const base = actionLabel(rule.action_type) + (cfg.with_accomplices ? ` ${t('automations.accomplices.short')}` : '')
 
   if (rule.action_type === 'notify') {
     const channel = cfg.channel === 'webhook' ? 'Webhook' : 'Telegram'

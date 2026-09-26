@@ -1570,6 +1570,9 @@ async def _handle_violation(
                 "unique_ips": len(ip_addresses) if ip_addresses else 0,
                 "simultaneous": temporal.simultaneous_connections_count if temporal else 0,
                 "devices": len(device.os_list) if device and device.os_list else 0,
+                # Соучастники накрутки триалов (чужие живые триалы на том же HWID) —
+                # правило может применить меру и к ним, как встроенный автоблок
+                "trial_accomplices": list(getattr(hwid, "active_trial_accomplices", None) or []),
             })
         except Exception:
             pass

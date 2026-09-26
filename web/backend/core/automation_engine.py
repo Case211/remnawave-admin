@@ -147,6 +147,32 @@ def _step_delay_hours(step: dict) -> float:
         return 0.0
 
 
+# Меры, которые можно применить заодно к соучастникам накрутки триалов
+_ACCOMPLICE_ACTIONS = {"block_user", "disable_user", "throttle_user"}
+
+
+async def _measure_state(conn, action_type: Optional[str], user_uuid: str) -> Optional[str]:
+    """Можно ли применять меру к клиенту: нет в панели или мера уже стоит — нельзя.
+
+    Поверх уже принятого решения меру не кладём: «заблокировать на сутки» по
+    навсегда заблокированному через сутки его бы разблокировало, а новое
+    ограничение перебило бы ручное.
+    """
+    from shared.db_schema import USER_THROTTLES_TABLE, USERS_TABLE
+
+    status = await conn.fetchval(f"SELECT status FROM {USERS_TABLE} WHERE uuid = $1", user_uuid)
+    if status is None:
+        return "user_not_found"
+    if action_type in ("block_user", "disable_user") and str(status).upper() == "DISABLED":
+        return "already_applied"
+    if action_type == "throttle_user" and await conn.fetchval(
+        f"SELECT 1 FROM {USER_THROTTLES_TABLE} WHERE user_uuid = $1 AND (until IS NULL OR until > NOW())",
+        user_uuid,
+    ):
+        return "already_applied"
+    return None
+
+
 def _warning_failed(action_type: Optional[str], result: str, details: Optional[dict]) -> bool:
     """Предупреждение клиенту не дошло; уже предупреждённый по этому нарушению — не в счёт."""
     return (
@@ -1226,6 +1252,38 @@ class AutomationEngine:
                 details={**(details or {}), "delayed": True, "step": payload.get("step")},
             )
 
+    async def _apply_to_accomplices(
+        self, handler, action_type: str, config: dict, target_id: Optional[str], context: dict,
+    ) -> list:
+        """Та же мера — соучастникам накрутки триалов по HWID.
+
+        Иначе связка остаётся рабочей: после меры к одному остальные видят уже
+        один живой триал, под правило не попадают, и накрутка стоит абузеру ровно
+        один аккаунт (так же рассуждает встроенный автоблок детектора). Кому мера
+        уже стоит и кто в белом списке — не трогаем.
+        """
+        from shared.database import db_service
+
+        own_config = {k: v for k, v in config.items() if k != "with_accomplices"}
+        results = []
+        for uuid in dict.fromkeys(context.get("trial_accomplices") or []):
+            if not uuid or uuid == target_id:
+                continue
+            async with db_service.acquire() as conn:
+                reason = await _measure_state(conn, action_type, uuid)
+            if not reason and (await db_service.is_user_violation_whitelisted(uuid))[0]:
+                reason = "whitelisted"
+            if reason:
+                results.append({"user_uuid": uuid, "result": "skipped", "reason": reason})
+                continue
+            try:
+                await handler(own_config, "user", uuid, {**context, "username": None, "accomplice_of": target_id})
+                results.append({"user_uuid": uuid, "result": "success"})
+            except Exception as e:
+                logger.warning("Accomplice %s: %s failed: %s", uuid, action_type, e)
+                results.append({"user_uuid": uuid, "result": "error", "error": str(e)})
+        return results
+
     async def _step_blocker(
         self, action_type: Optional[str], target_id: Optional[str], payload: dict, context: dict,
     ) -> Optional[str]:
@@ -1233,16 +1291,14 @@ class AutomationEngine:
 
         За время ожидания многое меняется: оператор разобрал нарушение или
         признал ошибкой, добавил клиента в белый список, клиент написал в
-        поддержку, мера уже стоит. Мера по устаревшему поводу хуже, чем никакой,
-        а поверх решения оператора — тем более: «заблокировать на сутки» по
-        навсегда заблокированному через сутки его бы разблокировало.
+        поддержку, мера уже стоит (см. _measure_state). Мера по устаревшему
+        поводу хуже, чем никакой.
         """
         violation_id = context.get("violation_id")
         if not violation_id:
             return None
 
         from shared.database import db_service
-        from shared.db_schema import USER_THROTTLES_TABLE, USERS_TABLE
 
         async with db_service.acquire() as conn:
             violation = await conn.fetchrow(
@@ -1256,16 +1312,9 @@ class AutomationEngine:
                 return "violation_resolved"
 
             user_uuid = str(violation["user_uuid"])
-            status = await conn.fetchval(f"SELECT status FROM {USERS_TABLE} WHERE uuid = $1", user_uuid)
-            if status is None:
-                return "user_not_found"
-            if action_type in ("block_user", "disable_user") and str(status).upper() == "DISABLED":
-                return "already_applied"
-            if action_type == "throttle_user" and await conn.fetchval(
-                f"SELECT 1 FROM {USER_THROTTLES_TABLE} WHERE user_uuid = $1 AND (until IS NULL OR until > NOW())",
-                user_uuid,
-            ):
-                return "already_applied"
+            state = await _measure_state(conn, action_type, user_uuid)
+            if state:
+                return state
 
         whitelisted, _ = await db_service.is_user_violation_whitelisted(user_uuid)
         if whitelisted:
@@ -1320,6 +1369,10 @@ class AutomationEngine:
             # Действие решило не выполняться (лимит перезапусков и т.п.)
             if isinstance(details, dict) and details.get("skipped"):
                 return "skipped", details
+            if action_config.get("with_accomplices") and action_type in _ACCOMPLICE_ACTIONS:
+                details["accomplices"] = await self._apply_to_accomplices(
+                    handler, action_type, action_config, target_id, context,
+                )
             return "success", details
 
         except Exception as e:

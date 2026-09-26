@@ -3709,6 +3709,12 @@
         "warning_not_delivered": "the warning did not reach the customer"
       },
       "notQueued": "Not queued: {{action}} — {{reason}}"
+    },
+    "accomplices": {
+      "option": "Also trial-abuse accomplices on the same HWID",
+      "hint": "Like the built-in auto-block: other subscriptions with a live trial on the same device. Without them the ring keeps working — after the measure hits one, the rest no longer match the rule. Already blocked, throttled and whitelisted customers are left alone.",
+      "short": "+ HWID accomplices",
+      "summary": "Accomplices: applied {{done}}, skipped {{skipped}}"
     }
   },
   "settings": {

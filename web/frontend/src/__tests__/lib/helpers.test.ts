@@ -243,6 +243,13 @@ describe('describeAction', () => {
   })
 })
 
+describe('describeAction with accomplices', () => {
+  it('marks a measure that also hits HWID accomplices', () => {
+    expect(describeAction({ action_type: 'block_user', action_config: { with_accomplices: true } }))
+      .toBe(`${describeAction({ action_type: 'block_user', action_config: {} })} + соучастники по HWID`)
+  })
+})
+
 describe('describeStep', () => {
   it('prefixes a delayed chain step with its delay', () => {
     expect(describeStep({ action_type: 'throttle_user', action_config: {}, delay_hours: 12 }))

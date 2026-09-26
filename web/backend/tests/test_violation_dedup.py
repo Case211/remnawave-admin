@@ -258,6 +258,18 @@ class TestHandleViolationCreatedGate:
         assert db.update_violation_action.await_args.kwargs["admin_telegram_id"] is None
 
     @pytest.mark.asyncio
+    async def test_accomplices_reach_automations(self):
+        """Правило в автоматизациях может применить меру и к соучастникам — список
+        уходит в событие нарушения."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(50, True), config={"violation_auto_hard_block": False})
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6] as broadcast:
+            await collector._handle_violation(
+                USER_UUID, _trial_score(["acc-uuid-1", "acc-uuid-2"]), None, [], False,
+            )
+        payload = broadcast.await_args.args[0]
+        assert payload["trial_accomplices"] == ["acc-uuid-1", "acc-uuid-2"]
+
+    @pytest.mark.asyncio
     async def test_accomplice_failure_does_not_stop_the_rest(self):
         """Падение блокировки одного соучастника не должно ронять остальных."""
         db, monitor, patches = _handle_violation_mocks(save_result=(47, True))

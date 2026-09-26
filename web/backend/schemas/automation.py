@@ -26,8 +26,9 @@ _ALLOWED_TRIGGER_KEYS: dict[str, set[str]] = {
     "threshold": {"metric", "operator", "value", "node_uuid", "for_minutes"} | _COMMON_TRIGGER_KEYS,
 }
 _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
-    "disable_user": {"reason", "duration_hours"},
-    "block_user": {"reason", "duration_hours"},
+    # with_accomplices — заодно соучастники накрутки триалов по HWID (violation.detected)
+    "disable_user": {"reason", "duration_hours", "with_accomplices"},
+    "block_user": {"reason", "duration_hours", "with_accomplices"},
     "notify": {"channel", "webhook_url", "message", "topic_type", "channels", "severity", "buttons",
                "quiet_from", "quiet_to", "telegram"},
     "restart_node": {"node_uuid", "max_per_hour"},
@@ -37,7 +38,7 @@ _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
     "reset_traffic": {"target_status"},
     "force_sync": {"node_uuid"},
     # Урезать скорость через шейпер (как «ограничить» в нарушениях)
-    "throttle_user": {"rate_kbit", "duration_hours", "reason"},
+    "throttle_user": {"rate_kbit", "duration_hours", "reason", "with_accomplices"},
     # Предупредить клиента по шаблону из «Нарушения → Предупреждения»
     "warn_user": {"force"},
 }

@@ -103,6 +103,11 @@ const EXTRA_ACTION_TYPES = ['notify', 'throttle_user', 'warn_user', 'block_user'
 // Отложенный шаг перед выполнением перепроверяет нарушение — без него перепроверять нечего
 const DELAY_EVENTS = ['violation.detected', 'torrent.detected']
 const MAX_STEP_DELAY_HOURS = 720
+// Меры, которые можно применить заодно к соучастникам накрутки триалов по HWID
+const ACCOMPLICE_ACTIONS = ['block_user', 'disable_user', 'throttle_user']
+
+const withoutKey = (obj: Record<string, unknown>, key: string) =>
+  Object.fromEntries(Object.entries(obj).filter(([k]) => k !== key))
 
 export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructorProps) {
   const queryClient = useQueryClient()
@@ -171,6 +176,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [throttleRate, setThrottleRate] = useState('')
   const [throttleHours, setThrottleHours] = useState('')
   const [warnForce, setWarnForce] = useState(false)
+  const [withAccomplices, setWithAccomplices] = useState(false)
   // Своя пауза, «И»/«ИЛИ», тихие часы, цепочка действий
   const [cooldownMinutes, setCooldownMinutes] = useState('')
   const [conditionsMatch, setConditionsMatch] = useState<'all' | 'any'>('all')
@@ -271,6 +277,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setThrottleRate(ac.rate_kbit?.toString() || '')
         setThrottleHours(editRule.action_type === 'throttle_user' ? ac.duration_hours?.toString() || '' : '')
         setWarnForce(!!ac.force)
+        setWithAccomplices(!!ac.with_accomplices)
         setCooldownMinutes(tc.cooldown_minutes?.toString() || '')
         setConditionsMatch(tc.conditions_match === 'any' ? 'any' : 'all')
         setQuietFrom(ac.quiet_from || '')
@@ -315,6 +322,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setThrottleRate('')
         setThrottleHours('')
         setWarnForce(false)
+        setWithAccomplices(false)
         setCooldownMinutes('')
         setConditionsMatch('all')
         setQuietFrom('')
@@ -371,6 +379,13 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
 
   // Build action_config
   const buildActionConfig = (): Record<string, unknown> => {
+    const cfg = buildBaseActionConfig()
+    return accomplicesAllowed && withAccomplices && ACCOMPLICE_ACTIONS.includes(actionType)
+      ? { ...cfg, with_accomplices: true }
+      : cfg
+  }
+
+  const buildBaseActionConfig = (): Record<string, unknown> => {
     const hours = parseFloat(blockHours)
     if (actionType === 'notify') {
       const cfg: Record<string, unknown> = { channel: notifyChannel, message: notifyMessage }
@@ -460,8 +475,12 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       conditions: validConditions,
       action_type: actionType,
       action_config: buildActionConfig(),
-      // Задержки есть только у шагов по нарушениям: сменили триггер — шаги снова сразу
-      extra_actions: extraActions.map((s) => ({ ...s, delay_hours: delaysAllowed ? s.delay_hours || 0 : 0 })),
+      // Задержки и соучастники есть только у шагов по нарушениям: сменили триггер — шаги как раньше
+      extra_actions: extraActions.map((s) => ({
+        ...s,
+        action_config: accomplicesAllowed ? s.action_config : withoutKey(s.action_config, 'with_accomplices'),
+        delay_hours: delaysAllowed ? s.delay_hours || 0 : 0,
+      })),
     }
 
     if (editRule) {
@@ -488,6 +507,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   }
 
   const delaysAllowed = triggerType === 'event' && DELAY_EVENTS.includes(eventType)
+  // Соучастников знает только детектор нарушений
+  const accomplicesAllowed = triggerType === 'event' && eventType === 'violation.detected'
   // Порядок шагов в списке — порядок выполнения: задержки не должны убывать
   const delaysOrdered = extraActions.every(
     (s, i) => i === 0 || (s.delay_hours || 0) >= (extraActions[i - 1].delay_hours || 0),
@@ -1362,6 +1383,16 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               </div>
             )}
 
+            {accomplicesAllowed && ACCOMPLICE_ACTIONS.includes(actionType) && (
+              <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-2">
+                <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                  <Checkbox checked={withAccomplices} onCheckedChange={(v) => setWithAccomplices(!!v)} />
+                  {t('automations.accomplices.option')}
+                </label>
+                <p className="text-[11px] text-dark-400">{t('automations.accomplices.hint')}</p>
+              </div>
+            )}
+
             {actionType === 'warn_user' && (
               <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-2">
                 <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.warn.title')}</Label>
@@ -1422,15 +1453,30 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                           <Input
                             type="number" min={0} step="0.5"
                             value={String(step.action_config.duration_hours ?? '')}
-                            onChange={(e) => setExtraActions((prev) => prev.map((s, i) => (i === idx
-                              ? { ...s, action_config: parseFloat(e.target.value) > 0 ? { ...s.action_config, duration_hours: parseFloat(e.target.value) } : {} }
-                              : s)))}
+                            onChange={(e) => {
+                              const hours = parseFloat(e.target.value)
+                              const rest = withoutKey(step.action_config, 'duration_hours')
+                              updateStep(idx, { action_config: hours > 0 ? { ...rest, duration_hours: hours } : rest })
+                            }}
                             placeholder="—"
                             aria-label={t('automations.delayed.duration')}
                             className="h-8 w-20 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
                           />
                           <span>{t('automations.delayed.durationUnit')}</span>
                         </div>
+                      )}
+                      {accomplicesAllowed && ACCOMPLICE_ACTIONS.includes(step.action_type) && (
+                        <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                          <Checkbox
+                            checked={!!step.action_config.with_accomplices}
+                            onCheckedChange={(v) => updateStep(idx, {
+                              action_config: v
+                                ? { ...step.action_config, with_accomplices: true }
+                                : withoutKey(step.action_config, 'with_accomplices'),
+                            })}
+                          />
+                          {t('automations.accomplices.option')}
+                        </label>
                       )}
                       {delaysAllowed && (
                         <div className="space-y-1.5">
