@@ -46,8 +46,11 @@ async def catch_invalid_requests(request: Request, call_next):
             # Некорректный метод - возвращаем 405 без логирования
             return JSONResponse(status_code=405, content={"error": "Method not allowed"})
         
-        # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования
-        if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"]:
+        # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования.
+        # /internal/* — колбэки бэкенда из bot_callbacks.py: run_webhook_server()
+        # подключает их к этому же приложению, секрет они проверяют сами.
+        if (request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"]
+                and not request.url.path.startswith("/internal/")):
             # Для корневого пути возвращаем простой ответ
             if request.url.path == "/":
                 return JSONResponse(status_code=200, content={"service": "remnawave-admin-webhook", "status": "ok"})
