@@ -615,6 +615,7 @@ async def _log_and_maybe_send(filename: str, backup_type: str, size_bytes: int, 
 
         class _SchedulerAdmin:
             id = None
+            account_id = None
             username = "scheduler"
             telegram_id = 0
 
