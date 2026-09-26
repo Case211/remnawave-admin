@@ -4,6 +4,8 @@
 subdomain|type|content, base64), нет проксирования и TTL, править запись
 нельзя — правка делается как delete + create. Домены/операции идут через
 input_data (JSON). Пароль — отдельный API-пароль (Настройки → Управление доступом).
+Списка доменов как такового в REG.API v2 нет (domain/get_list — «Command not found»):
+домены — это услуги с servtype=domain из service/get_list.
 """
 import base64
 import json
@@ -66,21 +68,29 @@ class RegruProvider(DnsProvider):
                     f"{dom.get('error_text') or dom.get('error_code') or 'ошибка'}")
         return answer
 
+    async def _domains(self, creds: Dict[str, str]) -> List[str]:
+        """Домены аккаунта: услуги с servtype=domain (фильтр и в запросе, и на нашей стороне)."""
+        ans = await self._call(creds, "/service/get_list", {"servtype": "domain"})
+        names: List[str] = []
+        for s in (ans.get("services") if isinstance(ans, dict) else None) or []:
+            if not isinstance(s, dict) or not s.get("dname"):
+                continue
+            if s.get("servtype") not in (None, "domain"):
+                continue
+            name = str(s["dname"])
+            if name not in names:
+                names.append(name)
+        return names
+
     async def verify(self, creds: Dict[str, str]) -> bool:
         try:
-            await self._call(creds, "/domain/get_list", {})
+            await self._domains(creds)
         except DnsProviderError:
             return False
         return True
 
     async def list_zones(self, creds: Dict[str, str]) -> List[DnsZone]:
-        ans = await self._call(creds, "/domain/get_list", {})
-        domains = (ans.get("domains") if isinstance(ans, dict) else None) or []
-        out: List[DnsZone] = []
-        for d in domains:
-            if isinstance(d, dict) and d.get("dname"):
-                out.append(DnsZone(id=str(d["dname"]), name=str(d["dname"])))
-        return out
+        return [DnsZone(id=name, name=name) for name in await self._domains(creds)]
 
     async def list_records(self, creds: Dict[str, str], zone_id: str) -> List[DnsRecord]:
         ans = await self._call(creds, "/zone/get_resource_records", {"domains": [{"dname": zone_id}]})

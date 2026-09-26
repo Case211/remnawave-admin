@@ -156,9 +156,18 @@ class TestRegru:
 
         def h(path, form):
             assert form["username"] == "u"
+            if path.endswith("/service/get_list"):
+                assert json.loads(form["input_data"]) == {"servtype": "domain"}
+                # Кроме доменов в услугах бывает хостинг и прочее — в зоны оно попадать не должно
+                return httpx.Response(200, json={"result": "success", "answer": {"services": [
+                    {"dname": "a.com", "servtype": "domain", "state": "A", "service_id": 1},
+                    {"dname": "a.com", "servtype": "domain", "state": "A", "service_id": 1},
+                    {"dname": "host-1", "servtype": "srv_hosting_ispmgr", "state": "A", "service_id": 2},
+                ]}})
             if path.endswith("/domain/get_list"):
-                return httpx.Response(200, json={"result": "success",
-                                                 "answer": {"domains": [{"dname": "a.com"}]}})
+                # Такого метода в REG.API v2 нет — reg.ru отвечает ошибкой (#284)
+                return httpx.Response(200, json={"result": "error", "error_code": "NO_SUCH_COMMAND",
+                                                 "error_text": "Command domain/get_list not found"})
             if path.endswith("/zone/get_resource_records"):
                 return httpx.Response(200, json={"result": "success", "answer": {"domains": [
                     {"dname": "a.com", "result": "success", "rrs": [
@@ -170,7 +179,7 @@ class TestRegru:
             assert await prov.verify({"username": "u", "password": "p"}) is True
             zs = await prov.list_zones({"username": "u", "password": "p"})
             rs = await prov.list_records({"username": "u", "password": "p"}, "a.com")
-        assert zs[0].name == "a.com"
+        assert [z.name for z in zs] == ["a.com"]
         r = rs[0]
         assert r.type == "A" and r.name == "www" and r.content == "1.2.3.4"
         assert _unid(r.id) == ("www", "A", "1.2.3.4")
@@ -192,7 +201,7 @@ class TestRegru:
         form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
         assert req.method == "POST"
         assert req.headers["content-type"].startswith("application/x-www-form-urlencoded")
-        assert form["password"] == "secret" and json.loads(form["input_data"]) == {}
+        assert form["password"] == "secret" and json.loads(form["input_data"]) == {"servtype": "domain"}
         assert b"secret" not in req.url.query
 
     @pytest.mark.asyncio
