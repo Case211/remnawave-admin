@@ -9,9 +9,14 @@ import logging
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from alembic.runtime.environment import EnvironmentContext
-from alembic.script import ScriptDirectory
+
+# В образе web-backend alembic ставится из корневого requirements.txt. Там, где
+# его нет, «import alembic» находит каталог миграций alembic/ в корне репозитория.
+pytest.importorskip("alembic.config", reason="пакет alembic не установлен")
+
+from alembic.config import Config  # noqa: E402
+from alembic.runtime.environment import EnvironmentContext  # noqa: E402
+from alembic.script import ScriptDirectory  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
