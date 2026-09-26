@@ -3634,7 +3634,6 @@
         "title": "Then also",
         "add": "Add action",
         "message": "Notification text",
-        "hours": "Hours",
         "hint": "Run in order after the main action. Skipped if the main action fails."
       },
       "throttle": {
@@ -3682,7 +3681,35 @@
     "import": "Import",
     "importDone": "Imported rules: {{created}}, failed: {{errors}}. New rules are disabled.",
     "importFailed": "Import failed",
-    "importBadFile": "This is not an automations export file"
+    "importBadFile": "This is not an automations export file",
+    "delayed": {
+      "when": "Run after",
+      "duration": "Duration",
+      "durationUnit": "h — empty: no end",
+      "hoursAfter": "h after the trigger",
+      "now": "h — empty or 0: right away",
+      "unlessSupport": "Skip if the customer has written to support meanwhile",
+      "recheckHint": "Before a delayed step we check that the violation is not annulled or resolved by an operator, the customer is not whitelisted and the measure is not already in place. Disabling the rule cancels waiting steps. If the warning in this chain did not reach the customer, the delayed measure is not queued.",
+      "orderHint": "Step delays must not decrease: the order in the list is the order of execution",
+      "after": "in {{delay}}",
+      "hours": "{{n}} h",
+      "minutes": "{{n}} min",
+      "badge": "delayed step",
+      "scheduled": "Waiting: {{action}} — {{time}}",
+      "reasons": {
+        "rule_disabled": "the rule is disabled — step cancelled",
+        "violation_not_found": "the violation is gone",
+        "violation_annulled": "the violation was annulled",
+        "violation_resolved": "the violation was already resolved",
+        "user_not_found": "the customer is no longer in the panel",
+        "already_applied": "the measure is already in place",
+        "whitelisted": "the customer is whitelisted",
+        "support_contacted": "the customer wrote to support — an operator decides",
+        "already_scheduled": "this step is already waiting",
+        "warning_not_delivered": "the warning did not reach the customer"
+      },
+      "notQueued": "Not queued: {{action}} — {{reason}}"
+    }
   },
   "settings": {
     "title": "Settings",

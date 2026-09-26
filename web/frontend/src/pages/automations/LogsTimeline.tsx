@@ -7,6 +7,7 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  Clock,
   Download,
   Filter,
 } from '@/components/brand/icons'
@@ -22,7 +23,21 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { automationsApi } from '../../api/automations'
+import type { AutomationLogEntry } from '../../api/automations'
 import { resultBadgeClass, resultLabel, formatDateTime, actionTypeLabel } from './helpers'
+
+type ChainStepResult = { action?: string; result?: string; details?: { run_at?: string; reason?: string } }
+// Причины, по которым отложенный шаг не встал в очередь
+const NOT_QUEUED = ['already_scheduled', 'warning_not_delivered']
+
+/** Почему шаг не выполнился — для отложенных шагов и предупреждений своими словами. */
+function skipReason(entry: AutomationLogEntry, t: (key: string, opts?: Record<string, unknown>) => string): string | null {
+  const reason = entry.details?.reason
+  if (entry.result !== 'skipped' || typeof reason !== 'string') return null
+  if (entry.details?.delayed) return t(`automations.delayed.reasons.${reason}`, { defaultValue: reason })
+  if (entry.action_taken === 'warn_user') return t(`violations.warnReasons.${reason}`, { defaultValue: reason })
+  return reason
+}
 import { exportCSV, exportJSON } from '../../lib/export'
 
 const RESULT_ICON: Record<string, React.ElementType> = {
@@ -167,6 +182,11 @@ export function LogsTimeline() {
           {data.items.map((entry) => {
             const Icon = RESULT_ICON[entry.result] || AlertTriangle
             const iconColor = RESULT_ICON_COLOR[entry.result] || 'text-dark-400'
+            const reason = skipReason(entry, t)
+            // Отложенные шаги этого срабатывания: что и когда выполнится, а что не поставлено и почему
+            const waiting = ((entry.details?.then as ChainStepResult[] | undefined) ?? []).filter(
+              (s) => s.result === 'scheduled' || (s.result === 'skipped' && NOT_QUEUED.includes(s.details?.reason ?? '')),
+            )
 
             return (
               <div
@@ -186,6 +206,9 @@ export function LogsTimeline() {
                     >
                       {resultLabel(entry.result)}
                     </Badge>
+                    {!!entry.details?.delayed && (
+                      <span className="text-[10px] text-dark-300">{t('automations.delayed.badge')}</span>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-dark-400">
                     {/* На телефоне дата — в строке с деталями: справа ей нет места */}
@@ -200,7 +223,27 @@ export function LogsTimeline() {
                         </span>
                       </>
                     )}
+                    {reason && (
+                      <>
+                        <span className="text-dark-600">·</span>
+                        <span className="text-yellow-300/80">{reason}</span>
+                      </>
+                    )}
                   </div>
+                  {waiting.map((step, i) => (
+                    <div key={i} className="mt-1 flex items-center gap-1.5 text-xs text-dark-300">
+                      <Clock className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                      {step.result === 'scheduled'
+                        ? t('automations.delayed.scheduled', {
+                          action: actionTypeLabel(step.action || ''),
+                          time: formatDateTime(step.details?.run_at ?? null),
+                        })
+                        : t('automations.delayed.notQueued', {
+                          action: actionTypeLabel(step.action || ''),
+                          reason: t(`automations.delayed.reasons.${step.details?.reason}`),
+                        })}
+                    </div>
+                  ))}
                 </div>
 
                 <div className="hidden sm:block text-xs text-dark-500 flex-shrink-0">

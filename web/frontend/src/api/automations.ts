@@ -25,6 +25,10 @@ export interface AutomationRule {
 export interface ExtraAction {
   action_type: string
   action_config: Record<string, unknown>
+  /** Выполнить через столько часов после срабатывания; 0 — сразу (только для нарушений) */
+  delay_hours?: number
+  /** Отложенный шаг не выполняется, если клиент за это время написал в поддержку */
+  unless_support?: boolean
 }
 
 export interface AutomationRuleCreate {
@@ -92,6 +96,7 @@ export interface AutomationTestSummary {
   operator?: string
   value?: number
   targets?: number
+  steps?: { action_type: string; delay_hours: number }[]
 }
 
 export interface AutomationTestResult {

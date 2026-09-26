@@ -285,6 +285,20 @@ export function describeAction(rule: { action_type: string; action_config: Recor
   return base
 }
 
+/** «через 12 ч» / «через 30 мин» — задержка шага цепочки. */
+export function formatStepDelay(hours: number): string {
+  const delay = hours < 1
+    ? t('automations.delayed.minutes', { n: Math.round(hours * 60) })
+    : t('automations.delayed.hours', { n: Math.round(hours * 10) / 10 })
+  return t('automations.delayed.after', { delay })
+}
+
+/** Шаг цепочки с задержкой: «через 12 ч — Урезать скорость». */
+export function describeStep(step: { action_type: string; action_config: Record<string, unknown>; delay_hours?: number }): string {
+  const action = describeAction(step)
+  return step.delay_hours && step.delay_hours > 0 ? `${formatStepDelay(step.delay_hours)} — ${action}` : action
+}
+
 export function actionDescription(action: string): string {
   return t(`automations.actionDescs.${action}`, { defaultValue: '' })
 }

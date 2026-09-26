@@ -5,6 +5,8 @@ import {
   categoryColor,
   describeTrigger,
   describeAction,
+  describeStep,
+  formatStepDelay,
   actionTypeLabel,
   actionDescription,
   triggerTypeLabel,
@@ -238,6 +240,23 @@ describe('describeAction', () => {
       action_type: 'custom_action',
       action_config: {},
     })).toBe('custom_action')
+  })
+})
+
+describe('describeStep', () => {
+  it('prefixes a delayed chain step with its delay', () => {
+    expect(describeStep({ action_type: 'throttle_user', action_config: {}, delay_hours: 12 }))
+      .toBe(`через 12 ч — ${describeAction({ action_type: 'throttle_user', action_config: {} })}`)
+  })
+
+  it('keeps an immediate step as a plain action', () => {
+    expect(describeStep({ action_type: 'notify', action_config: {}, delay_hours: 0 }))
+      .toBe(describeAction({ action_type: 'notify', action_config: {} }))
+  })
+
+  it('shows short delays in minutes', () => {
+    expect(formatStepDelay(0.5)).toBe('через 30 мин')
+    expect(formatStepDelay(1.5)).toBe('через 1.5 ч')
   })
 })
 

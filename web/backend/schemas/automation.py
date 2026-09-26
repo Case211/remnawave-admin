@@ -42,6 +42,10 @@ _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
     "warn_user": {"force"},
 }
 MAX_EXTRA_ACTIONS = 5
+# Отложенный шаг перепроверяет нарушение перед выполнением — без нарушения в
+# контексте перепроверять нечего, поэтому задержка только на этих событиях
+DELAYED_STEP_EVENTS = {"violation.detected", "torrent.detected"}
+MAX_STEP_DELAY_HOURS = 720
 # Что реально присылает движок: неизвестное событие или метрика = правило,
 # которое никогда не сработает
 EVENT_TYPES = {
@@ -89,9 +93,16 @@ def _check_action_keys(action_type: str, action_config: dict) -> None:
 
 
 class ExtraAction(BaseModel):
-    """Действие после основного — «уведомить + урезать скорость»."""
+    """Действие после основного — «уведомить + урезать скорость».
+
+    ``delay_hours`` — выполнить не сразу, а через столько часов после
+    срабатывания: «предупредить, через 12 ч урезать». ``unless_support`` —
+    не выполнять, если клиент за это время написал в поддержку.
+    """
     action_type: ActionType
     action_config: dict = Field(default_factory=dict)
+    delay_hours: float = Field(0, ge=0, le=MAX_STEP_DELAY_HOURS)
+    unless_support: bool = True
 
 class AutomationRuleCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
@@ -120,6 +131,13 @@ class AutomationRuleCreate(BaseModel):
         for extra in self.extra_actions:
             _check_action_keys(extra.action_type, extra.action_config)
             _validate_config_values(extra.action_config)
+        delays = [extra.delay_hours for extra in self.extra_actions]
+        if any(delays):
+            if self.trigger_type != "event" or self.trigger_config.get("event") not in DELAYED_STEP_EVENTS:
+                raise ValueError("Delayed steps are only available for violation and torrent events")
+            # Порядок шагов в списке — порядок выполнения, иначе цепочку не прочитать
+            if delays != sorted(delays):
+                raise ValueError("Step delays must not decrease along the chain")
         match = self.trigger_config.get("conditions_match")
         if match is not None and match not in ("all", "any"):
             raise ValueError("conditions_match must be 'all' or 'any'")

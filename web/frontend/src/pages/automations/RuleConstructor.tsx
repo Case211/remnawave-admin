@@ -43,6 +43,7 @@ import {
   CATEGORIES,
   describeTrigger,
   describeAction,
+  describeStep,
   categoryLabel,
   categoryColor,
   triggerTypeLabel,
@@ -99,6 +100,9 @@ const ACTION_CATEGORY_MAP: Record<string, string> = {
 
 // Что можно добавить вторым шагом: простые действия без выбора цели
 const EXTRA_ACTION_TYPES = ['notify', 'throttle_user', 'warn_user', 'block_user', 'disable_user', 'reset_traffic', 'force_sync']
+// Отложенный шаг перед выполнением перепроверяет нарушение — без него перепроверять нечего
+const DELAY_EVENTS = ['violation.detected', 'torrent.detected']
+const MAX_STEP_DELAY_HOURS = 720
 
 export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructorProps) {
   const queryClient = useQueryClient()
@@ -456,7 +460,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       conditions: validConditions,
       action_type: actionType,
       action_config: buildActionConfig(),
-      extra_actions: extraActions,
+      // Задержки есть только у шагов по нарушениям: сменили триггер — шаги снова сразу
+      extra_actions: extraActions.map((s) => ({ ...s, delay_hours: delaysAllowed ? s.delay_hours || 0 : 0 })),
     }
 
     if (editRule) {
@@ -482,6 +487,14 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
     )
   }
 
+  const delaysAllowed = triggerType === 'event' && DELAY_EVENTS.includes(eventType)
+  // Порядок шагов в списке — порядок выполнения: задержки не должны убывать
+  const delaysOrdered = extraActions.every(
+    (s, i) => i === 0 || (s.delay_hours || 0) >= (extraActions[i - 1].delay_hours || 0),
+  )
+  const updateStep = (idx: number, patch: Partial<ExtraAction>) =>
+    setExtraActions((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
+
   const canProceed = (): boolean => {
     if (step === 1) {
       if (triggerType === 'event') return !!eventType
@@ -502,6 +515,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         if (!notifyMessage.trim()) return false
         if (notifyChannel === 'webhook' && !webhookUrl.trim()) return false
       }
+      if (delaysAllowed && !delaysOrdered) return false
       return true
     }
     if (step === 4) return !!name.trim()
@@ -524,6 +538,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
     if (step === 3) {
       if (actionType === 'notify' && !notifyMessage.trim()) return t('automations.constructor.validationMessage')
       if (actionType === 'notify' && notifyChannel === 'webhook' && !webhookUrl.trim()) return t('automations.constructor.validationWebhook')
+      if (delaysAllowed && !delaysOrdered) return t('automations.delayed.orderHint')
     }
     if (step === 4 && !name.trim()) return t('automations.constructor.validationName')
     return null
@@ -1377,7 +1392,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         <span className="text-[11px] text-dark-400 w-4 text-center">{idx + 2}</span>
                         <Select
                           value={step.action_type}
-                          onValueChange={(v) => setExtraActions((prev) => prev.map((s, i) => (i === idx ? { action_type: v, action_config: {} } : s)))}
+                          onValueChange={(v) => updateStep(idx, { action_type: v, action_config: {} })}
                         >
                           <SelectTrigger className="min-w-0 flex-1 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white">
                             <SelectValue />
@@ -1402,15 +1417,48 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         />
                       )}
                       {(step.action_type === 'throttle_user' || step.action_type === 'block_user' || step.action_type === 'disable_user') && (
-                        <Input
-                          type="number" min={0} step="0.5"
-                          value={String(step.action_config.duration_hours ?? '')}
-                          onChange={(e) => setExtraActions((prev) => prev.map((s, i) => (i === idx
-                            ? { ...s, action_config: parseFloat(e.target.value) > 0 ? { ...s.action_config, duration_hours: parseFloat(e.target.value) } : {} }
-                            : s)))}
-                          placeholder={t('automations.constructor.chain.hours')}
-                          className="w-full sm:w-40 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
-                        />
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-dark-300">
+                          <span>{t('automations.delayed.duration')}</span>
+                          <Input
+                            type="number" min={0} step="0.5"
+                            value={String(step.action_config.duration_hours ?? '')}
+                            onChange={(e) => setExtraActions((prev) => prev.map((s, i) => (i === idx
+                              ? { ...s, action_config: parseFloat(e.target.value) > 0 ? { ...s.action_config, duration_hours: parseFloat(e.target.value) } : {} }
+                              : s)))}
+                            placeholder="—"
+                            aria-label={t('automations.delayed.duration')}
+                            className="h-8 w-20 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                          />
+                          <span>{t('automations.delayed.durationUnit')}</span>
+                        </div>
+                      )}
+                      {delaysAllowed && (
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-dark-300">
+                            <span>{t('automations.delayed.when')}</span>
+                            <Input
+                              type="number" min={0} max={MAX_STEP_DELAY_HOURS} step="0.5"
+                              value={step.delay_hours ? String(step.delay_hours) : ''}
+                              onChange={(e) => {
+                                const hours = parseFloat(e.target.value)
+                                updateStep(idx, { delay_hours: hours > 0 ? Math.min(hours, MAX_STEP_DELAY_HOURS) : 0 })
+                              }}
+                              placeholder="0"
+                              aria-label={t('automations.delayed.when')}
+                              className="h-8 w-20 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                            />
+                            <span>{t(step.delay_hours ? 'automations.delayed.hoursAfter' : 'automations.delayed.now')}</span>
+                          </div>
+                          {!!step.delay_hours && (
+                            <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                              <Checkbox
+                                checked={step.unless_support !== false}
+                                onCheckedChange={(v) => updateStep(idx, { unless_support: !!v })}
+                              />
+                              {t('automations.delayed.unlessSupport')}
+                            </label>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -1422,6 +1470,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   )}
                 </div>
                 <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.chain.hint')}</p>
+                {delaysAllowed && extraActions.some((s) => s.delay_hours) && (
+                  <p className="text-[11px] text-dark-300 mt-1">{t('automations.delayed.recheckHint')}</p>
+                )}
               </div>
             </div>
 
@@ -1683,7 +1734,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   <div key={i} className="flex items-center gap-2 pl-5">
                     <span className="text-[11px] text-dark-500">{i + 2}.</span>
                     <span className="text-xs text-primary-300">
-                      {describeAction({ action_type: step.action_type, action_config: step.action_config })}
+                      {describeStep({ ...step, delay_hours: delaysAllowed ? step.delay_hours : 0 })}
                     </span>
                   </div>
                 ))}
