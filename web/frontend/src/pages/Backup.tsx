@@ -22,7 +22,7 @@ import {
   Search,
   Recycle,
 } from '@/components/brand/icons'
-import { backupApi, type S3SettingsPayload } from '../api/backup'
+import { backupApi, type BackupLogItem, type S3SettingsPayload } from '../api/backup'
 import { useAuthStore } from '../store/authStore'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,6 +40,9 @@ import { settingsOf } from '@/api/settings'
 import client from '../api/client'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+
+// Плановые бэкапы бэкенд пишет от имени «scheduler» (core/backup_service.py)
+const isScheduled = (entry: BackupLogItem) => entry.created_by_username === 'scheduler'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -897,9 +900,12 @@ function HistoryTab() {
                     </span>
                   </div>
                   <p className="text-xs text-dark-400 mt-0.5">
-                    {entry.created_by_username && <><span className="text-dark-300">{entry.created_by_username}</span> &middot; </>}
+                    {entry.created_by_username && (
+                      <><span className="text-dark-300">{isScheduled(entry) ? t('backup.scheduled') : entry.created_by_username}</span> &middot; </>
+                    )}
                     {formatDate(entry.created_at)}
-                    {entry.notes && <> &middot; {entry.notes}</>}
+                    {/* Пометку плановых бэкенд пишет по-русски, а подпись выше уже сказала то же */}
+                    {entry.notes && !isScheduled(entry) && <> &middot; {entry.notes}</>}
                   </p>
                 </div>
                 {entry.size_bytes > 0 && (

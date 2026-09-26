@@ -6207,6 +6207,7 @@
     },
     "history": "Operation History",
     "noHistory": "No backup operations recorded",
+    "scheduled": "Scheduled",
     "importConfig": "Import Configuration",
     "noConfigFiles": "No config backup files available. Create a config backup first.",
     "importMissing": "Import Missing",
