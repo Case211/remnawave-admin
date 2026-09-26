@@ -169,11 +169,11 @@ async def send_notice(
 
     violation_id = int(violation.get("id") or 0)
     telegram_id = violation.get("telegram_id")
+    email = str(violation.get("email") or "").strip()
     if not violation_id:
         return {"sent": False, "reason": "no_violation"}
-    if not telegram_id:
-        # Клиента в боте нет — писать некому и некуда.
-        return {"sent": False, "reason": "no_telegram_id"}
+    if not telegram_id and not email:
+        return {"sent": False, "reason": "no_recipient"}
     if not force and await already_notified(violation_id):
         return {"sent": False, "reason": "already_notified"}
 
@@ -191,16 +191,23 @@ async def send_notice(
         return {"sent": False, "reason": "bedolaga_not_configured"}
 
     try:
-        user = await bedolaga_client.get_user_by_telegram(int(telegram_id))
+        if telegram_id:
+            user = await bedolaga_client.get_user_by_telegram(int(telegram_id))
+        else:
+            user = await bedolaga_client.get_user_by_email(email)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Клиент %s в боте не найден: %s", telegram_id, exc)
+        logger.warning("Клиент нарушения %s в боте не найден: %s", violation_id, exc)
         return {"sent": False, "reason": "user_not_found"}
 
     bot_user_id = int((user or {}).get("id") or 0)
     if not bot_user_id:
         return {"sent": False, "reason": "user_not_found"}
 
-    channels = ["telegram", "email"] if template.get("send_email") else ["telegram"]
+    if telegram_id:
+        channels = ["telegram", "email"] if template.get("send_email") else ["telegram"]
+    else:
+        # Email is the primary delivery channel when the account has no Telegram ID.
+        channels = ["email"]
     body = str(template.get("body_ru") or "")
     subject = str(template.get("subject_ru") or "Использование подписки")
 
@@ -235,7 +242,7 @@ async def send_notice(
                 """,
                 violation_id,
                 str(violation.get("user_uuid")),
-                int(telegram_id),
+                int(telegram_id) if telegram_id else None,
                 kind,
                 delivered,
                 sent_by,
