@@ -313,6 +313,31 @@ async def test_support_contact_pauses_the_measure():
 
 
 @pytest.mark.asyncio
+async def test_external_support_contact_works_without_telegram_id():
+    violation = {**VIOLATION, "telegram_id": None}
+    support = AsyncMock(return_value=True)
+    with patch("shared.database.db_service", _db(_Conn(violation))), \
+            patch("web.backend.core.automation.support_contact_since", support):
+        result = await AutomationEngine()._step_blocker("throttle_user", "u-1", PAYLOAD, {"violation_id": 5})
+    assert result == "support_contacted"
+    support.assert_awaited_once_with(None, datetime.fromisoformat(PAYLOAD["started_at"]), user_uuid="u-1")
+
+
+@pytest.mark.asyncio
+async def test_support_lookup_includes_external_events_by_user_uuid():
+    from web.backend.core.automation import support_contact_since
+
+    conn = AsyncMock()
+    conn.fetchval.return_value = True
+    since = datetime.fromisoformat(PAYLOAD["started_at"])
+    with patch("shared.database.db_service", _db(conn)):
+        assert await support_contact_since(None, since, user_uuid="u-1") is True
+    sql, telegram_id, actual_since, user_uuid = conn.fetchval.await_args.args
+    assert "external_support_events" in sql
+    assert (telegram_id, actual_since, user_uuid) == (None, since, "u-1")
+
+
+@pytest.mark.asyncio
 async def test_support_check_can_be_turned_off():
     payload = {**PAYLOAD, "unless_support": False}
     assert await _blocker(_Conn(VIOLATION), payload=payload, support=True) is None

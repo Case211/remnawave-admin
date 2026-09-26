@@ -292,6 +292,29 @@ Returns the full analyzer breakdown (`temporal_score`, `geo_score`, `asn_score`,
 `is_mobile`, `is_datacenter`, `is_vpn`) and resolution fields (`action_taken`,
 `action_taken_at`, `admin_comment`). `404` if not found.
 
+## External support contact
+
+### `POST /support-events`
+
+Required scope: `enforcement:support`. A bot or helpdesk reports that the customer contacted support. If a delayed violation step is waiting with the support check enabled, the step is skipped with the `support_contacted` reason when it becomes due.
+
+The `Idempotency-Key` header is required and must identify the event within the API key. Retrying the same value safely returns `202` with `duplicate: true`.
+
+```json
+{
+  "source": "telegram-support",
+  "kind": "customer_message",
+  "occurred_at": "2026-09-26T10:30:00Z",
+  "user": { "telegram_id": 123456789 },
+  "ticket_id": "ticket-42",
+  "metadata": { "queue": "billing" }
+}
+```
+
+`user` must contain at least one of `user_uuid`, `telegram_id`, `email`, or `username`. When several are supplied, all of them must identify the same user. Responses: `404` when no user matches, `409` when the identity is ambiguous, and `422` for invalid input or an event time more than five minutes in the future.
+
+For a standalone Telegram bot, `telegram_id` is normally sufficient. The event is stored by Admin; the integration needs no access to the database or Bedolaga tickets.
+
 ---
 
 ## Stats

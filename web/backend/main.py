@@ -69,6 +69,7 @@ from web.backend.api.v2 import plugins as plugins_api
 from web.backend.api.v2 import internal as internal_api
 from web.backend.core import plugins as plugin_loader
 from web.backend.api.v3 import public as public_api_v3
+from web.backend.api.v3 import support_events as support_events_api_v3
 
 
 # ── Logging setup (structlog) ────────────────────────────────────
@@ -1215,6 +1216,7 @@ def create_app() -> FastAPI:
     # Public API v3 — enabled via EXTERNAL_API_ENABLED=true
     if settings.external_api_enabled:
         app.include_router(public_api_v3.router, prefix="/api/v3", tags=["public-api"])
+        app.include_router(support_events_api_v3.router, prefix="/api/v3", tags=["public-api"])
         # Serve local Swagger UI static files (no CDN dependency)
         from pathlib import Path as _Path
         _swagger_dir = _Path(__file__).parent / "static" / "swagger-ui"

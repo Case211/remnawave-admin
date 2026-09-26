@@ -545,8 +545,8 @@ async def schedule_pending_action(rule_id: int, action: str, target: str, run_at
     return inserted is not None
 
 
-async def support_contact_since(telegram_id: int, since) -> bool:
-    """Писал ли клиент в поддержку (тикеты Bedolaga) начиная с since."""
+async def support_contact_since(telegram_id: Optional[int], since, user_uuid: Optional[str] = None) -> bool:
+    """Писал ли клиент в Bedolaga или внешнюю поддержку начиная с since."""
     from shared.database import db_service
     async with db_service.acquire() as conn:
         return bool(await conn.fetchval(
@@ -559,9 +559,13 @@ async def support_contact_since(telegram_id: int, since) -> bool:
                         OR EXISTS (SELECT 1 FROM support_ticket_messages m
                                     WHERE m.ticket_id = t.id AND NOT m.is_from_admin
                                       AND m.created_at >= $2))
+            ) OR EXISTS (
+                SELECT 1 FROM external_support_events e
+                 WHERE e.occurred_at >= $2
+                   AND (e.user_uuid = $3::uuid OR ($1::bigint IS NOT NULL AND e.telegram_id = $1))
             )
             """,
-            telegram_id, since,
+            telegram_id, since, user_uuid,
         ))
 
 
@@ -616,6 +620,10 @@ async def cleanup_automation_history(keep_days: int = 90) -> int:
         )
         await conn.execute(
             "DELETE FROM automation_pending_actions WHERE done_at < NOW() - INTERVAL '1 day' * $1",
+            keep_days,
+        )
+        await conn.execute(
+            "DELETE FROM external_support_events WHERE occurred_at < NOW() - INTERVAL '1 day' * $1",
             keep_days,
         )
     return int(result.split()[-1]) if result else 0

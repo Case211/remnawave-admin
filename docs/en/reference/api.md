@@ -96,6 +96,7 @@ scope required by the endpoint.
 | `hosts:read` | Read hosts | `GET /hosts`, `GET /hosts/{uuid}` |
 | `stats:read` | Global statistics | `GET /stats` |
 | `violations:read` | Read anti-abuse violations | `GET /violations`, `GET /violations/{id}` |
+| `enforcement:support` | Report a customer contact from an external support system | `POST /support-events` |
 | `bulk:write` | Bulk operations on users | `POST /users/bulk/*` |
 
 Guidelines:
@@ -106,7 +107,7 @@ Guidelines:
 - `bulk:write` bypasses per-user scope checks. Treat it as a privileged scope.
 - `nodes:token` grants access to a node's agent token — the credential that authenticates the Collector API, the agent WebSocket, and remote-terminal commands, effectively a key to the node host. Treat it as more privileged than `bulk:write`.
 
-A key cannot get a scope whose permission its creating admin does not have. Scopes that work across all users (`users:*`, `bulk:write`, `violations:read`) can only be granted by an admin without user visibility restrictions. A key of a disabled or deleted admin stops working.
+A key cannot get a scope whose permission its creating admin does not have. Scopes that work across all users (`users:*`, `bulk:write`, `violations:read`, `enforcement:support`) can only be granted by an admin without user visibility restrictions. A key of a disabled or deleted admin stops working.
 
 ---
 
