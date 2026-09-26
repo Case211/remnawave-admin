@@ -148,6 +148,31 @@ _stats = {
     "worker_started_at": None,   # When worker was last started
 }
 
+
+async def _warn_after_auto_action(violation: dict) -> None:
+    """Notify the customer after an automatic restriction was applied.
+
+    Delivery is best-effort: a notification provider outage must never roll
+    back or repeat an action that already succeeded in the panel.
+    """
+    if not config_service.get("violations_warn_on_action", True):
+        return
+    try:
+        from web.backend.core.violation_notices import send_notice
+
+        result = await send_notice(violation, sent_by="auto", auto=True)
+        if not result.get("sent"):
+            logger.info(
+                "Automatic action warning for violation %s was not sent: %s",
+                violation.get("id"), result.get("reason"),
+            )
+    except Exception as exc:  # noqa: BLE001 -- restriction already succeeded
+        logger.warning(
+            "Automatic action warning for violation %s failed: %s",
+            violation.get("id"), exc,
+        )
+
+
 async def _violation_worker():
     """Single long-lived worker that drains _pending_violation_users in chunks."""
     import time
@@ -1376,6 +1401,17 @@ async def _handle_violation(
 
         from shared.violation_detector import ViolationAction
 
+        notice_violation = {
+            "id": violation_id,
+            "user_uuid": user_uuid,
+            "username": username,
+            "email": email,
+            "telegram_id": telegram_id,
+            "score": violation_score.total,
+            "reasons": violation_score.reasons[:10] if violation_score.reasons else [],
+            "raw_breakdown": {"breakdown": violation_score.breakdown},
+        }
+
         # Детектор рекомендует разобраться вручную — можно вместо этого сразу
         # урезать скорость. Мера обратимая и не выкидывает человека из сети,
         # поэтому в отличие от автоблокировки её не страшно применять на
@@ -1406,6 +1442,8 @@ async def _handle_violation(
                     )
                     from web.backend.core.throttle_sync import push_throttles
                     await push_throttles()
+                    if not is_whitelisted:
+                        await _warn_after_auto_action(notice_violation)
                 else:
                     logger.warning("Auto-throttle failed for %s: %s", user_uuid[:8], err)
             except Exception as throttle_error:
@@ -1427,6 +1465,8 @@ async def _handle_violation(
                         "violation_id": violation_id,
                         "blocked_by": "auto",
                     })
+                    if not is_whitelisted:
+                        await _warn_after_auto_action(notice_violation)
                 except Exception as block_error:
                     logger.warning("Failed to auto-block user %s: %s", user_uuid, block_error)
 

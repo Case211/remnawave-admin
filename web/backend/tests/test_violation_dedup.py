@@ -164,12 +164,39 @@ class TestHandleViolationCreatedGate:
     @pytest.mark.asyncio
     async def test_created_fires_event_and_autoblocks(self):
         db, monitor, patches = _handle_violation_mocks(save_result=(43, True))
-        with patches[0], patches[1], patches[2] as fire, patches[3], patches[4], patches[5] as disable, patches[6]:
+        with patches[0], patches[1], patches[2] as fire, patches[3], patches[4], patches[5] as disable, patches[6], \
+             patch.object(collector, "_warn_after_auto_action", new_callable=AsyncMock) as warn:
             await collector._handle_violation(USER_UUID, _score(), None, [], False)
         fired_events = [c.args[0] for c in fire.call_args_list]
         assert "violation.created" in fired_events
         assert "user.blocked" in fired_events
         disable.assert_awaited_once_with(USER_UUID)
+        warn.assert_awaited_once()
+        assert warn.await_args.args[0]["id"] == 43
+
+    @pytest.mark.asyncio
+    async def test_warning_delivery_failure_is_swallowed(self):
+        warning = {"id": 50, "user_uuid": USER_UUID}
+        with patch.object(
+            collector.config_service, "get",
+            side_effect=lambda key, default=None: True if key == "violations_warn_on_action" else default,
+        ), patch(
+            "web.backend.core.violation_notices.send_notice",
+            new=AsyncMock(side_effect=RuntimeError("delivery unavailable")),
+        ) as send:
+            await collector._warn_after_auto_action(warning)
+
+        send.assert_awaited_once_with(warning, sent_by="auto", auto=True)
+
+    @pytest.mark.asyncio
+    async def test_warning_setting_can_disable_auto_action_notice(self):
+        warning = {"id": 51, "user_uuid": USER_UUID}
+        with patch.object(collector.config_service, "get", return_value=False), patch(
+            "web.backend.core.violation_notices.send_notice", new_callable=AsyncMock,
+        ) as send:
+            await collector._warn_after_auto_action(warning)
+
+        send.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_autoblock_toggle_off_skips_disable(self):
@@ -182,6 +209,23 @@ class TestHandleViolationCreatedGate:
         assert "violation.created" in fired_events
         assert "user.blocked" not in fired_events
         disable.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_successful_auto_throttle_warns_customer(self):
+        db, monitor, patches = _handle_violation_mocks(
+            save_result=(52, True), config={"violation_auto_soft_throttle": True},
+        )
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], \
+             patch("shared.throttle.default_rate_kbit", return_value=1024), \
+             patch("shared.throttle.apply_throttle", new=AsyncMock(return_value=(True, None, False))), \
+             patch("web.backend.core.throttle_sync.push_throttles", new_callable=AsyncMock), \
+             patch.object(collector, "_warn_after_auto_action", new_callable=AsyncMock) as warn:
+            await collector._handle_violation(
+                USER_UUID, _score(action=ViolationAction.SOFT_BLOCK), None, [], False,
+            )
+
+        warn.assert_awaited_once()
+        assert warn.await_args.args[0]["id"] == 52
 
     @pytest.mark.asyncio
     async def test_trial_abuse_blocks_accomplices_and_resolves(self):
