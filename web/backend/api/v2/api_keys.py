@@ -27,7 +27,8 @@ SCOPE_PERMISSION = {
     "bulk:write": ("users", "bulk_operations"),
     "stats:read": ("analytics", "view"),
     "violations:read": ("violations", "view"),
-    "enforcement:support": ("violations", "edit"),
+    # Обращение клиента останавливает отложенную меру — то же право, что решать по нарушениям
+    "enforcement:support": ("violations", "resolve"),
 }
 # Ключ работает по всем юзерам — такие области только админу без ограничения видимости
 _ALL_USERS_SCOPES = {

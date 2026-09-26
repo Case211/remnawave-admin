@@ -82,6 +82,18 @@ async def test_idempotency_key_is_required(v3_client):
 
 
 @pytest.mark.asyncio
+async def test_oversized_metadata_is_rejected(v3_client):
+    """metadata никто не читает — раздувать ею таблицу нельзя."""
+    body = {**_body(), "metadata": {"blob": "x" * 5000}}
+    with patch("web.backend.core.api_key_auth.validate_api_key", AsyncMock(return_value=VALID_KEY)):
+        response = await v3_client.post(
+            "/api/v3/support-events", json=body,
+            headers={"X-API-Key": "rwa_test", "Idempotency-Key": "big-1"},
+        )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_records_event_for_exact_user(v3_client):
     db, conn = _db()
     with patch("web.backend.core.api_key_auth.validate_api_key", AsyncMock(return_value=VALID_KEY)), \

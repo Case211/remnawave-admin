@@ -35,8 +35,8 @@ async def test_user_scopes_need_unrestricted_visibility():
 
 
 @pytest.mark.asyncio
-async def test_support_scope_needs_violation_edit_and_unrestricted_visibility():
-    admin = _admin(perms={("violations", "edit")})
+async def test_support_scope_needs_violation_resolve_and_unrestricted_visibility():
+    admin = _admin(perms={("violations", "resolve")})
     with patch("web.backend.core.rbac.get_visible_user_uuids", AsyncMock(return_value=None)):
         await api_keys._check_scopes_allowed(admin, ["enforcement:support"])
     with patch("web.backend.core.rbac.get_visible_user_uuids", AsyncMock(return_value={"u1"})):

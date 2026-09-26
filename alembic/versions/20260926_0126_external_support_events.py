@@ -1,7 +1,11 @@
-"""External support contacts for delayed automation rechecks.
+"""Обращения во внешнюю поддержку — для перепроверки отложенных шагов.
 
 Revision ID: 0126
 Revises: 0125
+
+Клиент может писать не в тикеты Bedolaga, а в отдельный бот или helpdesk;
+интеграция сообщает об этом через POST /api/v3/support-events. Событие
+переживает отзыв ключа: ждущая мера не должна «забыть» обращение.
 """
 from typing import Sequence, Union
 

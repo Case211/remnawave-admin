@@ -1,15 +1,24 @@
-"""Inbound support events from external bots and helpdesks."""
+"""Обращения клиентов во внешнюю поддержку — для перепроверки отложенных шагов.
+
+Клиент может писать не в тикеты Bedolaga, а в отдельный бот или helpdesk.
+Интеграция сообщает сюда факт обращения, и отложенная мера по его нарушению
+(шаг автоматизации с проверкой поддержки) не применится — решит оператор.
+Текст переписки не нужен: достаточно, кто и когда.
+"""
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from web.backend.api.v3.deps import ApiKeyUser, require_scope
 
 router = APIRouter()
+
+# metadata хранится как есть и ничем не читается — большой объём только раздул бы таблицу
+_MAX_METADATA_BYTES = 4096
 
 
 class SupportIdentity(BaseModel):
@@ -33,6 +42,13 @@ class SupportEvent(BaseModel):
     ticket_id: Optional[str] = Field(None, max_length=200)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("metadata")
+    @classmethod
+    def limit_metadata(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        if len(json.dumps(value, default=str).encode()) > _MAX_METADATA_BYTES:
+            raise ValueError(f"metadata is limited to {_MAX_METADATA_BYTES} bytes")
+        return value
+
 
 class SupportEventResult(BaseModel):
     accepted: bool = True
@@ -45,7 +61,7 @@ async def create_support_event(
     api_key: ApiKeyUser = Depends(require_scope("enforcement:support")),
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1, max_length=200),
 ):
-    """Record a customer contact for the existing delayed-action recheck."""
+    """Записать обращение клиента — его учтёт перепроверка отложенного шага."""
     occurred_at = body.occurred_at or datetime.now(timezone.utc)
     if occurred_at.tzinfo is None:
         occurred_at = occurred_at.replace(tzinfo=timezone.utc)
