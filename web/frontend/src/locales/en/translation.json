@@ -4830,7 +4830,7 @@
       },
       "violations_warn_on_action": {
         "label": "Violations: warn the customer on action",
-        "description": "When an operator blocks or throttles, send the customer an explanation — otherwise they come to support with \"nothing works\""
+        "description": "When a customer is blocked or throttled — manually or automatically — send them an explanation, otherwise they come to support with \"nothing works\""
       },
       "audit_retention_days": {
         "label": "Audit log retention (days)",

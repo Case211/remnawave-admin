@@ -165,14 +165,15 @@ class TestHandleViolationCreatedGate:
     async def test_created_fires_event_and_autoblocks(self):
         db, monitor, patches = _handle_violation_mocks(save_result=(43, True))
         with patches[0], patches[1], patches[2] as fire, patches[3], patches[4], patches[5] as disable, patches[6], \
-             patch.object(collector, "_warn_after_auto_action", new_callable=AsyncMock) as warn:
+             patch.object(collector, "_schedule_auto_notice") as schedule:
             await collector._handle_violation(USER_UUID, _score(), None, [], False)
         fired_events = [c.args[0] for c in fire.call_args_list]
         assert "violation.created" in fired_events
         assert "user.blocked" in fired_events
         disable.assert_awaited_once_with(USER_UUID)
-        warn.assert_awaited_once()
-        assert warn.await_args.args[0]["id"] == 43
+        # Предупреждение ставится в фоновую очередь, разбор нарушения его не ждёт
+        schedule.assert_called_once()
+        assert schedule.call_args.args[0]["id"] == 43
 
     @pytest.mark.asyncio
     async def test_warning_delivery_failure_is_swallowed(self):
@@ -219,13 +220,26 @@ class TestHandleViolationCreatedGate:
              patch("shared.throttle.default_rate_kbit", return_value=1024), \
              patch("shared.throttle.apply_throttle", new=AsyncMock(return_value=(True, None, False))), \
              patch("web.backend.core.throttle_sync.push_throttles", new_callable=AsyncMock), \
-             patch.object(collector, "_warn_after_auto_action", new_callable=AsyncMock) as warn:
+             patch.object(collector, "_schedule_auto_notice") as schedule:
             await collector._handle_violation(
                 USER_UUID, _score(action=ViolationAction.SOFT_BLOCK), None, [], False,
             )
 
-        warn.assert_awaited_once()
-        assert warn.await_args.args[0]["id"] == 52
+        schedule.assert_called_once()
+        assert schedule.call_args.args[0]["id"] == 52
+
+    @pytest.mark.asyncio
+    async def test_auto_notices_run_in_background_without_drops(self):
+        """Очередь предупреждений выполняет всё, даже больше лимита общих фоновых задач."""
+        import asyncio
+
+        with patch.object(collector, "_warn_after_auto_action", new_callable=AsyncMock) as warn:
+            for i in range(30):
+                collector._schedule_auto_notice({"id": i})
+            await asyncio.gather(*list(collector._auto_notice_tasks))
+
+        assert warn.await_count == 30
+        assert {c.args[0]["id"] for c in warn.await_args_list} == set(range(30))
 
     @pytest.mark.asyncio
     async def test_trial_abuse_blocks_accomplices_and_resolves(self):

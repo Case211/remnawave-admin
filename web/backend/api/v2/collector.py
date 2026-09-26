@@ -173,6 +173,31 @@ async def _warn_after_auto_action(violation: dict) -> None:
         )
 
 
+# Предупреждения после автоматических мер уходят в фоне: бот, поиск клиента,
+# письмо не должны тормозить разбор нарушений. Общий _schedule_background_task
+# при перегрузке задачи выбрасывает, а предупреждение после блокировки терять
+# нельзя — здесь задачи ждут своей очереди, одновременно не больше четырёх.
+_auto_notice_tasks: set = set()
+_AUTO_NOTICE_CONCURRENCY = 4
+_auto_notice_slots: Optional[asyncio.Semaphore] = None
+
+
+def _schedule_auto_notice(violation: dict) -> None:
+    """Поставить предупреждение клиенту после автоматической меры в фоновую очередь."""
+    global _auto_notice_slots
+    if _auto_notice_slots is None:
+        _auto_notice_slots = asyncio.Semaphore(_AUTO_NOTICE_CONCURRENCY)
+    slots = _auto_notice_slots
+
+    async def run():
+        async with slots:
+            await _warn_after_auto_action(violation)
+
+    task = asyncio.create_task(run())
+    _auto_notice_tasks.add(task)
+    task.add_done_callback(_auto_notice_tasks.discard)
+
+
 async def _violation_worker():
     """Single long-lived worker that drains _pending_violation_users in chunks."""
     import time
@@ -1443,7 +1468,7 @@ async def _handle_violation(
                     from web.backend.core.throttle_sync import push_throttles
                     await push_throttles()
                     if not is_whitelisted:
-                        await _warn_after_auto_action(notice_violation)
+                        _schedule_auto_notice(notice_violation)
                 else:
                     logger.warning("Auto-throttle failed for %s: %s", user_uuid[:8], err)
             except Exception as throttle_error:
@@ -1466,7 +1491,7 @@ async def _handle_violation(
                         "blocked_by": "auto",
                     })
                     if not is_whitelisted:
-                        await _warn_after_auto_action(notice_violation)
+                        _schedule_auto_notice(notice_violation)
                 except Exception as block_error:
                     logger.warning("Failed to auto-block user %s: %s", user_uuid, block_error)
 
