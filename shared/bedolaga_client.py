@@ -115,7 +115,7 @@ class BedolagaClient:
     async def get_user_by_telegram(self, telegram_id: int) -> dict:
         return await self._get(f"/users/by-telegram-id/{telegram_id}")
 
-    async def get_user_by_email(self, email: str, page_size: int = 200) -> Optional[dict]:
+    async def get_user_by_email(self, email: str, page_size: int = 200, max_pages: int = 50) -> Optional[dict]:
         """Find an email-only user using the paginated public users contract.
 
         Bedolaga currently has no dedicated lookup endpoint for email addresses.
@@ -127,7 +127,8 @@ class BedolagaClient:
             return None
 
         offset = 0
-        while True:
+        # Предохранитель: бот без учёта offset отдавал бы одну и ту же полную страницу вечно
+        for _ in range(max_pages):
             page = await self.list_users(limit=page_size, offset=offset)
             items = page.get("items", []) if isinstance(page, dict) else []
             for user in items:
@@ -139,6 +140,8 @@ class BedolagaClient:
             total = int(page.get("total") or 0) if isinstance(page, dict) else 0
             if not items or (total and offset >= total) or len(items) < page_size:
                 return None
+        logger.warning("Поиск клиента по email остановлен после %s страниц", max_pages)
+        return None
 
     async def notify_user(
         self,

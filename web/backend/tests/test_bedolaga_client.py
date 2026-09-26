@@ -30,3 +30,19 @@ async def test_get_user_by_email_returns_none_after_last_page(monkeypatch):
     monkeypatch.setattr(client, "list_users", fake_list_users)
 
     assert await client.get_user_by_email("missing@example.com") is None
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_email_stops_after_max_pages(monkeypatch):
+    """Бот, не учитывающий offset, отдаёт одну и ту же полную страницу — перебор не должен крутиться вечно."""
+    client = BedolagaClient()
+    calls = []
+
+    async def fake_list_users(limit, offset):
+        calls.append(offset)
+        return {"items": [{"id": i, "email": f"u{i}@example.com"} for i in range(limit)]}
+
+    monkeypatch.setattr(client, "list_users", fake_list_users)
+
+    assert await client.get_user_by_email("missing@example.com", page_size=2, max_pages=3) is None
+    assert len(calls) == 3

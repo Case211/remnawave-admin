@@ -164,7 +164,6 @@ async def send_notice(
     ``auto`` — отправка без отдельного решения человека: тогда действует порог
     скора из шаблона, иначе он не применяется.
     """
-    from shared.bedolaga_client import bedolaga_client
     from shared.database import db_service
 
     violation_id = int(violation.get("id") or 0)
@@ -182,49 +181,30 @@ async def send_notice(
     if not template:
         return {"sent": False, "reason": "no_template", "kind": kind}
 
-    from web.backend.api.v2.bedolaga import ensure_configured
-
-    try:
-        ensure_configured()
-    except Exception as exc:  # noqa: BLE001 — Bedolaga не настроена
-        logger.warning("Предупреждение по нарушению %s не ушло: %s", violation_id, exc)
-        return {"sent": False, "reason": "bedolaga_not_configured"}
-
-    try:
-        if telegram_id:
-            user = await bedolaga_client.get_user_by_telegram(int(telegram_id))
-        else:
-            user = await bedolaga_client.get_user_by_email(email)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Клиент нарушения %s в боте не найден: %s", violation_id, exc)
-        return {"sent": False, "reason": "user_not_found"}
-
-    bot_user_id = int((user or {}).get("id") or 0)
-    if not bot_user_id:
-        return {"sent": False, "reason": "user_not_found"}
-
-    if telegram_id:
-        channels = ["telegram", "email"] if template.get("send_email") else ["telegram"]
-    else:
-        # Email is the primary delivery channel when the account has no Telegram ID.
-        channels = ["email"]
     body = str(template.get("body_ru") or "")
     subject = str(template.get("subject_ru") or "Использование подписки")
+    html = "<p>" + body.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+    want_email = bool(template.get("send_email"))
 
-    try:
-        result = await bedolaga_client.notify_user(
-            bot_user_id,
-            text=body,
-            channels=channels,
-            email_subject=subject,
-            email_html="<p>" + body.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>",
-        )
-    except Exception as exc:  # noqa: BLE001 — бот недоступен
-        logger.warning("Предупреждение по нарушению %s не доставлено: %s", violation_id, exc)
-        return {"sent": False, "reason": "delivery_failed"}
-
+    # Сначала бот Bedolaga: Telegram от сервисного бота и письмо её почтой
+    result, reason = await _deliver_via_bedolaga(
+        violation_id, telegram_id, email, want_email, subject, body, html,
+    )
     telegram_ok = bool(((result or {}).get("telegram") or {}).get("sent"))
     email_ok = bool(((result or {}).get("email") or {}).get("sent"))
+    email_result = (result or {}).get("email")
+
+    # Главное — чтобы дошло письмо, если у клиента есть почта. Бот не доставил
+    # ничего (не настроен, без ручки /notify, клиента не нашёл) — пишем своим
+    # почтовым сервером любому клиенту с email; доставил только Telegram, а
+    # шаблон просит «и на почту» — досылаем письмо сами.
+    if email and not email_ok and (not telegram_ok or want_email):
+        if await _send_own_email(email, subject, body, html):
+            email_ok = True
+            email_result = {"sent": True, "via": "mail_server"}
+        elif not telegram_ok:
+            reason = "mail_failed"
+
     delivered = [name for name, ok in (("telegram", telegram_ok), ("email", email_ok)) if ok]
 
     if delivered and db_service.is_connected:
@@ -258,9 +238,69 @@ async def send_notice(
         "sent": bool(delivered),
         "kind": kind,
         "telegram": (result or {}).get("telegram"),
-        "email": (result or {}).get("email"),
-        "reason": None if delivered else "not_delivered",
+        "email": email_result,
+        "reason": None if delivered else (reason or "not_delivered"),
     }
+
+
+async def _deliver_via_bedolaga(
+    violation_id: int, telegram_id, email: str, want_email: bool, subject: str, body: str, html: str,
+) -> tuple[Optional[dict], Optional[str]]:
+    """Доставка ботом Bedolaga. Возвращает (ответ бота или None, причина неудачи или None)."""
+    from shared.bedolaga_client import bedolaga_client
+    from web.backend.api.v2.bedolaga import ensure_configured
+
+    try:
+        ensure_configured()
+    except Exception as exc:  # noqa: BLE001 — Bedolaga не настроена
+        logger.info("Bedolaga не настроена — предупреждение %s без бота: %s", violation_id, exc)
+        return None, "bedolaga_not_configured"
+
+    try:
+        if telegram_id:
+            user = await bedolaga_client.get_user_by_telegram(int(telegram_id))
+        else:
+            user = await bedolaga_client.get_user_by_email(email)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Клиент нарушения %s в боте не найден: %s", violation_id, exc)
+        return None, "user_not_found"
+
+    bot_user_id = int((user or {}).get("id") or 0)
+    if not bot_user_id:
+        return None, "user_not_found"
+
+    if telegram_id:
+        channels = ["telegram", "email"] if want_email else ["telegram"]
+    else:
+        # Без Telegram письмо — единственный канал
+        channels = ["email"]
+    try:
+        result = await bedolaga_client.notify_user(
+            bot_user_id, text=body, channels=channels, email_subject=subject, email_html=html,
+        )
+    except Exception as exc:  # noqa: BLE001 — бот недоступен или без ручки /notify (#3270)
+        logger.warning("Предупреждение по нарушению %s ботом не доставлено: %s", violation_id, exc)
+        return None, "delivery_failed"
+    return result, None
+
+
+async def _send_own_email(to_email: str, subject: str, body_text: str, body_html: str) -> bool:
+    """Письмо нашим почтовым сервером. False — сервер не настроен (нет домена отправки) или сбой."""
+    try:
+        from web.backend.core.mail.mail_service import mail_service
+
+        queue_id = await mail_service.send_email(
+            to_email=to_email,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+            category="violation_notice",
+            priority=1,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Письмо-предупреждение нашим сервером не ушло: %s", exc)
+        return False
+    return bool(queue_id)
 
 
 async def notice_for(violation_id: int) -> Optional[dict]:
