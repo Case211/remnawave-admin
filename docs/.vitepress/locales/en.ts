@@ -106,6 +106,7 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Releases',
           items: [
             { text: 'All releases', link: '/en/releases/' },
+            { text: '5.1.0', link: '/en/releases/5.1.0' },
             { text: '5.0.0', link: '/en/releases/5.0.0' },
           ],
         },

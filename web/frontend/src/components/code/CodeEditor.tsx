@@ -1,14 +1,15 @@
 /**
- * CodeEditor — JSON-редактор в стиле панели (CodeMirror 6).
+ * CodeEditor — редактор кода в стиле панели (CodeMirror 6): JSON, YAML, HTML.
  *
- * Валидация: синтаксис + JSON-схема xray (ajv), автокомплит ключей по схеме
- * и официальных протоколов Xray (xtls.github.io/en/config/).
+ * Валидация JSON: синтаксис + JSON-схема xray (ajv), автокомплит ключей по схеме
+ * и официальных протоколов Xray (xtls.github.io/en/config/). HTML — подсветка
+ * и перенос длинных строк; проверку под свою задачу даёт вызывающий (`lint`).
  */
 import { useEffect, useMemo, useRef } from 'react'
 import { EditorState, Extension } from '@codemirror/state'
 import {
   EditorView, keymap, drawSelection, highlightActiveLine, dropCursor,
-  highlightSpecialChars, lineNumbers, highlightActiveLineGutter,
+  highlightSpecialChars, lineNumbers, highlightActiveLineGutter, placeholder as placeholderText,
 } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import {
@@ -23,6 +24,7 @@ import {
 import { lintKeymap, linter, lintGutter, forEachDiagnostic, Diagnostic } from '@codemirror/lint'
 import { json, jsonLanguage, jsonParseLinter } from '@codemirror/lang-json'
 import { yaml } from '@codemirror/lang-yaml'
+import { html } from '@codemirror/lang-html'
 import { oneDark } from '@codemirror/theme-one-dark'
 import Ajv, { ValidateFunction } from 'ajv'
 import i18n from '@/i18n'
@@ -35,7 +37,7 @@ const ajv = new Ajv({ allErrors: true, strict: false })
 const INBOUND_PROTOCOLS = ['dokodemo-door', 'http', 'shadowsocks', 'socks', 'trojan', 'vless', 'vmess', 'wireguard', 'hysteria', 'tun']
 const OUTBOUND_PROTOCOLS = ['blackhole', 'dns', 'freedom', 'http', 'loopback', 'shadowsocks', 'socks', 'trojan', 'vless', 'vmess', 'wireguard', 'hysteria']
 
-export type CodeEditorSchema = 'xray' | 'json' | 'yaml' | 'none'
+export type CodeEditorSchema = 'xray' | 'json' | 'yaml' | 'html' | 'none'
 
 interface CodeEditorProps {
   value: string
@@ -47,6 +49,10 @@ interface CodeEditorProps {
   onDiagnostics?: (errors: number, hints: number) => void
   /** доступ к EditorView (навигация по секциям и т.п.) */
   viewRef?: React.MutableRefObject<EditorView | null>
+  /** своя проверка текста (сейчас — для schema="html"); severity error блокирует сохранение */
+  lint?: (doc: string) => Diagnostic[]
+  /** подсказка в пустом редакторе */
+  placeholder?: string
 }
 
 /** Тема под Glassmorphism панели: прозрачный фон, наши переменные. */
@@ -276,15 +282,17 @@ function makeCompletion(schema: object | null): Extension | null {
   })
 }
 
-export function CodeEditor({ value, onChange, readOnly = false, schema = 'json', className, onDiagnostics, viewRef: externalViewRef }: CodeEditorProps) {
+export function CodeEditor({ value, onChange, readOnly = false, schema = 'json', className, onDiagnostics, viewRef: externalViewRef, lint, placeholder }: CodeEditorProps) {
   const parentRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
   const onDiagRef = useRef(onDiagnostics)
+  const lintRef = useRef(lint)
   const lastErr = useRef(-1)
   const lastHint = useRef(-1)
   onChangeRef.current = onChange
   onDiagRef.current = onDiagnostics
+  lintRef.current = lint
 
   const jsonSchema = useMemo(() => schemaFor(schema), [schema])
   const validate = useMemo(
@@ -339,9 +347,15 @@ export function CodeEditor({ value, onChange, readOnly = false, schema = 'json',
       EditorView.editable.of(!readOnly),
       EditorState.readOnly.of(readOnly),
     ]
+    if (placeholder) extensions.push(placeholderText(placeholder))
 
     if (schema === 'yaml') {
       extensions.push(yaml())
+    } else if (schema === 'html') {
+      extensions.push(html(), EditorView.lineWrapping)
+      if (lintRef.current) {
+        extensions.push(lintGutter(), linter((view) => lintRef.current?.(view.state.doc.toString()) ?? [], { delay: 200 }))
+      }
     } else if (schema !== 'none') {
       extensions.push(json(), lintGutter(), makeLinter(validate, schema === 'xray'))
       extensions.push(autocompletion({ activateOnTyping: true, icons: true }))
@@ -361,7 +375,7 @@ export function CodeEditor({ value, onChange, readOnly = false, schema = 'json',
     }
     // пересоздание только при смене схемы/readOnly — value синхронится ниже
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schema, readOnly, validate, jsonSchema])
+  }, [schema, readOnly, validate, jsonSchema, placeholder])
 
   // внешнее обновление value (история версий, формат)
   useEffect(() => {

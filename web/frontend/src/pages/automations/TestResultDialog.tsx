@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { CheckCircle, AlertTriangle, Info, Zap, Clock } from '@/components/brand/icons'
 import type { TFunction } from 'i18next'
 import type { AutomationTestResult, AutomationTestSummary } from '../../api/automations'
-import { describeAction, describeTrigger } from './helpers'
+import { describeAction, describeStep, describeTrigger } from './helpers'
 
 interface TestResultDialogProps {
   open: boolean
@@ -33,6 +33,9 @@ function describeSummary(summary: AutomationTestSummary, t: TFunction): DetailPa
   }
   if (summary.action_type) {
     parts.push({ icon: 'action', text: describeAction({ action_type: summary.action_type, action_config: {} }) })
+  }
+  for (const step of summary.steps ?? []) {
+    parts.push({ icon: 'action', text: describeStep({ ...step, action_config: {} }) })
   }
   return parts
 }

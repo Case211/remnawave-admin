@@ -528,15 +528,45 @@ async def count_since(what: str, since) -> int:
 
 
 async def schedule_pending_action(rule_id: int, action: str, target: str, run_at,
-                                  payload: Optional[dict] = None) -> None:
-    """Отложенное действие: переживает рестарт, выполнит движок."""
+                                  payload: Optional[dict] = None) -> bool:
+    """Отложенное действие: переживает рестарт, выполнит движок.
+
+    False — такое уже ждёт своего часа (один отложенный шаг правила на клиента,
+    см. миграцию 0125), второе не ставится.
+    """
     from shared.database import db_service
     async with db_service.acquire() as conn:
-        await conn.execute(
+        inserted = await conn.fetchval(
             "INSERT INTO automation_pending_actions (rule_id, action, target, run_at, payload) "
-            "VALUES ($1, $2, $3, $4, $5::jsonb)",
-            rule_id, action, target, run_at, json.dumps(payload) if payload is not None else None,
+            "VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT DO NOTHING RETURNING id",
+            rule_id, action, target, run_at,
+            json.dumps(payload, default=str) if payload is not None else None,
         )
+    return inserted is not None
+
+
+async def support_contact_since(telegram_id: Optional[int], since, user_uuid: Optional[str] = None) -> bool:
+    """Писал ли клиент в Bedolaga или внешнюю поддержку начиная с since."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        return bool(await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM support_tickets t
+                 WHERE t.telegram_id = $1
+                   AND (t.created_at >= $2
+                        OR (t.last_message_from = 'user' AND t.last_message_at >= $2)
+                        OR EXISTS (SELECT 1 FROM support_ticket_messages m
+                                    WHERE m.ticket_id = t.id AND NOT m.is_from_admin
+                                      AND m.created_at >= $2))
+            ) OR EXISTS (
+                SELECT 1 FROM external_support_events e
+                 WHERE e.occurred_at >= $2
+                   AND (e.user_uuid = $3::uuid OR ($1::bigint IS NOT NULL AND e.telegram_id = $1))
+            )
+            """,
+            telegram_id, since, user_uuid,
+        ))
 
 
 async def claim_due_actions(limit: int = 50) -> List[dict]:
@@ -590,6 +620,10 @@ async def cleanup_automation_history(keep_days: int = 90) -> int:
         )
         await conn.execute(
             "DELETE FROM automation_pending_actions WHERE done_at < NOW() - INTERVAL '1 day' * $1",
+            keep_days,
+        )
+        await conn.execute(
+            "DELETE FROM external_support_events WHERE occurred_at < NOW() - INTERVAL '1 day' * $1",
             keep_days,
         )
     return int(result.split()[-1]) if result else 0

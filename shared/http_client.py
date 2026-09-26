@@ -46,7 +46,10 @@ class BaseHttpClient:
             base_url=self._base_url,
             headers=self._headers,
             timeout=timeout,
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            # Простаивающее соединение держим минуту, а не дефолтные 5 с: иначе
+            # почти каждый запрос к панели заново делает DNS, TCP и TLS, и на
+            # сети с потерями каждый из этих шагов добавляет секунды.
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20, keepalive_expiry=60.0),
             follow_redirects=True,
         )
 

@@ -195,6 +195,26 @@ async def test_summary_carries_the_warning_customer_got(_key, v3_client, monkeyp
 
 @pytest.mark.asyncio
 @patch("web.backend.core.api_key_auth.validate_api_key", new_callable=AsyncMock, return_value=VALID_KEY)
+async def test_warning_reaches_cabinet_without_telegram_markup(_key, v3_client, monkeypatch):
+    """Кабинет показывает текст как есть — теги Telegram ему не нужны, адрес ссылки — нужен."""
+    notice = {
+        "violation_id": 5,
+        "kind": "device",
+        "subject": "Устройства на подписке",
+        "body": '<b>Внимание</b>: см. <a href="https://stijoin.com/rules">правила</a> &amp; FAQ',
+        "sent_at": None,
+    }
+    monkeypatch.setattr("shared.database.db_service", _db(_row(), notice=notice))
+
+    resp = await v3_client.get(
+        "/api/v3/violations/summary?telegram_id=366945364", headers={"X-API-Key": "rwa_test"}
+    )
+
+    assert resp.json()["notice"]["body"] == "Внимание: см. правила (https://stijoin.com/rules) & FAQ"
+
+
+@pytest.mark.asyncio
+@patch("web.backend.core.api_key_auth.validate_api_key", new_callable=AsyncMock, return_value=VALID_KEY)
 async def test_whitelisted_customer_sees_no_warning(_key, v3_client, monkeypatch):
     """Оправданному оператором человеку плашку не показываем."""
     notice = {"violation_id": 5, "kind": "device", "subject": "s", "body": "b", "sent_at": None}

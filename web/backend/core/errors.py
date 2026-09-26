@@ -99,6 +99,8 @@ class ErrorCode(str, Enum):
     VIOLATION_NOT_FOUND = "VIOLATION_NOT_FOUND"
     TELEGRAM_NOT_CONFIGURED = "TELEGRAM_NOT_CONFIGURED"
     VIOLATION_UPDATE_FAILED = "VIOLATION_UPDATE_FAILED"
+    NOTICE_MARKUP_INVALID = "NOTICE_MARKUP_INVALID"
+    NOTICE_NO_CHANNEL = "NOTICE_NO_CHANNEL"
     WHITELIST_ADD_FAILED = "WHITELIST_ADD_FAILED"
     WHITELIST_USER_NOT_FOUND = "WHITELIST_USER_NOT_FOUND"
 
@@ -216,6 +218,8 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.NODE_NOT_FOUND: "Node not found",
     E.HOST_NOT_FOUND: "Host not found",
     E.VIOLATION_NOT_FOUND: "Violation not found",
+    E.NOTICE_MARKUP_INVALID: "Telegram will not accept this markup",
+    E.NOTICE_NO_CHANNEL: "At least one delivery channel is required",
     E.AUTOMATION_NOT_FOUND: "Automation rule not found",
     E.SETTING_NOT_FOUND: "Setting not found",
     E.SETTING_READONLY: "Setting is read-only",

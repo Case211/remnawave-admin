@@ -139,6 +139,48 @@ _CONDITION_ALIASES = {"online_count": "users_online"}
 _HISTORY_KEEP_DAYS = 90
 
 
+def _step_delay_hours(step: dict) -> float:
+    """Через сколько часов после срабатывания выполнить шаг цепочки; 0 — сразу."""
+    try:
+        return max(float(step.get("delay_hours") or 0), 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+# Меры, которые можно применить заодно к соучастникам накрутки триалов
+_ACCOMPLICE_ACTIONS = {"block_user", "disable_user", "throttle_user"}
+
+
+async def _measure_state(conn, action_type: Optional[str], user_uuid: str) -> Optional[str]:
+    """Можно ли применять меру к клиенту: нет в панели или мера уже стоит — нельзя.
+
+    Поверх уже принятого решения меру не кладём: «заблокировать на сутки» по
+    навсегда заблокированному через сутки его бы разблокировало, а новое
+    ограничение перебило бы ручное.
+    """
+    from shared.db_schema import USER_THROTTLES_TABLE, USERS_TABLE
+
+    status = await conn.fetchval(f"SELECT status FROM {USERS_TABLE} WHERE uuid = $1", user_uuid)
+    if status is None:
+        return "user_not_found"
+    if action_type in ("block_user", "disable_user") and str(status).upper() == "DISABLED":
+        return "already_applied"
+    if action_type == "throttle_user" and await conn.fetchval(
+        f"SELECT 1 FROM {USER_THROTTLES_TABLE} WHERE user_uuid = $1 AND (until IS NULL OR until > NOW())",
+        user_uuid,
+    ):
+        return "already_applied"
+    return None
+
+
+def _warning_failed(action_type: Optional[str], result: str, details: Optional[dict]) -> bool:
+    """Предупреждение клиенту не дошло; уже предупреждённый по этому нарушению — не в счёт."""
+    return (
+        action_type == "warn_user" and result != "success"
+        and (details or {}).get("reason") != "already_notified"
+    )
+
+
 def _cooldown_seconds(trigger_config: dict, default: int) -> int:
     """Пауза между срабатываниями: своя у правила (минуты) или по умолчанию."""
     try:
@@ -324,6 +366,9 @@ class AutomationEngine:
             return
         digests: Dict[Any, list] = {}
         for item in due:
+            if item["action"] == "chain_step":
+                await self._run_chain_step(item)
+                continue
             if item["action"] == "notify_digest":
                 digests.setdefault(item.get("rule_id"), []).append(item)
                 continue
@@ -1123,13 +1168,166 @@ class AutomationEngine:
         if not extras or result == "error":
             return result, details
         steps = []
-        for step in extras:
+        # «Предупредить, через 12 ч урезать» имеет смысл, только если клиент
+        # предупреждение получил: иначе мера снова приходит без объяснений
+        warning_failed = _warning_failed(rule.get("action_type"), result, details)
+        for index, step in enumerate(extras):
+            delay_hours = _step_delay_hours(step)
+            if delay_hours > 0:
+                if warning_failed:
+                    steps.append({"action": step.get("action_type"), "result": "skipped",
+                                  "details": {"reason": "warning_not_delivered"}})
+                else:
+                    steps.append(await self._schedule_step(rule, index, step, delay_hours, target_type, target_id, context))
+                continue
             sub_rule = {**rule, "action_type": step.get("action_type"), "action_config": step.get("action_config") or {}}
             sub_result, sub_details = await self._execute_single(sub_rule, target_type, target_id, context)
             steps.append({"action": step.get("action_type"), "result": sub_result, "details": sub_details})
+            warning_failed = warning_failed or _warning_failed(step.get("action_type"), sub_result, sub_details)
             if sub_result == "error":
                 result = "error"
         return result, {**(details or {}), "then": steps}
+
+    async def _schedule_step(
+        self, rule: dict, index: int, step: dict, delay_hours: float,
+        target_type: Optional[str], target_id: Optional[str], context: dict,
+    ) -> dict:
+        """Отложенный шаг цепочки — в очередь со снимком настроек и контекстом.
+
+        Настройки берутся на момент срабатывания: правку правила уже ждущий шаг
+        не подхватит, а выключенное правило его отменит (см. _run_chain_step).
+        """
+        from web.backend.core.automation import schedule_pending_action
+
+        now = datetime.now(timezone.utc)
+        run_at = now + timedelta(hours=delay_hours)
+        payload = {
+            "step": index,
+            "action_type": step.get("action_type"),
+            "action_config": step.get("action_config") or {},
+            "unless_support": step.get("unless_support", True) is not False,
+            "target_type": target_type,
+            "context": context,
+            "started_at": now.isoformat(),
+        }
+        action = step.get("action_type")
+        if not await schedule_pending_action(rule.get("id"), "chain_step", target_id or "-", run_at, payload):
+            return {"action": action, "result": "skipped", "details": {"reason": "already_scheduled"}}
+        return {"action": action, "result": "scheduled", "details": {"run_at": run_at.isoformat(), "delay_hours": delay_hours}}
+
+    async def _run_chain_step(self, item: dict) -> None:
+        """Наступил отложенный шаг цепочки: перепроверить и выполнить или пропустить."""
+        from web.backend.core.automation import (
+            finish_pending_action, get_automation_rule_by_id, write_automation_log,
+        )
+
+        payload = item.get("payload") or {}
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        action_type = payload.get("action_type")
+        target_type = payload.get("target_type")
+        target_id = item.get("target")
+        context = dict(payload.get("context") or {})
+
+        rule = await get_automation_rule_by_id(item["rule_id"]) if item.get("rule_id") else None
+        try:
+            if not rule or not rule.get("is_enabled"):
+                reason = "rule_disabled"
+            else:
+                reason = await self._step_blocker(action_type, target_id, payload, context)
+            if reason:
+                result, details = "skipped", {"action": action_type, "skipped": True, "reason": reason}
+            else:
+                sub_rule = {**rule, "action_type": action_type, "action_config": payload.get("action_config") or {}}
+                result, details = await self._execute_single(sub_rule, target_type, target_id, context)
+        except Exception as e:
+            logger.warning("Delayed automation step %s failed: %s", item["id"], e)
+            result, details = "error", {"error": str(e)}
+
+        await finish_pending_action(item["id"], result)
+        if item.get("rule_id"):
+            await write_automation_log(
+                rule_id=item["rule_id"], target_type=target_type, target_id=target_id,
+                action_taken=action_type or "chain_step", result=result,
+                details={**(details or {}), "delayed": True, "step": payload.get("step")},
+            )
+
+    async def _apply_to_accomplices(
+        self, handler, action_type: str, config: dict, target_id: Optional[str], context: dict,
+    ) -> list:
+        """Та же мера — соучастникам накрутки триалов по HWID.
+
+        Иначе связка остаётся рабочей: после меры к одному остальные видят уже
+        один живой триал, под правило не попадают, и накрутка стоит абузеру ровно
+        один аккаунт (так же рассуждает встроенный автоблок детектора). Кому мера
+        уже стоит и кто в белом списке — не трогаем.
+        """
+        from shared.database import db_service
+
+        own_config = {k: v for k, v in config.items() if k != "with_accomplices"}
+        results = []
+        for uuid in dict.fromkeys(context.get("trial_accomplices") or []):
+            if not uuid or uuid == target_id:
+                continue
+            async with db_service.acquire() as conn:
+                reason = await _measure_state(conn, action_type, uuid)
+            if not reason and (await db_service.is_user_violation_whitelisted(uuid))[0]:
+                reason = "whitelisted"
+            if reason:
+                results.append({"user_uuid": uuid, "result": "skipped", "reason": reason})
+                continue
+            try:
+                await handler(own_config, "user", uuid, {**context, "username": None, "accomplice_of": target_id})
+                results.append({"user_uuid": uuid, "result": "success"})
+            except Exception as e:
+                logger.warning("Accomplice %s: %s failed: %s", uuid, action_type, e)
+                results.append({"user_uuid": uuid, "result": "error", "error": str(e)})
+        return results
+
+    async def _step_blocker(
+        self, action_type: Optional[str], target_id: Optional[str], payload: dict, context: dict,
+    ) -> Optional[str]:
+        """Почему отложенный шаг выполнять уже нельзя; None — можно.
+
+        За время ожидания многое меняется: оператор разобрал нарушение или
+        признал ошибкой, добавил клиента в белый список, клиент написал в
+        поддержку, мера уже стоит (см. _measure_state). Мера по устаревшему
+        поводу хуже, чем никакой.
+        """
+        violation_id = context.get("violation_id")
+        if not violation_id:
+            return None
+
+        from shared.database import db_service
+
+        async with db_service.acquire() as conn:
+            violation = await conn.fetchrow(
+                "SELECT user_uuid, telegram_id, action_taken FROM violations WHERE id = $1", int(violation_id),
+            )
+            if violation is None:
+                return "violation_not_found"
+            if violation["action_taken"] == "annulled":
+                return "violation_annulled"
+            if violation["action_taken"]:
+                return "violation_resolved"
+
+            user_uuid = str(violation["user_uuid"])
+            state = await _measure_state(conn, action_type, user_uuid)
+            if state:
+                return state
+
+        whitelisted, _ = await db_service.is_user_violation_whitelisted(user_uuid)
+        if whitelisted:
+            return "whitelisted"
+
+        if payload.get("unless_support", True):
+            from web.backend.core.automation import support_contact_since
+
+            started_at = datetime.fromisoformat(payload["started_at"])
+            telegram_id = int(violation["telegram_id"]) if violation["telegram_id"] else None
+            if await support_contact_since(telegram_id, started_at, user_uuid=user_uuid):
+                return "support_contacted"
+        return None
 
     async def _execute_single(
         self,
@@ -1172,6 +1370,10 @@ class AutomationEngine:
             # Действие решило не выполняться (лимит перезапусков и т.п.)
             if isinstance(details, dict) and details.get("skipped"):
                 return "skipped", details
+            if action_config.get("with_accomplices") and action_type in _ACCOMPLICE_ACTIONS:
+                details["accomplices"] = await self._apply_to_accomplices(
+                    handler, action_type, action_config, target_id, context,
+                )
             return "success", details
 
         except Exception as e:
@@ -1658,6 +1860,13 @@ class AutomationEngine:
             trigger_config = json.loads(trigger_config)
 
         summary: Dict[str, Any] = {"trigger_type": trigger_type, "action_type": rule["action_type"]}
+        extras = rule.get("extra_actions") or []
+        if isinstance(extras, str):
+            extras = json.loads(extras)
+        # Цепочка с задержками: фронт покажет «через 12 ч — урезать скорость»
+        summary["steps"] = [
+            {"action_type": step.get("action_type"), "delay_hours": _step_delay_hours(step)} for step in extras
+        ]
         matching_targets: List[dict] = []
         would_trigger = False
 

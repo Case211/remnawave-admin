@@ -1894,6 +1894,9 @@
       "low": "Score 0–39. Informational notices, no action needed."
     },
     "actions": {
+      "warn": "Warn",
+      "warned": "Warning sent",
+      "warnTooltip": "Send the configured warning to the user without applying restrictions.",
       "block": "Block",
       "blockShort": "Block",
       "blockTooltip": "Block user in the panel. VPN access will be disabled.",
@@ -2023,7 +2026,21 @@
     "noViolations": "No violations found",
     "allProcessed": "All violations processed",
     "noRecords": "No violation records for the selected period",
+    "warnReasons": {
+      "no_violation": "Violation not found",
+      "no_recipient": "The user has neither Telegram nor email — nowhere to send the warning",
+      "already_notified": "The user has already been warned about this violation",
+      "no_template": "No enabled warning template for this kind of violation",
+      "bedolaga_not_configured": "Bedolaga is not connected, and there will be no email: the customer has no email or Email is off in the template",
+      "user_not_found": "The customer is not found in the Bedolaga bot, and there will be no email: no email address or Email is off in the template",
+      "delivery_failed": "The Bedolaga bot rejected the warning, and there will be no email: no email address or Email is off in the template",
+      "mail_failed": "The bot did not deliver and our mail server could not send the email — check its settings",
+      "not_delivered": "Neither Telegram nor email delivered the warning",
+      "unknown": "The warning was not sent",
+      "no_channel": "Nothing to deliver with: the customer has no Telegram or email for the channels enabled in the template"
+    },
     "toast": {
+      "warned": "Warning sent",
       "resolved": "Violation processed",
       "annulled": "Violation annulled",
       "annulledAll": "All user violations annulled",
@@ -2183,11 +2200,10 @@
       "hint": "The customer gets these texts when an operator warns them or applies an action. Do not spell out what the detector saw: such hints are simply worked around.",
       "saved": "Template saved",
       "enabled": "Warn",
-      "alsoEmail": "and by email",
       "minScore": "Auto-send threshold",
       "off": "off",
       "updatedBy": "edited by {{name}}",
-      "subjectPlaceholder": "Email subject",
+      "subjectPlaceholder": "Default: «{{subject}}»",
       "bodyPlaceholder": "Warning text",
       "kinds": {
         "default": "General (subscription sharing)",
@@ -2201,7 +2217,56 @@
         "torrent": "Torrent (P2P traffic)",
         "traffic_rate": "Traffic usage (excessive consumption)"
       },
-      "minScoreHint": "Applies to auto-sending only: the «Warn» button sends regardless of the score"
+      "minScoreHint": "Applies to auto-sending only: the «Warn» button sends regardless of the score",
+      "telegram": "Telegram",
+      "email": "Email",
+      "lastChannel": "At least one channel has to stay on — to stop warnings, use the «Warn» switch",
+      "channelOff": "off",
+      "editorFor": "Text for the channel",
+      "emptyBody": "The Telegram text is empty — this template sends nothing: the email and the cabinet banner are built from it too",
+      "telegramHint": "Telegram markup: <b>, <i>, <u>, <s>, <a href>, <code>, <pre>, <blockquote>, <tg-spoiler>. A line break is just Enter. The customer sees the same text in the cabinet, and the email is built from it unless it has its own.",
+      "previewTelegram": "What the customer sees in Telegram",
+      "previewEmpty": "Nothing yet",
+      "issuesTitle": "Telegram will reject this text",
+      "fixSpecialChars": "Escape special characters",
+      "saveBlocked": "Telegram will not accept a message with markup errors — fix the highlighted spots",
+      "subject": "Email subject",
+      "emailPlaceholder": "Empty — the email is built from the Telegram text",
+      "fillFromTelegram": "Start from the Telegram text",
+      "useTelegramText": "Build the email from the Telegram text again",
+      "emailAutoHint": "No custom HTML — the email is built from the Telegram text: line breaks, bold, links. To lay it out differently, start from the Telegram text and edit.",
+      "emailOwnHint": "The email goes out exactly like this. Its plain-text version comes from the Telegram text.",
+      "previewEmail": "What the email looks like",
+      "format": {
+        "toolbar": "Formatting",
+        "bold": "Bold",
+        "italic": "Italic",
+        "underline": "Underline",
+        "strike": "Strikethrough",
+        "spoiler": "Spoiler",
+        "code": "Monospace",
+        "link": "Link",
+        "quote": "Quote"
+      },
+      "markup": {
+        "line": "Line {{line}}:",
+        "more": "…and {{count}} more",
+        "raw_lt": "write «<» as &lt;",
+        "raw_gt": "write «>» as &gt;",
+        "raw_amp": "write «&» as &amp;",
+        "unknown_entity": "Telegram does not know {{entity}} — only &lt; &gt; &amp; &quot; and numeric ones like &#169;",
+        "unknown_tag": "Telegram does not support <{{tag}}>",
+        "line_break": "<{{tag}}> does not work in Telegram — a line break is just Enter",
+        "self_closing": "<{{tag}}/> must be opened and closed: <{{tag}}>…</{{tag}}>",
+        "bad_attr": "<{{tag}}> has no {{attr}} attribute",
+        "missing_attr": "<{{tag}}> needs the {{attr}} attribute",
+        "mismatched": "</{{tag}}> closes the wrong tag — close <{{expected}}> first",
+        "unexpected_close": "extra </{{tag}}>: this tag is not open",
+        "unclosed": "<{{tag}}> is not closed",
+        "inside_code": "formatting does not work inside <{{parent}}>: <{{tag}}>",
+        "nested_link": "a link inside a link does not work",
+        "nested_quote": "a quote inside a quote does not work"
+      }
     }
   },
   "admins": {
@@ -3569,7 +3634,6 @@
         "title": "Then also",
         "add": "Add action",
         "message": "Notification text",
-        "hours": "Hours",
         "hint": "Run in order after the main action. Skipped if the main action fails."
       },
       "throttle": {
@@ -3617,7 +3681,41 @@
     "import": "Import",
     "importDone": "Imported rules: {{created}}, failed: {{errors}}. New rules are disabled.",
     "importFailed": "Import failed",
-    "importBadFile": "This is not an automations export file"
+    "importBadFile": "This is not an automations export file",
+    "delayed": {
+      "when": "Run after",
+      "duration": "Duration",
+      "durationUnit": "h — empty: no end",
+      "hoursAfter": "h after the trigger",
+      "now": "h — empty or 0: right away",
+      "unlessSupport": "Skip if the customer has written to support meanwhile",
+      "recheckHint": "Before a delayed step we check that the violation is not annulled or resolved by an operator, the customer is not whitelisted and the measure is not already in place. Disabling the rule cancels waiting steps. If the warning in this chain did not reach the customer, the delayed measure is not queued.",
+      "orderHint": "Step delays must not decrease: the order in the list is the order of execution",
+      "after": "in {{delay}}",
+      "hours": "{{n}} h",
+      "minutes": "{{n}} min",
+      "badge": "delayed step",
+      "scheduled": "Waiting: {{action}} — {{time}}",
+      "reasons": {
+        "rule_disabled": "the rule is disabled — step cancelled",
+        "violation_not_found": "the violation is gone",
+        "violation_annulled": "the violation was annulled",
+        "violation_resolved": "the violation was already resolved",
+        "user_not_found": "the customer is no longer in the panel",
+        "already_applied": "the measure is already in place",
+        "whitelisted": "the customer is whitelisted",
+        "support_contacted": "the customer wrote to support — an operator decides",
+        "already_scheduled": "this step is already waiting",
+        "warning_not_delivered": "the warning did not reach the customer"
+      },
+      "notQueued": "Not queued: {{action}} — {{reason}}"
+    },
+    "accomplices": {
+      "option": "Also trial-abuse accomplices on the same HWID",
+      "hint": "Like the built-in auto-block: other subscriptions with a live trial on the same device. Without them the ring keeps working — after the measure hits one, the rest no longer match the rule. Already blocked, throttled and whitelisted customers are left alone.",
+      "short": "+ HWID accomplices",
+      "summary": "Accomplices: applied {{done}}, skipped {{skipped}}"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -4814,7 +4912,7 @@
       },
       "violations_warn_on_action": {
         "label": "Violations: warn the customer on action",
-        "description": "When an operator blocks or throttles, send the customer an explanation — otherwise they come to support with \"nothing works\""
+        "description": "When a customer is blocked or throttled — manually or automatically — send them an explanation, otherwise they come to support with \"nothing works\""
       },
       "audit_retention_days": {
         "label": "Audit log retention (days)",
@@ -6064,7 +6162,9 @@
     "tokenParseFailed": "Failed to parse token",
     "API_KEY_NOT_FOUND": "API key not found",
     "WEBHOOK_NOT_FOUND": "Webhook not found",
-    "SCOPE_NOT_ALLOWED": "You cannot grant an API key rights you do not have yourself"
+    "SCOPE_NOT_ALLOWED": "You cannot grant an API key rights you do not have yourself",
+    "NOTICE_MARKUP_INVALID": "Telegram will not accept this markup — fix the spots highlighted in the editor",
+    "NOTICE_NO_CHANNEL": "A template needs at least one delivery channel"
   },
   "backup": {
     "title": "Backups",
@@ -6140,6 +6240,7 @@
     },
     "history": "Operation History",
     "noHistory": "No backup operations recorded",
+    "scheduled": "Scheduled",
     "importConfig": "Import Configuration",
     "noConfigFiles": "No config backup files available. Create a config backup first.",
     "importMissing": "Import Missing",

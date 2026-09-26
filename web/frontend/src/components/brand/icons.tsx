@@ -868,6 +868,12 @@ export const QrCode = createIcon('QrCode', (
     <path d="M14 14h3v3M20.5 14v6.5M14 20.5h3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
   </>
 ))
+export const Quote = createIcon('Quote', (
+  <>
+    <path d="M4 7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 10 7v4.5c0 3.2-1.8 5.6-5 6.5" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M14 7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 20 7v4.5c0 3.2-1.8 5.6-5 6.5" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+  </>
+))
 export const Recycle = createIcon('Recycle', (
   <>
     <path d="M8.5 6.5 11 3l2.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>

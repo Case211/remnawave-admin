@@ -106,6 +106,7 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Релизы',
           items: [
             { text: 'Все релизы', link: '/releases/' },
+            { text: '5.1.0', link: '/releases/5.1.0' },
             { text: '5.0.0', link: '/releases/5.0.0' },
           ],
         },

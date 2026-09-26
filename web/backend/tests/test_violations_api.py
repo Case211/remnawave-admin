@@ -169,6 +169,126 @@ class TestAnnulScope:
         mock_db.update_violation_action.assert_not_called()
 
 
+def _db_service_with(conn):
+    """db_service с is_connected и acquire(), отдающим conn как контекст."""
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=conn)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    svc = MagicMock()
+    svc.is_connected = True
+    svc.acquire = MagicMock(return_value=cm)
+    return svc
+
+
+class TestClientNotices:
+    """«Клиента предупредили» — из violation_notices, а не из notified_at (оповещение админов), #285."""
+
+    @pytest.mark.asyncio
+    async def test_list_marks_client_warning_separately(self, app, client):
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        mock_db.count_violations_for_period = AsyncMock(return_value=2)
+        mock_db.get_violations_for_period = AsyncMock(return_value=MOCK_VIOLATIONS)
+        mock_db.violations_recap = AsyncMock(return_value={})
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        conn = MagicMock()
+        conn.fetch = AsyncMock(return_value=[{"violation_id": 1, "sent_at": datetime(2026, 2, 16, 11, 0)}])
+        with patch("shared.database.db_service", _db_service_with(conn)):
+            resp = await client.get("/api/v2/violations")
+
+        assert resp.status_code == 200
+        items = {i["id"]: i for i in resp.json()["items"]}
+        # №1: админам не сообщали, а клиента предупредили
+        assert items[1]["notified"] is False
+        assert items[1]["client_notified_at"].startswith("2026-02-16T11:00")
+        # №2: админам сообщали, клиенту — нет
+        assert items[2]["notified"] is True
+        assert items[2]["client_notified_at"] is None
+
+    @pytest.mark.asyncio
+    async def test_lookup_failure_does_not_break_list(self):
+        from web.backend.api.v2.violations import _client_notices
+
+        conn = MagicMock()
+        conn.fetch = AsyncMock(side_effect=RuntimeError("db down"))
+        with patch("shared.database.db_service", _db_service_with(conn)):
+            assert await _client_notices([1, 2]) == {}
+        assert await _client_notices([]) == {}
+
+
+class TestNotifyScope:
+    """Предупредить можно только клиента из своей области — как resolve/annul."""
+
+    @pytest.mark.asyncio
+    async def test_notify_forbidden_out_of_scope(self, app, client):
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value={"id": 7, "user_uuid": "dead-beef", "telegram_id": 42})
+        send = AsyncMock(return_value={"sent": True})
+        with (
+            patch("shared.database.db_service", _db_service_with(conn)),
+            patch("web.backend.core.rbac.get_visible_user_uuids", new_callable=AsyncMock, return_value={"other-uuid"}),
+            patch("web.backend.core.violation_notices.send_notice", send),
+        ):
+            resp = await client.post("/api/v2/violations/7/notify", json={})
+        assert resp.status_code == 403
+        send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_notify_in_scope_returns_backend_result(self, app, client):
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value={"id": 7, "user_uuid": "dead-beef", "telegram_id": 42})
+        send = AsyncMock(return_value={"sent": False, "reason": "no_template"})
+        with (
+            patch("shared.database.db_service", _db_service_with(conn)),
+            patch("web.backend.core.rbac.get_visible_user_uuids", new_callable=AsyncMock, return_value=None),
+            patch("web.backend.core.violation_notices.send_notice", send),
+        ):
+            resp = await client.post("/api/v2/violations/7/notify", json={})
+        assert resp.status_code == 200
+        assert resp.json() == {"sent": False, "reason": "no_template"}
+        send.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_notify_requires_body(self, app, client):
+        """Без тела FastAPI отвечает 422 — поэтому веб-кнопка шлёт {} (#285)."""
+        resp = await client.post("/api/v2/violations/7/notify")
+        assert resp.status_code == 422
+
+
+class TestNoticeTemplatePatch:
+    """Шаблон, который Telegram не примет, не сохраняется — и оператор видит почему."""
+
+    @pytest.mark.asyncio
+    async def test_rejected_template_is_400_with_code(self, app, client):
+        from web.backend.core.violation_notices import NoticeTemplateError
+
+        update = AsyncMock(side_effect=NoticeTemplateError("NOTICE_MARKUP_INVALID", "Telegram markup: line_break at 1:6"))
+        with patch("web.backend.core.violation_notices.update_template", update):
+            resp = await client.patch("/api/v2/violations/notice-templates/default", json={"body_ru": "текст<br>"})
+
+        assert resp.status_code == 400
+        assert "NOTICE_MARKUP_INVALID" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_channel_and_letter_fields_reach_storage(self, app, client):
+        update = AsyncMock(return_value={"kind": "default"})
+        with (
+            patch("web.backend.core.violation_notices.update_template", update),
+            patch("web.backend.api.v2.violations.write_audit_log", new_callable=AsyncMock),
+        ):
+            resp = await client.patch(
+                "/api/v2/violations/notice-templates/default",
+                json={"send_telegram": False, "email_html_ru": ""},
+            )
+
+        assert resp.status_code == 200
+        # Пустое письмо — осознанная очистка, а не «поле не прислали»
+        assert update.await_args.args[1] == {"send_telegram": False, "email_html_ru": ""}
+
+
 class TestRowToListItem:
     """Tests for _row_to_list_item helper."""
 

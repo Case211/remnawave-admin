@@ -63,7 +63,9 @@ class ViolationListItem(ViolationBase):
     """Элемент списка нарушений."""
     severity: ViolationSeverity = ViolationSeverity.LOW
     action_taken: Optional[str] = None
+    # notified — админам ушло оповещение о нарушении; предупреждение клиенту — client_notified_at
     notified: bool = False
+    client_notified_at: Optional[datetime] = None
     reasons: List[str] = []
     admin_comment: Optional[str] = None
     recap: Optional[ViolationRecap] = None
@@ -95,6 +97,7 @@ class ViolationDetail(ViolationBase):
     action_taken_at: Optional[datetime] = None
     action_taken_by: Optional[int] = None
     notified_at: Optional[datetime] = None
+    client_notified_at: Optional[datetime] = None
     raw_data: Optional[Dict[str, Any]] = None
     hwid_matched_users: Optional[List[Dict[str, Any]]] = None
     admin_comment: Optional[str] = None

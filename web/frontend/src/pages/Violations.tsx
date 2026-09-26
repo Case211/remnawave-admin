@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, memo } from 'react'
+import { useState, useCallback, useEffect, useRef, memo, lazy, Suspense } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -47,7 +47,6 @@ import {
 import client from '../api/client'
 import { UserTimelineDialog } from '@/components/violations/UserTimelineDialog'
 import { DetectorTuningTab } from '@/components/violations/DetectorTuningTab'
-import { NoticeTemplatesTab } from '@/components/violations/NoticeTemplatesTab'
 import { AsnDirectory } from '@/components/violations/AsnDirectory'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -70,6 +69,11 @@ import type {
   TopViolator,
   IPInfo,
 } from '@/types/violations'
+
+// Редакторы шаблонов тянут CodeMirror — грузим их, только когда открыли вкладку
+const NoticeTemplatesTab = lazy(() =>
+  import('@/components/violations/NoticeTemplatesTab').then((m) => ({ default: m.NoticeTemplatesTab })),
+)
 
 const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid', 'traffic_rate', 'torrent'] as const
 
@@ -323,13 +327,35 @@ const ScoreCircle = memo(function ScoreCircle({ score, size = 'md' }: { score: n
   )
 })
 
+// ── Warning result ───────────────────────────────────────────────
+
+/** Ответ POST /violations/{id}/notify: 200 приходит и когда ничего не ушло — причина в reason. */
+export interface NoticeResult {
+  sent: boolean
+  reason?: string | null
+}
+
+const NOTICE_REASONS = new Set([
+  'no_violation', 'no_recipient', 'already_notified', 'no_template', 'no_channel',
+  'bedolaga_not_configured', 'user_not_found', 'delivery_failed', 'mail_failed', 'not_delivered',
+])
+
+/** Что сказать оператору после попытки предупредить: успех или понятная причина отказа. */
+export function noticeFeedback(result: NoticeResult | undefined): { ok: boolean; key: string } {
+  if (result?.sent) return { ok: true, key: 'violations.toast.warned' }
+  const reason = result?.reason && NOTICE_REASONS.has(result.reason) ? result.reason : 'unknown'
+  return { ok: false, key: `violations.warnReasons.${reason}` }
+}
+
 // ── Violation card ───────────────────────────────────────────────
 
-const ViolationCard = memo(function ViolationCard({
+export const ViolationCard = memo(function ViolationCard({
   violation,
   canResolve,
   isResolving,
+  isWarning,
   onBlock,
+  onWarn,
   onDismiss,
   onAnnul,
   onWhitelist,
@@ -339,7 +365,9 @@ const ViolationCard = memo(function ViolationCard({
   violation: Violation
   canResolve: boolean
   isResolving?: boolean
+  isWarning?: boolean
   onBlock: () => void
+  onWarn: () => void
   onDismiss: () => void
   onAnnul: () => void
   onWhitelist: () => void
@@ -462,6 +490,15 @@ const ViolationCard = memo(function ViolationCard({
           <div className="mt-4 pt-3 border-t border-[var(--glass-border)] flex flex-wrap gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
+                <Button variant="secondary" size="sm" onClick={onWarn} disabled={isResolving || isWarning || Boolean(violation.client_notified_at)} aria-label={t('violations.actions.warn')} className="gap-1">
+                  <MessageCircle className="w-4 h-4" />
+                  {violation.client_notified_at ? t('violations.actions.warned') : t('violations.actions.warn')}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.warnTooltip')}</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button variant="destructive" size="sm" onClick={onBlock} disabled={isResolving} aria-label={t('violations.actions.block')} className="gap-1">
                   <Ban className="w-4 h-4" />
                   <span className="hidden sm:inline">{t('violations.actions.block')}</span>
@@ -559,8 +596,10 @@ function getPlatformInfo(platform: string | null, unknownLabel: string): { Icon:
 function ViolationDetailPanel({
   violationId,
   canResolve,
+  isWarning,
   onClose,
   onBlock,
+  onWarn,
   onDismiss,
   onAnnul,
   onAnnulAll,
@@ -570,8 +609,10 @@ function ViolationDetailPanel({
 }: {
   violationId: number
   canResolve: boolean
+  isWarning?: boolean
   onClose: () => void
   onBlock: (id: number) => void
+  onWarn: (id: number) => void
   onDismiss: (id: number) => void
   onAnnul: (id: number) => void
   onAnnulAll: (userUuid: string) => void
@@ -1089,6 +1130,15 @@ function ViolationDetailPanel({
               {t('violations.actions.resolve')}
             </h3>
             <div className="flex flex-wrap gap-3">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="secondary" onClick={() => onWarn(detail.id)} disabled={isWarning || Boolean(detail.client_notified_at)} className="gap-2">
+                    <MessageCircle className="w-4 h-4" />
+                    {detail.client_notified_at ? t('violations.actions.warned') : t('violations.actions.warn')}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.warnTooltip')}</p></TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="destructive" onClick={() => onBlock(detail.id)} className="gap-2">
@@ -1843,6 +1893,21 @@ export default function Violations() {
 
   const { mutate: resolveMutate, isPending: isResolvePending } = resolveViolation
 
+  const notifyViolation = useMutation({
+    // Тело обязательно: эндпоинт ждёт NoticeSendRequest, без тела FastAPI отвечает 422
+    mutationFn: (id: number) => client.post<NoticeResult>(`/violations/${id}/notify`, {}).then((r) => r.data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['violations'] })
+      queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
+      const feedback = noticeFeedback(result)
+      if (feedback.ok) toast.success(t(feedback.key))
+      else toast.error(t(feedback.key))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
   // Comment dialog state
   const [commentDialog, setCommentDialog] = useState<{
     open: boolean
@@ -1967,8 +2032,10 @@ export default function Violations() {
         <ViolationDetailPanel
           violationId={selectedViolationId}
           canResolve={canResolve}
+          isWarning={notifyViolation.isPending}
           onClose={() => setSelectedViolationId(null)}
           onBlock={handleBlock}
+          onWarn={(id) => notifyViolation.mutate(id)}
           onDismiss={handleDismiss}
           onAnnul={handleAnnul}
           onAnnulAll={handleAnnulAll}
@@ -2298,7 +2365,9 @@ export default function Violations() {
 
       {/* Content based on tab */}
       {tab === 'notices' ? (
-        <NoticeTemplatesTab />
+        <Suspense fallback={<Skeleton className="h-28 w-full" />}>
+          <NoticeTemplatesTab />
+        </Suspense>
       ) : tab === 'tuning' ? (
         <DetectorTuningTab />
       ) : tab === 'asn' ? (
@@ -2361,7 +2430,9 @@ export default function Violations() {
                     violation={violation}
                     canResolve={canResolve}
                     isResolving={isResolvePending}
+                    isWarning={notifyViolation.isPending && notifyViolation.variables === violation.id}
                     onBlock={() => handleBlock(violation.id)}
+                    onWarn={() => notifyViolation.mutate(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}
                     onAnnul={() => handleAnnul(violation.id)}
                     onWhitelist={() => handleWhitelist(violation.user_uuid)}

@@ -25,7 +25,10 @@ export interface Violation {
   recommended_action: string
   confidence: number
   action_taken: string | null
+  /** Админам ушло оповещение о нарушении — это не предупреждение клиенту. */
   notified: boolean
+  /** Когда клиента предупредили по этому нарушению (violation_notices). */
+  client_notified_at?: string | null
   detected_at: string
   reasons?: string[]
   countries?: string[]
@@ -60,6 +63,7 @@ export interface ViolationDetail {
   action_taken_at: string | null
   action_taken_by: number | null
   notified_at: string | null
+  client_notified_at?: string | null
   raw_data: Record<string, unknown> | null
   admin_comment?: string | null
   /** Источник скора, когда анализаторы подключений в нём не участвовали: 'torrent' | 'external'. */
