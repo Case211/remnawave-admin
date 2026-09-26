@@ -323,12 +323,33 @@ const ScoreCircle = memo(function ScoreCircle({ score, size = 'md' }: { score: n
   )
 })
 
+// ── Warning result ───────────────────────────────────────────────
+
+/** Ответ POST /violations/{id}/notify: 200 приходит и когда ничего не ушло — причина в reason. */
+export interface NoticeResult {
+  sent: boolean
+  reason?: string | null
+}
+
+const NOTICE_REASONS = new Set([
+  'no_violation', 'no_telegram_id', 'already_notified', 'no_template',
+  'bedolaga_not_configured', 'user_not_found', 'delivery_failed', 'not_delivered',
+])
+
+/** Что сказать оператору после попытки предупредить: успех или понятная причина отказа. */
+export function noticeFeedback(result: NoticeResult | undefined): { ok: boolean; key: string } {
+  if (result?.sent) return { ok: true, key: 'violations.toast.warned' }
+  const reason = result?.reason && NOTICE_REASONS.has(result.reason) ? result.reason : 'unknown'
+  return { ok: false, key: `violations.warnReasons.${reason}` }
+}
+
 // ── Violation card ───────────────────────────────────────────────
 
 export const ViolationCard = memo(function ViolationCard({
   violation,
   canResolve,
   isResolving,
+  isWarning,
   onBlock,
   onWarn,
   onDismiss,
@@ -340,6 +361,7 @@ export const ViolationCard = memo(function ViolationCard({
   violation: Violation
   canResolve: boolean
   isResolving?: boolean
+  isWarning?: boolean
   onBlock: () => void
   onWarn: () => void
   onDismiss: () => void
@@ -464,9 +486,9 @@ export const ViolationCard = memo(function ViolationCard({
           <div className="mt-4 pt-3 border-t border-[var(--glass-border)] flex flex-wrap gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="secondary" size="sm" onClick={onWarn} disabled={isResolving || violation.notified} aria-label={t('violations.actions.warn')} className="gap-1">
+                <Button variant="secondary" size="sm" onClick={onWarn} disabled={isResolving || isWarning || Boolean(violation.client_notified_at)} aria-label={t('violations.actions.warn')} className="gap-1">
                   <MessageCircle className="w-4 h-4" />
-                  {violation.notified ? t('violations.actions.warned') : t('violations.actions.warn')}
+                  {violation.client_notified_at ? t('violations.actions.warned') : t('violations.actions.warn')}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.warnTooltip')}</p></TooltipContent>
@@ -570,6 +592,7 @@ function getPlatformInfo(platform: string | null, unknownLabel: string): { Icon:
 function ViolationDetailPanel({
   violationId,
   canResolve,
+  isWarning,
   onClose,
   onBlock,
   onWarn,
@@ -582,6 +605,7 @@ function ViolationDetailPanel({
 }: {
   violationId: number
   canResolve: boolean
+  isWarning?: boolean
   onClose: () => void
   onBlock: (id: number) => void
   onWarn: (id: number) => void
@@ -1104,9 +1128,9 @@ function ViolationDetailPanel({
             <div className="flex flex-wrap gap-3">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="secondary" onClick={() => onWarn(detail.id)} disabled={Boolean(detail.notified_at)} className="gap-2">
+                  <Button variant="secondary" onClick={() => onWarn(detail.id)} disabled={isWarning || Boolean(detail.client_notified_at)} className="gap-2">
                     <MessageCircle className="w-4 h-4" />
-                    {detail.notified_at ? t('violations.actions.warned') : t('violations.actions.warn')}
+                    {detail.client_notified_at ? t('violations.actions.warned') : t('violations.actions.warn')}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.warnTooltip')}</p></TooltipContent>
@@ -1866,11 +1890,14 @@ export default function Violations() {
   const { mutate: resolveMutate, isPending: isResolvePending } = resolveViolation
 
   const notifyViolation = useMutation({
-    mutationFn: (id: number) => client.post(`/violations/${id}/notify`),
-    onSuccess: () => {
+    // Тело обязательно: эндпоинт ждёт NoticeSendRequest, без тела FastAPI отвечает 422
+    mutationFn: (id: number) => client.post<NoticeResult>(`/violations/${id}/notify`, {}).then((r) => r.data),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['violations'] })
       queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
-      toast.success(t('violations.toast.warned'))
+      const feedback = noticeFeedback(result)
+      if (feedback.ok) toast.success(t(feedback.key))
+      else toast.error(t(feedback.key))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       toast.error(err.response?.data?.detail || err.message || t('common.error'))
@@ -2001,6 +2028,7 @@ export default function Violations() {
         <ViolationDetailPanel
           violationId={selectedViolationId}
           canResolve={canResolve}
+          isWarning={notifyViolation.isPending}
           onClose={() => setSelectedViolationId(null)}
           onBlock={handleBlock}
           onWarn={(id) => notifyViolation.mutate(id)}
@@ -2396,6 +2424,7 @@ export default function Violations() {
                     violation={violation}
                     canResolve={canResolve}
                     isResolving={isResolvePending}
+                    isWarning={notifyViolation.isPending && notifyViolation.variables === violation.id}
                     onBlock={() => handleBlock(violation.id)}
                     onWarn={() => notifyViolation.mutate(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}

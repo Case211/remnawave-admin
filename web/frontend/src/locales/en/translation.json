@@ -2026,6 +2026,17 @@
     "noViolations": "No violations found",
     "allProcessed": "All violations processed",
     "noRecords": "No violation records for the selected period",
+    "warnReasons": {
+      "no_violation": "Violation not found",
+      "no_telegram_id": "The user has no Telegram — nowhere to send the warning",
+      "already_notified": "The user has already been warned about this violation",
+      "no_template": "No enabled warning template for this kind of violation",
+      "bedolaga_not_configured": "Bedolaga is not connected — its bot delivers warnings",
+      "user_not_found": "The user was not found in the Bedolaga bot",
+      "delivery_failed": "The Bedolaga bot did not accept the warning",
+      "not_delivered": "Neither Telegram nor email delivered the warning",
+      "unknown": "The warning was not sent"
+    },
     "toast": {
       "warned": "Warning sent",
       "resolved": "Violation processed",

@@ -76,6 +76,32 @@ def _recap_days() -> int:
         return 30
 
 
+async def _client_notices(violation_ids) -> dict[int, datetime]:
+    """Когда клиента предупредили по каждому нарушению — одним запросом на страницу.
+
+    Не путать с ``notified_at`` самого нарушения: это отметка, что админам ушло
+    оповещение. Предупреждения клиенту лежат в ``violation_notices`` — запись
+    появляется только при доставке, одна на нарушение.
+    """
+    ids = [int(i) for i in violation_ids if i]
+    if not ids:
+        return {}
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        return {}
+    try:
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT violation_id, sent_at FROM violation_notices WHERE violation_id = ANY($1::bigint[])",
+                ids,
+            )
+    except Exception as e:  # noqa: BLE001 — отметка вспомогательная, список должен открыться
+        logger.warning("Client notices lookup failed: %s", e)
+        return {}
+    return {int(r["violation_id"]): r["sent_at"] for r in rows}
+
+
 def _row_to_list_item(v: dict) -> ViolationListItem:
     """Convert a DB row dict to ViolationListItem (handles UUID→str, None defaults)."""
     score = float(v.get('score', 0) or 0)
@@ -208,11 +234,14 @@ async def list_violations(
         except Exception as e:
             logger.warning("Violations recap failed: %s", e)
 
+        notices = await _client_notices(v.get("id") for v in violations)
+
         # Преобразуем в модели
         items = []
         for v in violations:
             try:
                 item = _row_to_list_item(v)
+                item.client_notified_at = notices.get(item.id)
                 found = recap.get(str(v.get("user_uuid")))
                 if found:
                     item.recap = ViolationRecap(days=recap_days, **found)
@@ -615,10 +644,13 @@ async def get_user_violations(
         days=days,
     )
 
+    notices = await _client_notices(v.get("id") for v in violations)
     items = []
     for v in violations:
         try:
-            items.append(_row_to_list_item(v))
+            item = _row_to_list_item(v)
+            item.client_notified_at = notices.get(item.id)
+            items.append(item)
         except Exception as e:
             logger.warning("Skipping user violation row id=%s: %s", v.get('id'), e)
 
@@ -1183,6 +1215,12 @@ async def notify_violation_user(
     if not row:
         raise api_error(404, E.NOT_FOUND, "Violation not found")
 
+    # Access-policy: писать можно только клиенту из своей области — как у resolve/annul
+    from web.backend.core.rbac import get_visible_user_uuids
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None and str(row["user_uuid"]).lower() not in visible:
+        raise api_error(403, E.FORBIDDEN)
+
     result = await send_notice(dict(row), sent_by=admin.username, force=data.force)
 
     if result.get("sent"):
@@ -1266,6 +1304,7 @@ async def get_violation(
         action_taken_at=violation.get('action_taken_at'),
         action_taken_by=violation.get('action_taken_by'),
         notified_at=violation.get('notified_at'),
+        client_notified_at=(await _client_notices([violation_id])).get(violation_id),
         raw_data=violation.get('raw_breakdown') or violation.get('raw_data'),
         hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
         admin_comment=violation.get('admin_comment'),
