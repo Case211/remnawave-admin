@@ -85,6 +85,7 @@ const res = await fetch("https://admin.example.com/api/v3/users", {
 | `stats:read` | общая статистика | `GET /stats` |
 | `violations:read` | читать нарушения | `GET /violations` |
 | `bulk:write` | массовые операции | `POST /users/bulk/*` |
+| `enforcement:support` | сообщать об обращении пользователя из любого Helpdesk; приостанавливает ожидающую меру | `POST /enforcement/support-events` |
 
 Разумные привычки:
 

@@ -29,6 +29,7 @@ import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
 import { useHasPermission } from '@/components/PermissionGate'
 import MemoryDiagnosticsBlock from '@/components/settings/MemoryDiagnosticsBlock'
+import EnforcementBlock from '@/components/settings/EnforcementBlock'
 import { useFormatters } from '@/lib/useFormatters'
 
 import { Button } from '@/components/ui/button'
@@ -1005,6 +1006,7 @@ export default function Settings() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const canEdit = useHasPermission('settings', 'edit')
+  const canViewEnforcement = useHasPermission('violations', 'view')
   const [search, setSearch] = useState('')
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
   const [categoryFilters, setCategoryFilters] = useState<Record<string, string>>({})
@@ -1069,7 +1071,17 @@ export default function Settings() {
     },
   })
 
-  const categories = settingsData?.categories || {}
+  const categories = useMemo(() => {
+    const source = settingsData?.categories || {}
+    return Object.fromEntries(
+      Object.entries(source)
+        .map(([category, items]) => [
+          category,
+          items.filter((item) => item.subcategory !== 'enforcement'),
+        ])
+        .filter(([, items]) => (items as ConfigItem[]).length > 0),
+    ) as Record<string, ConfigItem[]>
+  }, [settingsData])
   const syncItems = syncData?.items || []
 
   const toggleCategory = (category: string) => {
@@ -1140,6 +1152,15 @@ export default function Settings() {
     const wasSaved = savedKeys.has(item.key)
     const hasError = item.key in errorKeys
     const canReset = item.source === 'db' && !item.is_readonly && canEdit
+
+    if (item.key === 'enforcement_pilot_user_uuids') {
+      return (
+        <div key={item.key} className="py-3">
+          <p className="text-sm text-white">{label}</p>
+          <p className="text-xs text-dark-200 mt-0.5">{t('settings.enforcement.pilotHint')}</p>
+        </div>
+      )
+    }
 
     const statusIcon = isSaving ? (
       <RefreshCw className="w-3.5 h-3.5 text-primary-400 animate-spin" />
@@ -1612,8 +1633,11 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList>
+        <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="general">{t('settings.tabs.general')}</TabsTrigger>
+          {canViewEnforcement && (
+            <TabsTrigger value="enforcement">{t('settings.tabs.enforcement')}</TabsTrigger>
+          )}
           <TabsTrigger value="auth">{t('settings.tabs.auth')}</TabsTrigger>
           <TabsTrigger value="faq">{t('settings.tabs.faq')}</TabsTrigger>
           <TabsTrigger value="diagnostics">{t('settings.tabs.diagnostics')}</TabsTrigger>
@@ -1635,6 +1659,12 @@ export default function Settings() {
         <TabsContent value="diagnostics" className="space-y-6 mt-4">
           <MemoryDiagnosticsBlock />
         </TabsContent>
+
+        {canViewEnforcement && (
+          <TabsContent value="enforcement" className="space-y-6 mt-4">
+            <EnforcementBlock canEdit={canEdit} />
+          </TabsContent>
+        )}
 
         <TabsContent value="general" className="space-y-6 mt-4">
 

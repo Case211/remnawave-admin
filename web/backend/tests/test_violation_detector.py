@@ -231,6 +231,7 @@ async def test_hwid_parallel_active_trials_hard_blocks():
     det = make_detector(geo_map, recent_violations=0)
     res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
     assert res.breakdown["hwid"].max_active_trials_per_hwid == 2
+    assert res.breakdown["hwid"].active_trial_abuse_detected is True
     assert res.breakdown["hwid"].max_accounts_per_hwid == 2
     assert res.total == 100.0
     assert res.recommended_action.value == "hard_block"
@@ -302,6 +303,7 @@ async def test_hwid_expired_trial_next_to_active_is_clean():
     det = make_detector(geo_map, recent_violations=0)
     res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
     assert res.breakdown["hwid"].max_active_trials_per_hwid == 1
+    assert res.breakdown["hwid"].active_trial_abuse_detected is False
     assert res.breakdown["hwid"].score == 0.0
     assert res.recommended_action.value != "hard_block"
 
@@ -331,6 +333,7 @@ async def test_hwid_second_trial_under_own_telegram_is_abuse():
     assert hwid.max_accounts_per_hwid == 1, "после привязки telegram_id аккаунт один"
     assert hwid.per_account_abuse is False, "две подписки из десяти разрешённых"
     assert hwid.max_trial_subs_per_hwid == 2
+    assert hwid.repeated_trial_abuse_detected is True
     assert hwid.score == 100.0
     assert res.recommended_action.value == "hard_block"
 

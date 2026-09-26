@@ -97,6 +97,7 @@ scope required by the endpoint.
 | `stats:read` | Global statistics | `GET /stats` |
 | `violations:read` | Read anti-abuse violations | `GET /violations`, `GET /violations/{id}` |
 | `bulk:write` | Bulk operations on users | `POST /users/bulk/*` |
+| `enforcement:support` | Report customer contact from any helpdesk; pauses pending enforcement | `POST /enforcement/support-events` |
 
 Guidelines:
 

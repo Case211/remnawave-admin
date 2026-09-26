@@ -50,6 +50,7 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Возможности',
           items: [
             { text: 'Анти-абуз', link: '/guide/anti-abuse' },
+            { text: 'Отложенное применение мер', link: '/guide/enforcement-workflow' },
             { text: 'Почтовый сервер', link: '/guide/mail' },
             { text: 'Плагины', link: '/guide/plugins' },
             { text: 'Мониторинг', link: '/guide/monitoring' },

@@ -50,6 +50,7 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Features',
           items: [
             { text: 'Anti-abuse', link: '/en/guide/anti-abuse' },
+            { text: 'Delayed enforcement', link: '/en/guide/enforcement-workflow' },
             { text: 'Mail server', link: '/en/guide/mail' },
             { text: 'Plugins', link: '/en/guide/plugins' },
             { text: 'Monitoring', link: '/en/guide/monitoring' },

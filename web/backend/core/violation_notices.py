@@ -192,6 +192,7 @@ async def send_notice(
     sent_by: str | None = None,
     force: bool = False,
     auto: bool = False,
+    body_suffix: str | None = None,
 ) -> dict:
     """Отправить клиенту предупреждение по конкретному нарушению.
 
@@ -227,9 +228,16 @@ async def send_notice(
         return {"sent": False, "reason": "no_channel", "kind": kind}
 
     body = str(template.get("body_ru") or "")
+    suffix = str(body_suffix or "").strip()
+    if suffix:
+        body = f"{body.rstrip()}\n\n{suffix}"
     subject = str(template.get("subject_ru") or "Использование подписки")
     # Своё письмо у шаблона необязательно: пусто — собираем из текста Telegram
-    email_html = str(template.get("email_html_ru") or "").strip() or telegram_to_email_html(body)
+    email_html = str(template.get("email_html_ru") or "").strip()
+    if email_html and suffix:
+        email_html = f"{email_html}\n{telegram_to_email_html(suffix)}"
+    elif not email_html:
+        email_html = telegram_to_email_html(body)
     plain = telegram_to_text(body)
 
     # Сначала бот Bedolaga: Telegram от сервисного бота и письмо её почтой

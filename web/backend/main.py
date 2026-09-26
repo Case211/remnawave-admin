@@ -62,6 +62,7 @@ from web.backend.api.v2 import backup as backup_api
 from web.backend.api.v2 import support as support_api
 from web.backend.api.v2 import api_keys as api_keys_api
 from web.backend.api.v2 import blocked_ips as blocked_ips_api
+from web.backend.api.v2 import enforcement as enforcement_api
 from web.backend.api.v2 import webhooks as webhooks_api
 from web.backend.api.v2 import squads as squads_api
 from web.backend.api.v2.bedolaga import router as bedolaga_router
@@ -69,6 +70,7 @@ from web.backend.api.v2 import plugins as plugins_api
 from web.backend.api.v2 import internal as internal_api
 from web.backend.core import plugins as plugin_loader
 from web.backend.api.v3 import public as public_api_v3
+from web.backend.api.v3 import enforcement as enforcement_api_v3
 
 
 # ── Logging setup (structlog) ────────────────────────────────────
@@ -638,6 +640,9 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.finance.bedolaga_income import deposits_loop
                     _bg("bedolaga_deposits", deposits_loop())
 
+                    from web.backend.core.enforcement_workflow import enforcement_loop
+                    _bg("enforcement_workflow", enforcement_loop())
+
                 # ── Services for collector and full mode ──
                 if app_mode in ("collector", "full"):
                     async def _baseline_refresh_loop():
@@ -1158,6 +1163,11 @@ def create_app() -> FastAPI:
         app.include_router(node_shaper_api.router, prefix="/api/v2/nodes", tags=["nodes"])
         app.include_router(analytics.router, prefix="/api/v2/analytics", tags=["analytics"])
         app.include_router(violations.router, prefix="/api/v2/violations", tags=["violations"])
+        app.include_router(
+            enforcement_api.router,
+            prefix="/api/v2/enforcement",
+            tags=["enforcement"],
+        )
         app.include_router(hosts.router, prefix="/api/v2/hosts", tags=["hosts"])
         app.include_router(settings_api.router, prefix="/api/v2/settings", tags=["settings"])
         app.include_router(diagnostics_api.router, prefix="/api/v2/diagnostics", tags=["diagnostics"])
@@ -1215,6 +1225,11 @@ def create_app() -> FastAPI:
     # Public API v3 — enabled via EXTERNAL_API_ENABLED=true
     if settings.external_api_enabled:
         app.include_router(public_api_v3.router, prefix="/api/v3", tags=["public-api"])
+        app.include_router(
+            enforcement_api_v3.router,
+            prefix="/api/v3/enforcement",
+            tags=["enforcement-integrations"],
+        )
         # Serve local Swagger UI static files (no CDN dependency)
         from pathlib import Path as _Path
         _swagger_dir = _Path(__file__).parent / "static" / "swagger-ui"

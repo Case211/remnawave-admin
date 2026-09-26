@@ -314,8 +314,8 @@ class HwidCrossAccountAnalyzer:
             per_account_abuse=per_account_threshold_hit,
             max_accounts_per_hwid=max_distinct_accounts_per_hwid,
             max_active_trials_per_hwid=max_active_trial_accounts_per_hwid,
+            active_trial_abuse_detected=active_trials_threshold_hit,
             max_trial_subs_per_hwid=max_trial_subs_per_hwid,
+            repeated_trial_abuse_detected=trial_subs_threshold_hit,
             active_trial_accomplices=accomplices,
         )
-
-

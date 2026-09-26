@@ -124,10 +124,12 @@ class HwidScore:
     per_account_abuse: bool = False  # абуз мультитарифа (один telegram_id, N подписок на HWID)
     max_accounts_per_hwid: int = 1  # макс. разных аккаунтов на одном HWID (включая самого юзера)
     max_active_trials_per_hwid: int = 0  # макс. РАЗНЫХ аккаунтов с живым триалом на одном HWID
+    active_trial_abuse_detected: bool = False  # порог живых триалов действительно превышен
     # Макс. пробных подписок одного аккаунта на одном HWID, считая истёкшие —
     # единственный срез, который не обойти привязкой своего telegram_id к новой
     # подписке (после неё аккаунт снова «один», и остальные проверки слепнут)
     max_trial_subs_per_hwid: int = 0
+    repeated_trial_abuse_detected: bool = False  # порог повторных триалов действительно превышен
     # UUID'ы чужих подписок с живым триалом на тех HWID, где порог превышен —
     # соучастники накрутки, блокировать их надо вместе с проверяемым
     active_trial_accomplices: List[str] = None

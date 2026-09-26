@@ -1010,9 +1010,23 @@ async def _process_torrent_violations(
                     "source": "torrent",
                 })
 
+                enforcement_deferred = False
+                try:
+                    from web.backend.core.enforcement_workflow import create_enforcement_case
+                    enforcement_deferred = await create_enforcement_case(
+                        violation_id=violation_id,
+                        user_uuid=user_uuid,
+                        signals=[],
+                        recommended_action="hard_block",
+                        score=100.0,
+                        reasons=[f"Torrent traffic detected ({len(user_events)} events)"],
+                    )
+                except Exception as e:
+                    logger.warning("Failed to create torrent enforcement case: %s", e)
+
                 # Автоблок — до уведомления, чтобы в нём был итог, а не обещание
-                action = "notify"
-                if auto_action == "block_user":
+                action = "deferred" if enforcement_deferred else "notify"
+                if auto_action == "block_user" and not enforcement_deferred:
                     try:
                         from shared.api_client import api_client
                         await api_client.disable_user(await _resolve_user_key(user_uuid))
@@ -1412,17 +1426,54 @@ async def _handle_violation(
             except Exception as mark_error:
                 logger.warning("Failed to mark violation %s as notified: %s", violation_id, mark_error)
 
+        trial_accomplices = list(getattr(hwid, "active_trial_accomplices", None) or [])
+        active_trial_count = int(
+            getattr(hwid, "max_active_trials_per_hwid", 0) or (len(trial_accomplices) + 1 if trial_accomplices else 0)
+        )
+        repeated_trial_count = int(getattr(hwid, "max_trial_subs_per_hwid", 0) or 0)
+        structured_signals = [
+            *([{
+                "code": "hwid.active_trial_accounts",
+                "value": active_trial_count,
+                "related_user_uuids": trial_accomplices,
+            }] if getattr(hwid, "active_trial_abuse_detected", False) else []),
+            *([{
+                "code": "hwid.repeated_trial_subscription",
+                "value": repeated_trial_count,
+                "related_user_uuids": [],
+            }] if getattr(hwid, "repeated_trial_abuse_detected", False) else []),
+        ]
+        related_user_uuids = trial_accomplices
         fire_event("violation.created", {
             "violation_id": violation_id,
             "user_uuid": user_uuid,
             "username": username,
+            "email": email,
+            "telegram_id": telegram_id,
             "score": violation_score.total,
             "confidence": violation_score.confidence,
             "recommended_action": violation_score.recommended_action.value,
             "reasons": violation_score.reasons[:10] if violation_score.reasons else [],
             "ip_addresses": ip_addresses,
+            "signals": structured_signals,
+            "related_user_uuids": related_user_uuids,
             "source": "detector",
         })
+
+        enforcement_deferred = False
+        try:
+            from web.backend.core.enforcement_workflow import create_enforcement_case
+            enforcement_deferred = await create_enforcement_case(
+                violation_id=violation_id,
+                user_uuid=user_uuid,
+                signals=structured_signals,
+                recommended_action=violation_score.recommended_action.value,
+                score=violation_score.total,
+                reasons=violation_score.reasons[:10] if violation_score.reasons else [],
+            )
+        except Exception as enforcement_error:
+            # Если очередь не создана, сохраняем прежнее поведение детектора.
+            logger.warning("Failed to create enforcement case: %s", enforcement_error)
 
         from shared.violation_detector import ViolationAction
 
@@ -1474,7 +1525,7 @@ async def _handle_violation(
             except Exception as throttle_error:
                 logger.warning("Auto-throttle error for %s: %s", user_uuid[:8], throttle_error)
 
-        if violation_score.recommended_action == ViolationAction.HARD_BLOCK:
+        if violation_score.recommended_action == ViolationAction.HARD_BLOCK and not enforcement_deferred:
             if config_service.get("violation_auto_hard_block", True):
                 from shared.api_client import api_client
                 blocked_count = 0
@@ -1548,6 +1599,11 @@ async def _handle_violation(
                     "Auto-block skipped for user %s (violation_auto_hard_block=off, score=%.1f)",
                     user_uuid[:8], violation_score.total,
                 )
+        elif violation_score.recommended_action == ViolationAction.HARD_BLOCK:
+            logger.info(
+                "Auto-block deferred for user %s: delayed enforcement workflow is active",
+                user_uuid[:8],
+            )
 
         try:
             from web.backend.api.v2.websocket import broadcast_violation

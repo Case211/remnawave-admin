@@ -216,6 +216,28 @@ async def _upsert_ticket(conn, ticket: dict, messages: list[dict], customer: dic
         )
 
 
+async def _pause_enforcement_for_customer_reply(
+    ticket: dict, messages: list[dict], customer: dict | None = None,
+) -> None:
+    """Feed native support replies into the same fail-closed pause path as external helpdesks."""
+    last_message = messages[-1] if messages else None
+    if not last_message or last_message.get("is_from_admin"):
+        return
+    try:
+        from web.backend.core.enforcement_workflow import pause_for_support_identity
+
+        await pause_for_support_identity(
+            telegram_id=ticket.get("telegram_id") or (customer or {}).get("telegram_id"),
+            support_event={
+                "provider": "built_in_support",
+                "ticket_id": str(ticket.get("id") or ""),
+                "message_id": str(last_message.get("id") or ""),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - support sync must continue
+        logger.warning("Support sync: enforcement pause failed for %s: %s", ticket.get("id"), exc)
+
+
 async def forget_ticket(ticket_id: int) -> bool:
     """Убрать из проекции обращение, которого больше нет в боте.
 
@@ -261,6 +283,7 @@ async def sync_ticket(ticket_id: int) -> bool:
     customer = {"name": await _customer_title(int(ticket.get("user_id") or 0))}
     async with db_service.acquire() as conn:
         await _upsert_ticket(conn, ticket, messages, customer)
+    await _pause_enforcement_for_customer_reply(ticket, messages, customer)
     return True
 
 
@@ -336,6 +359,7 @@ async def sync_tickets(*, full: bool = False) -> dict:
             async with db_service.acquire() as conn:
                 await _upsert_ticket(conn, ticket, messages, customer)
             updated += 1
+            await _pause_enforcement_for_customer_reply(ticket, messages, customer)
 
             # Страховка на случай, когда события бота до нас не доходят: без WS
             # обращение находит только этот проход. От рассылки по всей истории
