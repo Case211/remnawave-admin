@@ -20,7 +20,12 @@ config = context.config
 # existing_loggers=False prevents fileConfig from disabling loggers
 # created by the application (e.g. the bot logger) — otherwise migration
 # errors would be silently swallowed.
-if config.config_file_name is not None:
+# fileConfig() also replaces the root handlers with the ones from alembic.ini.
+# The web backend runs migrations in-process on startup (main.py ->
+# command.upgrade), and that would detach its file handlers (backend.log,
+# violations.log) until restart. So apply alembic.ini only when logging is not
+# configured yet — i.e. when alembic is run from the CLI.
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 _log = logging.getLogger("alembic.env")
