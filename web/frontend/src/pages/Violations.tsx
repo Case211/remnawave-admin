@@ -1736,7 +1736,9 @@ export default function Violations() {
   const usernameFilter = getP('username', '')
   const dateFrom = getP('dateFrom', '')
   const dateTo = getP('dateTo', '')
-  const includeAnnulled = getP('annulled', '') === '1'
+  // «Все» — значит все: разбирают нарушения в основном аннулированием, и без
+  // них вкладка ничем не отличалась от «Ожидают». Скрыть — annulled=0.
+  const includeAnnulled = getP('annulled', '1') !== '0'
   const selectedViolationId = getN('vid', 0) || null
 
   // Batch param update helper — atomic, no race conditions
@@ -1768,7 +1770,7 @@ export default function Violations() {
   const setUsernameFilter = useCallback((v: string) => setParams({ username: v || null, page: null }), [setParams])
   const setDateFrom = useCallback((v: string) => setParams({ dateFrom: v || null, page: null }), [setParams])
   const setDateTo = useCallback((v: string) => setParams({ dateTo: v || null, page: null }), [setParams])
-  const setIncludeAnnulled = useCallback((v: boolean) => setParams({ annulled: v ? '1' : null, page: null }), [setParams])
+  const setIncludeAnnulled = useCallback((v: boolean) => setParams({ annulled: v ? null : '0', page: null }), [setParams])
   const setSelectedViolationId = useCallback((v: number | null) => setParams({ vid: v ? String(v) : null }), [setParams])
 
   // Auto-select first violation when coming from Top Violators
@@ -2336,14 +2338,15 @@ export default function Violations() {
       {/* Tabs */}
       {/* На телефоне вкладки переносятся: семь в одну строку не влезают */}
       <div className="flex flex-wrap gap-1 bg-[var(--glass-bg)] rounded-lg p-1 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+        {/* Счётчика у «Все» нет: статистика аннулированные не считает, а список их показывает */}
         {([
-          { key: 'all' as Tab, label: t('violations.tabs.all'), count: stats?.total },
-          { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
-          { key: 'top' as Tab, label: t('violations.tabs.topViolators'), count: undefined },
-          { key: 'hwids' as Tab, label: t('violations.tabs.hwids'), count: undefined },
-          { key: 'asn' as Tab, label: t('violations.tabs.asn'), count: undefined },
-          { key: 'tuning' as Tab, label: t('violations.tabs.tuning'), count: undefined },
-          { key: 'notices' as Tab, label: t('violations.tabs.notices'), count: undefined },
+          { key: 'all' as Tab, label: t('violations.tabs.all') },
+          { key: 'pending' as Tab, label: t('violations.tabs.pending') },
+          { key: 'top' as Tab, label: t('violations.tabs.topViolators') },
+          { key: 'hwids' as Tab, label: t('violations.tabs.hwids') },
+          { key: 'asn' as Tab, label: t('violations.tabs.asn') },
+          { key: 'tuning' as Tab, label: t('violations.tabs.tuning') },
+          { key: 'notices' as Tab, label: t('violations.tabs.notices') },
         ]).map((tabItem) => (
           <button
             key={tabItem.key}
@@ -2356,9 +2359,6 @@ export default function Violations() {
             )}
           >
             {tabItem.label}
-            {tabItem.count !== undefined && tabItem.count > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({tabItem.count})</span>
-            )}
           </button>
         ))}
       </div>

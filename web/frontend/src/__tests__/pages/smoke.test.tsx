@@ -5,7 +5,7 @@
  * can mount without a running backend.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { usePermissionStore } from '@/store/permissionStore'
@@ -209,6 +209,14 @@ function createTestQueryClient() {
   })
 }
 
+/** Параметры запроса списка нарушений, если он уже ушёл. */
+function violationListParams(client: { get: (...args: never[]) => unknown }) {
+  const call = vi.mocked(client.get).mock.calls.find(([url]) => url === '/violations') as
+    | [string, { params?: Record<string, unknown> }]
+    | undefined
+  return call?.[1]?.params
+}
+
 function renderPage(ui: React.ReactElement, { route = '/' } = {}) {
   const queryClient = createTestQueryClient()
   return render(
@@ -315,6 +323,23 @@ describe('Page smoke tests', () => {
     const Violations = (await import('@/pages/Violations')).default
     const { container } = renderPage(<Violations />)
     expect(container).toBeTruthy()
+  })
+
+  // «Все» — значит все: без аннулированных вкладка ничем не отличалась от «Ожидают»
+  it('Violations: «Все» по умолчанию просит и аннулированные', async () => {
+    const client = (await import('@/api/client')).default
+    const Violations = (await import('@/pages/Violations')).default
+    renderPage(<Violations />, { route: '/violations' })
+    await waitFor(() => expect(violationListParams(client)).toBeDefined())
+    expect(violationListParams(client)?.include_annulled).toBe(true)
+  })
+
+  it('Violations: annulled=0 скрывает аннулированные', async () => {
+    const client = (await import('@/api/client')).default
+    const Violations = (await import('@/pages/Violations')).default
+    renderPage(<Violations />, { route: '/violations?annulled=0' })
+    await waitFor(() => expect(violationListParams(client)).toBeDefined())
+    expect(violationListParams(client)?.include_annulled).toBeUndefined()
   })
 
   it('Settings renders without errors', async () => {

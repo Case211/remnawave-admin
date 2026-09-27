@@ -23,6 +23,10 @@ NODE_USAGE_TOP_USERS = 1000
 # запрос заставляет панель считать суточный агрегат.
 NODE_TRAFFIC_CONCURRENCY = 8
 
+# Обычный проход — секунды, на большом флоте — минуты. Дольше этого проход
+# считается зависшим: его снимают, следующий идёт по расписанию.
+SYNC_PASS_TIMEOUT_SECONDS = 30 * 60
+
 
 def _node_total_bytes(response: Any, day: str, fallback: int) -> int:
     """Итог ноды за день из ответа панели.
@@ -176,7 +180,13 @@ class SyncService:
             logger.error("❌ Initial sync failed: %s", e)
     
     async def _periodic_sync_loop(self) -> None:
-        """Periodic sync loop."""
+        """Periodic sync loop.
+
+        Проход идёт отдельной задачей под таймаутом, а сам цикл останавливает
+        только stop(). 27.09.2026 во время сетевого сбоя у хостера проход
+        встал, и цикл молча вышел: синк не шёл 12 часов, пока его не запустили
+        руками, а трафик и HWID в админке всё это время стояли.
+        """
         while self._running:
             try:
                 # Re-read interval each iteration so UI changes take effect without restart
@@ -187,10 +197,20 @@ class SyncService:
                     break
 
                 logger.debug("Running periodic sync...")
-                await self.full_sync()
+                await asyncio.wait_for(
+                    asyncio.create_task(self.full_sync()), timeout=SYNC_PASS_TIMEOUT_SECONDS,
+                )
 
+            except asyncio.TimeoutError:
+                logger.error("Periodic sync pass took over %d s and was cancelled", SYNC_PASS_TIMEOUT_SECONDS)
             except asyncio.CancelledError:
-                break
+                # Отмена, прилетевшая из самого прохода (её роняет сетевой
+                # клиент на обрыве), цикл не касается: он отменён, только если
+                # остановлен stop() или отменена его собственная задача.
+                task = asyncio.current_task()
+                if not self._running or (task is not None and task.cancelling()):
+                    break
+                logger.error("Periodic sync pass was cancelled from inside; the next one runs on schedule")
             except Exception as e:
                 logger.error("Error in periodic sync: %s", e, exc_info=True)
                 # Continue running, will retry next interval

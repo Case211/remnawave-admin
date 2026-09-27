@@ -639,6 +639,11 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.finance.bedolaga_income import deposits_loop
                     _bg("bedolaga_deposits", deposits_loop())
 
+                    # Сторож синка — здесь, а не в коллекторе рядом с синком:
+                    # так он замечает и зависший проход, и лежащий коллектор
+                    from web.backend.core.sync_watchdog import loop as sync_watchdog_loop
+                    _bg("sync_watchdog", sync_watchdog_loop())
+
                 # ── Services for collector and full mode ──
                 if app_mode in ("collector", "full"):
                     async def _baseline_refresh_loop():

@@ -131,6 +131,9 @@ def violation_kind(violation: dict) -> str:
         except ValueError:
             raw = None
     if isinstance(raw, dict):
+        # Расход трафика — не анализатор детектора, у записи своя метка
+        if "traffic_rate" in raw:
+            return "traffic_rate"
         breakdown = raw.get("breakdown") if isinstance(raw.get("breakdown"), dict) else raw
         dominant = dominant_analyzer(breakdown)
         if dominant in NOTICE_KINDS:

@@ -35,6 +35,16 @@ def test_torrents_are_recognised_by_reason():
     assert notices.violation_kind(violation) == "torrent"
 
 
+def test_traffic_rate_gets_its_own_template():
+    """Расход трафика — не анализатор детектора; без метки уходил общий текст про раздачу."""
+    violation = {
+        "raw_breakdown": '{"traffic_rate": {"score": 75.9, "delta_gb": 70.1, "minutes": 55}}',
+        "reasons": ["Потребление 70.1 GB за 55 мин"],
+    }
+
+    assert notices.violation_kind(violation) == "traffic_rate"
+
+
 # ── Когда ──
 
 

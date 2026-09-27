@@ -61,9 +61,15 @@ class ViolationsMixin:
         hwid_matched_users: Optional[str] = None,
         user_agent_score: Optional[float] = None,
         suspicious_user_agents: Optional[str] = None,
+        dedup: bool = True,
     ) -> Tuple[Optional[int], bool]:
         """
         Сохранить нарушение в базу данных.
+
+        ``dedup=False`` — без склейки с ожидающим нарушением юзера. Для того,
+        у кого повторы и так сдерживает свой кулдаун: расход трафика со скором
+        ниже висящего торрента иначе исчезал, и карточка в Telegram была,
+        а записи в списке — нет.
 
         Returns:
             (ID записи, created): created=False — дедуп вернул существующую
@@ -96,7 +102,7 @@ class ViolationsMixin:
                             "ORDER BY detected_at DESC LIMIT 1",
                         ),
                         user_uuid, dedup_hours,
-                    )
+                    ) if dedup else None
                     if existing and float(existing["score"] or 0) >= score:
                         logger.debug(
                             "Skipping duplicate violation for user %s (pending id=%d, score %.1f >= %.1f)",

@@ -74,6 +74,19 @@ class TestSaveViolationDedup:
         conn.fetchval.assert_awaited()
 
     @pytest.mark.asyncio
+    async def test_dedup_off_creates_even_under_higher_pending(self):
+        """Расход трафика со скором ниже висящего торрента раньше исчезал:
+        карточка в Telegram была, а записи в списке — нет."""
+        conn = _make_conn(existing_row={"id": 42, "score": 100.0}, insert_id=125)
+        p1, p2 = _patch_db(conn)
+        with p1, p2:
+            vid, created = await db_service.save_violation(
+                user_uuid=USER_UUID, score=75.9, recommended_action="monitor", dedup=False,
+            )
+        assert (vid, created) == (125, True)
+        conn.fetchrow.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_dedup_query_is_window_bounded(self):
         """SQL дедупа обязан ограничивать pending по detected_at, иначе
         нарушение годовалой давности глушит новые записи вечно."""
