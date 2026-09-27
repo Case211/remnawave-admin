@@ -3750,10 +3750,9 @@
     },
     "geo": {
       "title": "Connection Geography",
-      "tooltip": "Where connections came from in the period: unique users and addresses by country and city. Each city lists its 100 most active users.",
+      "tooltip": "Where connections came from in the period: unique users and addresses by country, region and city. The region comes from the GeoIP region name. Each city lists its 100 most active users.",
       "noData": "No geolocation data",
       "noDataHint": "Data will appear after first connections",
-      "noMapKey": "Without a CARTO key the map shows an “API key required” watermark. Get a free key at carto.com/basemaps/apikey and paste it in Settings → General → “CARTO maps key”.",
       "connections": "{{count}} connections",
       "users": "Users",
       "more": "more",
@@ -3776,7 +3775,44 @@
         "cityAsc": "City (A-Z)",
         "cityDesc": "City (Z-A)"
       },
-      "ipsCount": "{{formatted}} IP"
+      "ipsCount": "{{formatted}} IP",
+      "map": {
+        "aria": "Connections map",
+        "world": "World",
+        "russia": "Russia",
+        "metricUsers": "Users",
+        "metricIps": "IP addresses",
+        "zoomIn": "Zoom in",
+        "zoomOut": "Zoom out",
+        "reset": "Reset zoom",
+        "noConnections": "no connections",
+        "legendUsers": "users",
+        "legendIps": "addresses",
+        "hint": "Ctrl + scroll to zoom, drag to pan, click for details",
+        "topCountries": "Countries",
+        "topRegions": "Regions",
+        "noAreaData": "No connections in this period",
+        "showAll": "Show all ({{count}})",
+        "showTop": "Top {{count}} only",
+        "unknownRegion_one": "{{count}} user ({{ips}} IP) has addresses without a region: GeoIP does not know the region or names it unusually, most often on mobile networks.",
+        "unknownRegion_other": "{{count}} users ({{ips}} IPs) have addresses without a region: GeoIP does not know the region or names it unusually, most often on mobile networks.",
+        "region": "Region",
+        "country": "Country",
+        "share": "Share",
+        "clearSelection": "Clear selection",
+        "emptyArea": "Nobody connected from here in this period — at least from addresses GeoIP places here.",
+        "openRegions": "Regions of the country",
+        "cities": "Cities",
+        "nodes": "Nodes they connect through",
+        "topUsersOnly_one": "Showing the {{count}} most active",
+        "topUsersOnly_other": "Showing the {{count}} most active",
+        "pickCountry": "Country…",
+        "withConnections": "With connections",
+        "topRegionsRu": "Russian regions",
+        "regionRu": "Federal subject",
+        "loadFailed": "Could not load the regions map",
+        "noKnownRegions": "No region is known for anyone who connected from here — see the line below."
+      }
     },
     "topUsers": {
       "title": "Top users by traffic",
@@ -5203,10 +5239,6 @@
       "display_timezone": {
         "label": "🕒 Time zone",
         "description": "IANA zone, e.g. Europe/Moscow. All times are shown in it: web panel, bot, notifications, exports and report times. The database keeps time in UTC"
-      },
-      "map_tiles_api_key": {
-        "label": "🗺️ CARTO maps key",
-        "description": "CARTO Basemaps key for the analytics map. Without it tiles carry an “API key required” watermark. Free key (5M tiles/month): carto.com/basemaps/apikey"
       },
       "web_panel_public_url": {
         "label": "🔗 Public panel URL",

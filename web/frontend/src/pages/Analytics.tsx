@@ -41,12 +41,12 @@ import client from '@/api/client'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
 import { InteractiveChart } from '@/components/charts/InteractiveChart'
 import { MiddleTruncate } from '@/components/MiddleTruncate'
-import type { GeoCity, GeoCityUser, TopUser, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem, TorrentTopUser } from '@/api/advancedAnalytics'
+import type { GeoCity, GeoCityUser, GeoData, TopUser, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem, TorrentTopUser } from '@/api/advancedAnalytics'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON, formatBytesForExport } from '@/lib/export'
 
-// Lazy-load the map component (leaflet + react-leaflet + clustering)
-const LazyGeoMap = lazy(() => import('@/components/LazyGeoMap'))
+// Lazy-load the geo map (d3-geo + bundled Natural Earth geometry)
+const GeoExplorer = lazy(() => import('@/components/geo/GeoExplorer'))
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -197,7 +197,8 @@ function GeoMapCard() {
   const [geoPeriod, setGeoPeriod] = useUrlParam('geo_period', '7d')
   const [geoDateFrom, setGeoDateFrom] = useUrlParam('geo_from', '')
   const [geoDateTo, setGeoDateTo] = useUrlParam('geo_to', '')
-  const chart = useChartTheme()
+  const [geoView, setGeoView] = useUrlParam('geo_view', '')
+  const [geoMetric, setGeoMetric] = useUrlParam('geo_metric', 'users')
 
   const hasCustomDates = Boolean(geoDateFrom)
   const apiDateFrom = hasCustomDates ? geoDateFrom : undefined
@@ -210,33 +211,10 @@ function GeoMapCard() {
     refetchInterval: 60_000,
   })
 
-  // URL тайлов приходит с бэкенда: с ключом CARTO — чистые, без ключа —
-  // старый адрес с водяным знаком; тогда под картой подсказка про ключ.
-  const { data: mapTiles } = useQuery({
-    queryKey: ['map-tiles'],
-    queryFn: advancedAnalyticsApi.mapTiles,
-    staleTime: 5 * 60_000,
-  })
-  const mapTileUrl = mapTiles?.[chart.isLight ? 'light' : 'dark'] || chart.mapTileUrl
-
   const cities = geoData?.cities || []
   const countries = geoData?.countries || []
 
-  // Compute max count for radius scaling
-  const maxCount = useMemo(
-    () => Math.max(1, ...cities.map((c: GeoCity) => c.count)),
-    [cities],
-  )
-
-  // Map center: if we have cities, use weighted center; otherwise default
-  const center = useMemo(() => {
-    if (cities.length === 0) return [50, 40] as [number, number]
-    const totalWeight = cities.reduce((s: number, c: GeoCity) => s + c.count, 0)
-    if (totalWeight === 0) return [50, 40] as [number, number]
-    const lat = cities.reduce((s: number, c: GeoCity) => s + c.lat * c.count, 0) / totalWeight
-    const lon = cities.reduce((s: number, c: GeoCity) => s + c.lon * c.count, 0) / totalWeight
-    return [lat, lon] as [number, number]
-  }, [cities])
+  const metric = geoMetric === 'ips' ? 'ips' : 'users'
 
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
@@ -287,30 +265,16 @@ function GeoMapCard() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Map — lazy-loaded with clustering */}
-            <div className="h-[400px] rounded-lg overflow-hidden border border-[var(--glass-border)]/50">
-              <Suspense fallback={
-                <div className="h-full flex items-center justify-center bg-[var(--glass-bg)]">
-                  <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-                </div>
-              }>
-                <LazyGeoMap
-                  cities={cities}
-                  maxCount={maxCount}
-                  center={center}
-                  mapBackground={chart.mapBackground}
-                  mapTileUrl={mapTileUrl}
-                />
-              </Suspense>
-            </div>
-            {mapTiles && !mapTiles.has_key && (
-              <p className="text-xs text-muted-foreground">{t('analytics.geo.noMapKey')}</p>
-            )}
-
-            {/* Top countries */}
-            {countries.length > 0 && (
-              <CountryGrid countries={countries} />
-            )}
+            {/* Векторная карта — отдельный чанк вместе с геометрией */}
+            <Suspense fallback={<Skeleton className="h-[400px] w-full rounded-lg" />}>
+              <GeoExplorer
+                data={geoData as GeoData}
+                view={geoView}
+                onViewChange={setGeoView}
+                metric={metric}
+                onMetricChange={setGeoMetric}
+              />
+            </Suspense>
 
             {/* Users by city — collapsible list */}
             {cities.length > 0 && (
@@ -573,45 +537,6 @@ function CityUsersList({
       </div>
     </div>
   )
-}
-
-// ── Country Grid (B3 fix — totalConns via useMemo) ──────────────
-
-function CountryGrid({ countries }: { countries: { country: string; country_code: string; count: number }[] }) {
-  const totalConns = useMemo(() => countries.reduce((s, x) => s + x.count, 0), [countries])
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-      {countries.slice(0, 10).map((c) => {
-        const pct = totalConns > 0 ? ((c.count / totalConns) * 100).toFixed(1) : '0'
-        return (
-          <div
-            key={c.country_code}
-            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]"
-          >
-            <span className="text-lg leading-none">
-              {countryFlag(c.country_code)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-white truncate">{c.country}</p>
-              <p className="text-xs text-muted-foreground">
-                {c.count.toLocaleString()} ({pct}%)
-              </p>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/** Convert 2-letter country code to flag emoji */
-function countryFlag(code: string): string {
-  if (!code || code.length !== 2) return '\u{1F310}'
-  const offset = 0x1f1e6
-  const a = code.charCodeAt(0) - 65
-  const b = code.charCodeAt(1) - 65
-  if (a < 0 || a > 25 || b < 0 || b > 25) return '\u{1F310}'
-  return String.fromCodePoint(offset + a, offset + b)
 }
 
 // ── Top Users Card ──────────────────────────────────────────────

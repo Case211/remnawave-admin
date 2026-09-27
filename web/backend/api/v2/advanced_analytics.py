@@ -3,7 +3,6 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List, Any
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -108,44 +107,6 @@ def _normalize_city_name(city: str) -> str:
     return _get_city_aliases().get(normalized, normalized)
 
 
-# Стили растровых тайлов CARTO под тему интерфейса
-_CARTO_STYLES = {"dark": "dark_all", "light": "light_all"}
-
-
-def _map_tile_urls(api_key: str) -> Dict[str, Any]:
-    """URL тайлов карты для аналитики по теме.
-
-    CARTO с августа 2026 без ключа рисует на тайлах водяной знак «API key
-    required» (карта работает). С ключом — новый эндпоинт rastertiles, ключ
-    передаётся параметром ``key``. Без ключа остаётся старый адрес, чтобы
-    карта не пропадала.
-    """
-    key = (api_key or "").strip()
-    if key:
-        encoded = quote(key, safe="")
-        urls = {
-            theme: f"https://basemaps.cartocdn.com/rastertiles/{style}/{{z}}/{{x}}/{{y}}.png?key={encoded}"
-            for theme, style in _CARTO_STYLES.items()
-        }
-    else:
-        urls = {
-            theme: f"https://{{s}}.basemaps.cartocdn.com/{style}/{{z}}/{{x}}/{{y}}{{r}}.png"
-            for theme, style in _CARTO_STYLES.items()
-        }
-    return {**urls, "has_key": bool(key)}
-
-
-@router.get("/map-tiles")
-@limiter.limit(RATE_ANALYTICS)
-async def get_map_tiles(
-    request: Request,
-    admin: AdminUser = Depends(require_permission("analytics", "view")),
-):
-    """Tile URL templates for the analytics map (dark/light) and whether a CARTO key is set."""
-    from shared.config_service import config_service
-    return _map_tile_urls(config_service.get("map_tiles_api_key") or "")
-
-
 @router.get("/geo")
 @limiter.limit(RATE_ANALYTICS)
 async def get_geo_connections(
@@ -155,11 +116,13 @@ async def get_geo_connections(
     date_to: Optional[str] = Query(None, description="Custom end date (ISO 8601)"),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
-    """География за период: уникальные юзеры и адреса по странам и городам."""
+    """География за период: уникальные юзеры и адреса по странам, субъектам и городам."""
     scope = await _user_scope(admin)
     if scope is None:
-        return await _compute_geo(period=period, date_from=date_from, date_to=date_to)
-    return await _geo(period, date_from, date_to, scope)
+        data = await _compute_geo(period=period, date_from=date_from, date_to=date_to)
+    else:
+        data = await _geo(period, date_from, date_to, scope)
+    return _geo_visible_nodes(data, await _node_scope(admin))
 
 
 @cached("analytics:geo", ttl=CACHE_TTL_LONG, key_args=("period", "date_from", "date_to"))
@@ -168,10 +131,27 @@ async def _compute_geo(period: str = "7d", date_from: Optional[str] = None, date
 
 
 _GEO_CITY_USERS_LIMIT = 100
+_GEO_REGION_TOP = 10
+
+
+def _geo_visible_nodes(data: Dict[str, Any], node_scope: Optional[List[str]]) -> Dict[str, Any]:
+    """Ноды в разбивке регионов — только видимые админу, первые _GEO_REGION_TOP.
+
+    В кэше список полный: обрежь его до фильтра — и админ, чьи ноды в регионе
+    не в первой десятке, увидел бы пустой список.
+    """
+    visible = None if node_scope is None else set(node_scope)
+    regions = [
+        {**r, "nodes": [n for n in r["nodes"] if visible is None or n["uuid"] in visible][:_GEO_REGION_TOP]}
+        for r in data.get("regions", [])
+    ]
+    return {**data, "regions": regions}
 
 
 async def _geo(period: str, date_from: Optional[str], date_to: Optional[str],
                scope: Optional[List[str]]) -> Dict[str, Any]:
+    from shared.geo_regions import has_region_map, resolve_region
+
     db_service = _db()
     since, until = _bounds(period, date_from, date_to)
     try:
@@ -181,38 +161,75 @@ async def _geo(period: str, date_from: Optional[str], date_to: Optional[str],
             rows = await conn.fetch(
                 f"""
                 WITH pairs AS (
-                    SELECT user_uuid, SPLIT_PART(ip_address, '/', 1) AS ip, COUNT(*) AS connections
+                    SELECT user_uuid, SPLIT_PART(ip_address, '/', 1) AS ip, node_uuid,
+                           COUNT(*) AS connections
                     FROM {USER_CONNECTIONS_TABLE}
                     WHERE connected_at >= $1 AND connected_at < $2
                       AND ($3::uuid[] IS NULL OR user_uuid = ANY($3::uuid[]))
-                    GROUP BY user_uuid, ip
+                    GROUP BY user_uuid, ip, node_uuid
                 )
                 SELECT p.user_uuid::text AS uuid, u.username, u.status,
-                       im.city, im.country_name, im.country_code,
+                       im.city, im.region, im.country_name, im.country_code,
                        AVG(im.latitude) AS latitude, AVG(im.longitude) AS longitude,
                        SUM(p.connections) AS connections,
-                       array_agg(p.ip) AS ips
+                       array_agg(DISTINCT p.ip) AS ips,
+                       array_agg(DISTINCT p.node_uuid::text)
+                           FILTER (WHERE p.node_uuid IS NOT NULL) AS nodes
                 FROM pairs p
                 JOIN {IP_METADATA_TABLE} im ON im.ip_address = p.ip
                 LEFT JOIN {USERS_TABLE} u ON u.uuid = p.user_uuid
                 WHERE im.country_name IS NOT NULL
-                GROUP BY p.user_uuid, u.username, u.status, im.city, im.country_name, im.country_code
+                GROUP BY p.user_uuid, u.username, u.status, im.city, im.region,
+                         im.country_name, im.country_code
                 """,
                 since, until, scope,
             )
+            node_names = {
+                str(r["uuid"]): r["name"]
+                for r in await conn.fetch(select_sql(NODES_TABLE, "uuid, name"))
+            }
     except Exception as e:
         raise _failed("geo", e)
 
     countries: Dict[str, Dict[str, Any]] = {}
     cities: Dict[tuple, Dict[str, Any]] = {}
+    # Субъекты — по названию региона из GeoIP (shared.geo_regions); кого не
+    # узнали, считаем отдельно, чтобы карта не выдавала их за «никого»
+    regions: Dict[str, Dict[str, Any]] = {}
+    unknown: Dict[str, Dict[str, set]] = {}
     for r in rows:
         ips = [str(ip) for ip in (r["ips"] or [])]
-        c = countries.setdefault(r["country_name"], {
+        # По коду, а не имени: провайдеры GeoIP пишут «Russia» и «Russian Federation»
+        c = countries.setdefault((r["country_code"] or r["country_name"]).upper(), {
             "country": r["country_name"], "country_code": r["country_code"],
             "users": set(), "ips": set(),
         })
         c["users"].add(r["uuid"])
         c["ips"].update(ips)
+
+        code = resolve_region(r["country_code"], r["region"])
+        if code:
+            reg = regions.setdefault(code, {
+                "code": code, "country_code": r["country_code"], "ips": set(), "users": {},
+                "cities": defaultdict(lambda: {"city": None, "users": set()}),
+                "nodes": defaultdict(set),
+            })
+            reg["ips"].update(ips)
+            reg_user = reg["users"].setdefault(r["uuid"], {
+                "uuid": r["uuid"], "username": r["username"] or r["uuid"][:8],
+                "status": r["status"] or "unknown", "connections": 0,
+            })
+            reg_user["connections"] += int(r["connections"] or 0)
+            if r["city"]:
+                reg_city = reg["cities"][_normalize_city_name(r["city"])]
+                reg_city["city"] = reg_city["city"] or r["city"]
+                reg_city["users"].add(r["uuid"])
+            for node in r["nodes"] or []:
+                reg["nodes"][str(node)].add(r["uuid"])
+        elif has_region_map(r["country_code"]):
+            unk = unknown.setdefault(r["country_code"], {"users": set(), "ips": set()})
+            unk["users"].add(r["uuid"])
+            unk["ips"].update(ips)
 
         if not r["city"] or r["latitude"] is None or r["longitude"] is None:
             continue
@@ -240,11 +257,13 @@ async def _geo(period: str, date_from: Optional[str], date_to: Optional[str],
             user["connections"] += int(r["connections"] or 0)
             user["ips"] = sorted(set(user["ips"]) | set(ips))
 
+    # Все страны: карта мира закрашивает каждую, и хвост за первой полусотней
+    # иначе выглядел бы как «никого»
     country_list = sorted(
         ({"country": c["country"], "country_code": c["country_code"],
           "count": len(c["users"]), "unique_ips": len(c["ips"])} for c in countries.values()),
         key=lambda c: c["count"], reverse=True,
-    )[:50]
+    )
 
     city_list = []
     for city in cities.values():
@@ -262,7 +281,34 @@ async def _geo(period: str, date_from: Optional[str], date_to: Optional[str],
         })
     city_list.sort(key=lambda c: c["count"], reverse=True)
 
-    return {"countries": country_list, "cities": city_list[:100]}
+    def _top(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return sorted(items, key=lambda x: x["count"], reverse=True)[:_GEO_REGION_TOP]
+
+    region_list = sorted((
+        {
+            "code": reg["code"],
+            "country_code": reg["country_code"],
+            "count": len(reg["users"]),
+            "unique_ips": len(reg["ips"]),
+            "cities": _top([{"city": c["city"], "count": len(c["users"])}
+                            for c in reg["cities"].values()]),
+            # Все ноды: первую десятку отрезает _geo_visible_nodes после фильтра по правам
+            "nodes": sorted(({"uuid": uuid, "name": node_names.get(uuid) or uuid[:8], "count": len(users)}
+                             for uuid, users in reg["nodes"].items()), key=lambda x: x["count"], reverse=True),
+            "users": sorted(reg["users"].values(), key=lambda u: u["connections"],
+                            reverse=True)[:_GEO_CITY_USERS_LIMIT],
+        } for reg in regions.values()
+    ), key=lambda x: x["count"], reverse=True)
+
+    return {
+        "countries": country_list,
+        "cities": city_list[:100],
+        "regions": region_list,
+        "regions_unknown": [
+            {"country_code": cc, "count": len(u["users"]), "unique_ips": len(u["ips"])}
+            for cc, u in unknown.items()
+        ],
+    }
 
 
 @router.get("/top-users")

@@ -149,31 +149,6 @@ vi.mock('sonner', () => ({
   Toaster: () => null,
 }))
 
-// Mock Leaflet CSS import
-vi.mock('leaflet/dist/leaflet.css', () => ({}))
-
-// Mock Leaflet (used by Analytics page)
-vi.mock('leaflet', () => ({
-  default: {
-    map: vi.fn(),
-    tileLayer: vi.fn(),
-    marker: vi.fn(),
-    Icon: { Default: { mergeOptions: vi.fn() } },
-    icon: vi.fn(() => ({})),
-  },
-  Icon: { Default: { mergeOptions: vi.fn() } },
-  icon: vi.fn(() => ({})),
-}))
-
-vi.mock('react-leaflet', () => ({
-  MapContainer: ({ children }: { children: React.ReactNode }) => <div data-testid="map">{children}</div>,
-  TileLayer: () => <div />,
-  Marker: () => <div />,
-  Popup: () => <div />,
-  CircleMarker: () => <div />,
-  useMap: vi.fn(() => ({ setView: vi.fn(), invalidateSize: vi.fn() })),
-}))
-
 // Mock Recharts (used by Dashboard and Analytics)
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

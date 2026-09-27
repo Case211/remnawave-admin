@@ -29,9 +29,39 @@ export interface GeoCity {
   users: GeoCityUser[]
 }
 
+/** Юзер субъекта: самые активные по числу подключений, не больше 100 */
+export interface GeoRegionUser {
+  uuid: string
+  username: string
+  status: string
+  connections: number
+}
+
+/** Субъект страны (пока только РФ), code — ISO 3166-2 */
+export interface GeoRegion {
+  code: string
+  country_code: string
+  /** Уникальные юзеры за период */
+  count: number
+  unique_ips: number
+  /** Города и ноды — по числу юзеров, первые 10 */
+  cities: { city: string; count: number }[]
+  nodes: { uuid: string; name: string; count: number }[]
+  users: GeoRegionUser[]
+}
+
+/** Юзеры страны, чей регион GeoIP не назвал или назвал неизвестно как */
+export interface GeoRegionUnknown {
+  country_code: string
+  count: number
+  unique_ips: number
+}
+
 export interface GeoData {
   countries: GeoCountry[]
   cities: GeoCity[]
+  regions?: GeoRegion[]
+  regions_unknown?: GeoRegionUnknown[]
 }
 
 export interface TopUser {
@@ -181,20 +211,7 @@ export interface RetentionData {
   total_retained: number
 }
 
-/** URL тайлов карты по теме; has_key=false — CARTO без ключа рисует водяной знак. */
-export interface MapTilesData {
-  dark: string
-  light: string
-  has_key: boolean
-}
-
 export const advancedAnalyticsApi = {
-  /** Tile URL templates for the geo map (with the CARTO key when configured). */
-  mapTiles: async (): Promise<MapTilesData> => {
-    const { data } = await client.get('/analytics/advanced/map-tiles')
-    return data
-  },
-
   /** Fetch provider/ASN analytics. */
   providers: async (period = '7d'): Promise<ProvidersData> => {
     const { data } = await client.get('/analytics/advanced/providers', { params: { period } })
