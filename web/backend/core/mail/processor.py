@@ -326,17 +326,52 @@ async def _handle_dmarc_reports(inbox_id: int) -> int:
 
 # ── Отписки ───────────────────────────────────────────────────────
 
-async def _handle_unsubscribe(inbox_id: int, mail_from: str) -> None:
+def unsubscribe_sender(mail_from: str, from_header: str, spf: str, dkim: str,
+                       dmarc: str, is_spam: bool) -> Optional[str]:
+    """Чей адрес отписывать по письму на unsubscribe@ — или None, если верить нельзя.
+
+    Envelope ``MAIL FROM`` — строка, которую отправляющий сервер называет сам:
+    любой может прислать письмо «от» чужого адреса и тем самым занести его в
+    подавленные. Поэтому отписка принимается только когда письмо прошло
+    аутентификацию (SPF, DKIM или DMARC ``pass``), не помечено подозрительным
+    и домен заголовка ``From`` совпадает с envelope-доменом.
+    """
+    from email.utils import parseaddr
+
+    envelope = (mail_from or "").strip().lower()
+    if "@" not in envelope:
+        return None
+    if is_spam:
+        return None
+    if "pass" not in (spf or "", dkim or "", dmarc or ""):
+        return None
+    header_addr = parseaddr(from_header or "")[1].strip().lower()
+    if header_addr and "@" in header_addr:
+        if header_addr.rpartition("@")[2] != envelope.rpartition("@")[2]:
+            return None
+    return envelope
+
+
+async def _handle_unsubscribe(inbox_id: int, row: Dict[str, Any]) -> bool:
     """Письмо на unsubscribe@ — просьба больше не писать.
 
     Адрес обещан в заголовке List-Unsubscribe каждого нашего письма, так что
     отписка обязана работать: иначе заголовок — пустое обещание, а почтовые
-    системы за такое понижают репутацию отправителя.
+    системы за такое понижают репутацию отправителя. Но верим только
+    аутентифицированному отправителю — см. ``unsubscribe_sender``.
     """
-    if not mail_from or "@" not in mail_from:
-        return
-    await suppress(mail_from, reason="unsubscribe",
+    addr = unsubscribe_sender(
+        row.get("mail_from") or "", row.get("from_header") or "",
+        row.get("spf_result") or "", row.get("dkim_result") or "",
+        row.get("dmarc_result") or "", bool(row.get("is_spam")),
+    )
+    if not addr:
+        logger.warning("Unsubscribe from %r ignored: sender not authenticated (inbox id=%s)",
+                       row.get("mail_from"), inbox_id)
+        return False
+    await suppress(addr, reason="unsubscribe",
                    detail="Отписка письмом на unsubscribe@", source_inbox_id=inbox_id)
+    return True
 
 
 # ── Основной проход ───────────────────────────────────────────────
@@ -350,7 +385,8 @@ async def process_pending(limit: int = _BATCH) -> Dict[str, int]:
         async with db_service.acquire() as conn:
             rows = await conn.fetch(
                 select_sql(EMAIL_INBOX_TABLE,
-                    "id, rcpt_to, mail_from, raw_message, has_attachments, subject",
+                    "id, rcpt_to, mail_from, from_header, raw_message, has_attachments, subject, "
+                    "spf_result, dkim_result, dmarc_result, is_spam",
                     "WHERE is_processed = false ORDER BY id LIMIT $1"),
                 limit,
             )
@@ -362,8 +398,8 @@ async def process_pending(limit: int = _BATCH) -> Dict[str, int]:
         inbox_id = row["id"]
         try:
             if (row["rcpt_to"] or "").lower().startswith("unsubscribe@"):
-                await _handle_unsubscribe(inbox_id, row["mail_from"] or "")
-                stats["unsubscribes"] += 1
+                if await _handle_unsubscribe(inbox_id, dict(row)):
+                    stats["unsubscribes"] += 1
             else:
                 msg = email.message_from_string(row["raw_message"] or "")
                 bounce = parse_bounce(msg)
