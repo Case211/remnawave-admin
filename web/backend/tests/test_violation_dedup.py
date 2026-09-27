@@ -195,7 +195,7 @@ class TestHandleViolationCreatedGate:
             collector.config_service, "get",
             side_effect=lambda key, default=None: True if key == "violations_warn_on_action" else default,
         ), patch(
-            "web.backend.core.violation_notices.send_notice",
+            "shared.violation_notices.send_notice",
             new=AsyncMock(side_effect=RuntimeError("delivery unavailable")),
         ) as send:
             await collector._warn_after_auto_action(warning)
@@ -206,7 +206,7 @@ class TestHandleViolationCreatedGate:
     async def test_warning_setting_can_disable_auto_action_notice(self):
         warning = {"id": 51, "user_uuid": USER_UUID}
         with patch.object(collector.config_service, "get", return_value=False), patch(
-            "web.backend.core.violation_notices.send_notice", new_callable=AsyncMock,
+            "shared.violation_notices.send_notice", new_callable=AsyncMock,
         ) as send:
             await collector._warn_after_auto_action(warning)
 

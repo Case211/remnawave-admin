@@ -9,7 +9,7 @@ from email.utils import formataddr, formatdate, make_msgid
 from typing import Any, Dict, List, Optional
 
 from shared.db_schema import EMAIL_QUEUE_TABLE, DOMAIN_CONFIG_TABLE
-from shared.db_query import select_sql, insert_sql, update_sql
+from shared.db_query import select_sql, update_sql
 
 logger = logging.getLogger(__name__)
 
@@ -95,57 +95,18 @@ class OutboundMailQueue:
         ignore_suppression: bool = False,
         headers: Optional[Dict[str, str]] = None,
     ) -> Optional[int]:
-        """Add an email to the outbound queue. Returns the queue row id."""
-        try:
-            # Адрес, который уже ответил жёстким отказом или отписался, письма
-            # не получит. Повторные попытки не просто бесполезны: почтовые
-            # системы считают настойчивую отправку в мёртвые ящики признаком
-            # спамера и портят репутацию домена целиком.
-            if not ignore_suppression:
-                from web.backend.core.mail.processor import is_suppressed
-                if await is_suppressed(to_email):
-                    logger.info("Skipped suppressed address: %s", to_email)
-                    return None
+        """Add an email to the outbound queue. Returns the queue row id.
 
-            from shared.database import db_service
-            async with db_service.acquire() as conn:
-                # Auto-resolve domain_id from sender address
-                if domain_id is None:
-                    sender_domain = from_email.split("@")[-1] if "@" in from_email else None
-                    if sender_domain:
-                        domain_id = await conn.fetchval(
-                            select_sql(DOMAIN_CONFIG_TABLE, "id",
-                                "WHERE domain = $1 AND is_active = true"),
-                            sender_domain,
-                        )
+        Сама постановка — в ``shared.mail_queue``: ставит письма и бот.
+        """
+        from shared.mail_queue import enqueue
 
-                # Rate limit check
-                if domain_id:
-                    allowed = await self._check_rate_limit(conn, domain_id)
-                    if not allowed:
-                        logger.warning(
-                            "Rate limit exceeded for domain_id=%d (effective hourly cap reached)",
-                            domain_id,
-                        )
-                        return None
-
-                import json as _json
-                row_id = await conn.fetchval(
-                    insert_sql(EMAIL_QUEUE_TABLE,
-                        ["domain_id", "from_email", "from_name", "to_email", "subject",
-                         "body_text", "body_html", "category", "priority", "headers",
-                         "status", "next_attempt_at"],
-                        values="$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', NOW()",
-                        returning="id"),
-                    domain_id, from_email, from_name, to_email, subject,
-                    body_text, body_html, category, priority,
-                    _json.dumps(headers or {}),
-                )
-                logger.info("Enqueued email id=%s to=%s subj=%s", row_id, to_email, subject[:60])
-                return row_id
-        except Exception as e:
-            logger.error("Failed to enqueue email: %s", e)
-            return None
+        return await enqueue(
+            from_email=from_email, to_email=to_email, subject=subject,
+            body_text=body_text, body_html=body_html, from_name=from_name,
+            category=category, priority=priority, domain_id=domain_id,
+            ignore_suppression=ignore_suppression, headers=headers,
+        )
 
     # ── Background loop ───────────────────────────────────────────
 
@@ -466,39 +427,6 @@ class OutboundMailQueue:
                 logger.warning("Plain SMTP also failed for %s: %s", host, e)
 
         raise RuntimeError(f"All MX hosts failed: {last_error}")
-
-    def _effective_hourly_limit(self, domain_limit: Optional[int]) -> int:
-        """Resolve the effective hourly send cap for a domain.
-
-        A positive per-domain ``max_send_per_hour`` is an explicit override.
-        Otherwise (0 / NULL) the domain inherits the global default from
-        settings (``mailserver_max_send_per_hour``). A result ``<= 0`` means
-        unlimited. This is what makes the "Лимит отправки в час" setting in the
-        UI actually take effect — historically it was read nowhere.
-        """
-        if domain_limit and domain_limit > 0:
-            return int(domain_limit)
-        try:
-            from shared.config_service import config_service
-            return int(config_service.get("mailserver_max_send_per_hour", 100) or 0)
-        except Exception:
-            return 100
-
-    async def _check_rate_limit(self, conn, domain_id: int) -> bool:
-        """Check if the domain is within its effective hourly send limit."""
-        row = await conn.fetchrow(
-            select_sql(DOMAIN_CONFIG_TABLE, "max_send_per_hour", "WHERE id = $1"), domain_id,
-        )
-        limit = self._effective_hourly_limit(row["max_send_per_hour"] if row else None)
-        if limit <= 0:
-            return True  # unlimited
-
-        sent_count = await conn.fetchval(
-            select_sql(EMAIL_QUEUE_TABLE, "COUNT(*)",
-                "WHERE domain_id = $1 AND created_at > NOW() - INTERVAL '1 hour'"),
-            domain_id,
-        )
-        return (sent_count or 0) < limit
 
 
 # Global instance

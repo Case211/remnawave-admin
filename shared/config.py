@@ -42,6 +42,11 @@ class SharedSettings(BaseSettings):
         default="/app/geoip/GeoLite2-ASN.mmdb", alias="MAXMIND_ASN_DB"
     )
 
+    # Bot API Bedolaga — нужен и вебу, и боту: предупреждения клиентам и
+    # кнопки поддержки бот шлёт сам, а пакета web в его образе нет
+    bedolaga_api_url: str | None = Field(default=None, alias="BEDOLAGA_API_URL")
+    bedolaga_api_token: str | None = Field(default=None, alias="BEDOLAGA_API_TOKEN")
+
     @property
     def database_enabled(self) -> bool:
         """Проверяет, включена ли база данных."""

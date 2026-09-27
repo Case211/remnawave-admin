@@ -152,7 +152,7 @@ async def _send_warning(user_uuid: str, admin: BotAdmin, *, auto: bool = False) 
     ``auto`` включает порог скора из шаблона: автоматическую отправку он
     сдерживает, а нажатие кнопки — нет, там уже решил человек.
     """
-    from web.backend.core.violation_notices import send_notice
+    from shared.violation_notices import send_notice
 
     violation = await _latest_violation(user_uuid)
     if not violation:

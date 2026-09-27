@@ -245,16 +245,9 @@ class MailService:
 
     async def get_active_outbound_domain(self) -> Optional[Dict[str, Any]]:
         """Return the first active outbound domain config, or None."""
-        try:
-            from shared.database import db_service
-            async with db_service.acquire() as conn:
-                row = await conn.fetchrow(
-                    select_sql(DOMAIN_CONFIG_TABLE, "*",
-                        "WHERE is_active = true AND outbound_enabled = true ORDER BY id LIMIT 1")
-                )
-                return dict(row) if row else None
-        except Exception:
-            return None
+        from shared.mail_queue import active_outbound_domain
+
+        return await active_outbound_domain()
 
     async def refresh_smtp_credentials(self):
         """Trigger an immediate refresh of the SMTP credential cache."""

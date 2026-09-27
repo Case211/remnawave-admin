@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from shared.mail_queue import effective_hourly_limit, within_rate_limit
 from web.backend.core.mail.outbound_queue import OutboundMailQueue
 
 
@@ -48,6 +49,7 @@ def test_relayed_user_mail_is_untouched():
 
 
 # ── effective hourly limit (domain override vs global default) ──────
+# Постановка в очередь живёт в shared.mail_queue: письма ставит и бот.
 
 def _cfg(global_limit):
     cfg = MagicMock()
@@ -57,55 +59,49 @@ def _cfg(global_limit):
 
 def test_effective_limit_uses_domain_override():
     """A positive per-domain value wins over the global setting."""
-    q = OutboundMailQueue()
     with patch("shared.config_service.config_service", _cfg(1000)):
-        assert q._effective_hourly_limit(500) == 500
+        assert effective_hourly_limit(500) == 500
 
 
 def test_effective_limit_inherits_global_when_zero_or_null():
-    q = OutboundMailQueue()
     with patch("shared.config_service.config_service", _cfg(1000)):
-        assert q._effective_hourly_limit(0) == 1000
-        assert q._effective_hourly_limit(None) == 1000
+        assert effective_hourly_limit(0) == 1000
+        assert effective_hourly_limit(None) == 1000
 
 
 def test_effective_limit_unlimited_when_global_zero():
-    q = OutboundMailQueue()
     with patch("shared.config_service.config_service", _cfg(0)):
-        assert q._effective_hourly_limit(0) == 0  # <= 0 ⇒ unlimited upstream
+        assert effective_hourly_limit(0) == 0  # <= 0 ⇒ unlimited upstream
 
 
-# ── _check_rate_limit ───────────────────────────────────────────────
+# ── within_rate_limit ───────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_check_rate_limit_blocks_at_global_cap():
+async def test_rate_limit_blocks_at_global_cap():
     """Domain inherits global (row=0); already at the cap ⇒ blocked."""
-    q = OutboundMailQueue()
     conn = AsyncMock()
     conn.fetchrow.return_value = {"max_send_per_hour": 0}
     conn.fetchval.return_value = 1000  # sent in last hour
     with patch("shared.config_service.config_service", _cfg(1000)):
-        assert await q._check_rate_limit(conn, 3) is False
+        assert await within_rate_limit(conn, 3) is False
 
 
 @pytest.mark.asyncio
-async def test_check_rate_limit_allows_under_global_cap():
-    q = OutboundMailQueue()
+async def test_rate_limit_allows_under_global_cap():
     conn = AsyncMock()
     conn.fetchrow.return_value = {"max_send_per_hour": 0}
     conn.fetchval.return_value = 50
     with patch("shared.config_service.config_service", _cfg(1000)):
-        assert await q._check_rate_limit(conn, 3) is True
+        assert await within_rate_limit(conn, 3) is True
 
 
 @pytest.mark.asyncio
-async def test_check_rate_limit_unlimited_skips_count():
+async def test_rate_limit_unlimited_skips_count():
     """When effective limit is unlimited we never even count the queue."""
-    q = OutboundMailQueue()
     conn = AsyncMock()
     conn.fetchrow.return_value = {"max_send_per_hour": 0}
     with patch("shared.config_service.config_service", _cfg(0)):
-        assert await q._check_rate_limit(conn, 3) is True
+        assert await within_rate_limit(conn, 3) is True
     conn.fetchval.assert_not_called()
 
 

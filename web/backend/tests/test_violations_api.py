@@ -230,7 +230,7 @@ class TestNotifyScope:
         with (
             patch("shared.database.db_service", _db_service_with(conn)),
             patch("web.backend.core.rbac.get_visible_user_uuids", new_callable=AsyncMock, return_value={"other-uuid"}),
-            patch("web.backend.core.violation_notices.send_notice", send),
+            patch("shared.violation_notices.send_notice", send),
         ):
             resp = await client.post("/api/v2/violations/7/notify", json={})
         assert resp.status_code == 403
@@ -244,7 +244,7 @@ class TestNotifyScope:
         with (
             patch("shared.database.db_service", _db_service_with(conn)),
             patch("web.backend.core.rbac.get_visible_user_uuids", new_callable=AsyncMock, return_value=None),
-            patch("web.backend.core.violation_notices.send_notice", send),
+            patch("shared.violation_notices.send_notice", send),
         ):
             resp = await client.post("/api/v2/violations/7/notify", json={})
         assert resp.status_code == 200
@@ -263,10 +263,10 @@ class TestNoticeTemplatePatch:
 
     @pytest.mark.asyncio
     async def test_rejected_template_is_400_with_code(self, app, client):
-        from web.backend.core.violation_notices import NoticeTemplateError
+        from shared.violation_notices import NoticeTemplateError
 
         update = AsyncMock(side_effect=NoticeTemplateError("NOTICE_MARKUP_INVALID", "Telegram markup: line_break at 1:6"))
-        with patch("web.backend.core.violation_notices.update_template", update):
+        with patch("shared.violation_notices.update_template", update):
             resp = await client.patch("/api/v2/violations/notice-templates/default", json={"body_ru": "текст<br>"})
 
         assert resp.status_code == 400
@@ -276,7 +276,7 @@ class TestNoticeTemplatePatch:
     async def test_channel_and_letter_fields_reach_storage(self, app, client):
         update = AsyncMock(return_value={"kind": "default"})
         with (
-            patch("web.backend.core.violation_notices.update_template", update),
+            patch("shared.violation_notices.update_template", update),
             patch("web.backend.api.v2.violations.write_audit_log", new_callable=AsyncMock),
         ):
             resp = await client.patch(

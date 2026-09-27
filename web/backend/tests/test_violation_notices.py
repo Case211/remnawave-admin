@@ -6,7 +6,7 @@
 """
 import pytest
 
-from web.backend.core import violation_notices as notices
+from shared import violation_notices as notices
 
 
 # ── Какой текст ──
@@ -153,7 +153,7 @@ async def test_no_recipient_no_notice(monkeypatch):
 async def test_email_only_notice_is_delivered_and_recorded(monkeypatch):
     conn = _Conn({"default": _template(kind="default", min_score=0, body_ru="<b>Важно</b>: текст")})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
 
     async def fake_user(email):
         assert email == "person@example.com"
@@ -197,7 +197,7 @@ async def test_second_notice_needs_force(monkeypatch):
 async def test_notice_goes_out_and_is_recorded(monkeypatch):
     conn = _Conn({"default": _template(kind="default", min_score=0)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
 
     async def fake_user(telegram_id):
         return {"id": 7, "telegram_id": telegram_id}
@@ -225,7 +225,7 @@ async def test_failed_delivery_leaves_no_mark(monkeypatch):
     """Не дошло — отметки нет, оператор сможет отправить снова без force."""
     conn = _Conn({"default": _template(kind="default", min_score=0)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
 
     async def fake_user(telegram_id):
         return {"id": 7}
@@ -256,17 +256,12 @@ def _own_mail(monkeypatch, queue_id=55):
         sent.append(kwargs)
         return queue_id
 
-    from web.backend.core.mail.mail_service import mail_service
-
-    monkeypatch.setattr(mail_service, "send_email", fake_send_email)
+    monkeypatch.setattr("shared.mail_queue.send_email", fake_send_email)
     return sent
 
 
 def _no_bedolaga(monkeypatch):
-    def not_configured():
-        raise RuntimeError("Bedolaga не подключена")
-
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", not_configured)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: False)
 
 
 _VIOLATION = {"id": 1, "user_uuid": "11111111-2222-3333-4444-555555555555", "score": 90}
@@ -294,7 +289,7 @@ async def test_bot_without_notify_falls_back_to_email(monkeypatch):
     """У прод-бота нет ручки /notify (#3270 не принят) — письмо уходит нашим сервером."""
     conn = _Conn({"default": _template(kind="default", min_score=0)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
 
     async def fake_user(telegram_id):
         return {"id": 7}
@@ -316,7 +311,7 @@ async def test_template_email_is_completed_when_bot_sent_only_telegram(monkeypat
     """Канал Email включён, бот доставил только Telegram — письмо досылаем сами."""
     conn = _Conn({"default": _template(kind="default", min_score=0, send_email=True)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
 
     async def fake_user(telegram_id):
         return {"id": 7}
@@ -340,7 +335,7 @@ async def test_no_extra_email_when_template_does_not_ask(monkeypatch):
     """Telegram дошёл, канал Email выключен — лишнего письма нет."""
     conn = _Conn({"default": _template(kind="default", min_score=0, send_email=False)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
 
     async def fake_user(telegram_id):
         return {"id": 7}
@@ -403,7 +398,7 @@ async def test_email_channel_off_means_no_letter(monkeypatch):
 async def test_telegram_channel_off_sends_only_email(monkeypatch):
     conn = _Conn({"default": _template(kind="default", min_score=0, send_telegram=False)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
     calls = []
 
     async def fake_user(telegram_id):
@@ -428,7 +423,7 @@ async def test_each_channel_gets_its_own_text(monkeypatch):
     body = "<b>Внимание</b>\nТекст"
     conn = _Conn({"default": _template(kind="default", min_score=0, body_ru=body)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
-    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", lambda: None)
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
     calls = {}
 
     async def fake_user(telegram_id):

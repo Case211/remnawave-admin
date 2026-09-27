@@ -1161,7 +1161,7 @@ async def list_notice_templates(
     admin: AdminUser = Depends(require_permission("violations", "view")),
 ):
     """Шаблоны предупреждений — по одному на вид нарушения."""
-    from web.backend.core.violation_notices import NOTICE_KINDS, list_templates
+    from shared.violation_notices import NOTICE_KINDS, list_templates
 
     return {"items": await list_templates(), "kinds": list(NOTICE_KINDS)}
 
@@ -1174,7 +1174,7 @@ async def patch_notice_template(
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
 ):
     """Изменить шаблон. Правку текста, который уходит клиентам, пишем в аудит."""
-    from web.backend.core.violation_notices import NoticeTemplateError, update_template
+    from shared.violation_notices import NoticeTemplateError, update_template
 
     try:
         updated = await update_template(
@@ -1210,7 +1210,7 @@ async def notify_violation_user(
     Право то же, что у блокировки: сообщение уходит человеку от имени сервиса,
     и отозвать его нельзя.
     """
-    from web.backend.core.violation_notices import send_notice
+    from shared.violation_notices import send_notice
 
     from shared.database import db_service
 

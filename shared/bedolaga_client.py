@@ -361,3 +361,20 @@ class BedolagaClient:
 
 
 bedolaga_client = BedolagaClient()
+
+
+def ensure_configured() -> bool:
+    """Настроить клиент из BEDOLAGA_API_URL / BEDOLAGA_API_TOKEN. False — не задано.
+
+    Общий для веба и бота: у процесса бота клиент никто не поднимал, а веб-
+    настройки ему недоступны — в образе бота нет пакета web.
+    """
+    if bedolaga_client.is_configured:
+        return True
+    from shared.config import get_shared_settings
+
+    settings = get_shared_settings()
+    if not settings.bedolaga_api_url or not settings.bedolaga_api_token:
+        return False
+    bedolaga_client.configure(settings.bedolaga_api_url, settings.bedolaga_api_token)
+    return True
