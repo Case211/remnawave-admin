@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { TFunction } from 'i18next'
-import { formatDetailValue, getDescription, getVisibleDetails, resourceKey, translateAuditAction } from '@/lib/auditFormat'
+import i18n from '@/i18n'
+import {
+  formatDetailValue, getActionLabelT, getDescription, getResourceLabel, getVisibleDetails, parseAction,
+  resourceKey, translateAuditAction,
+} from '@/lib/auditFormat'
 
 // i18next-заглушка: возвращает defaultValue, а для известного ключа — перевод
 const dict: Record<string, string> = {
@@ -40,6 +44,12 @@ describe('auditFormat', () => {
     expect(resourceKey('setting')).toBe('settings')
     expect(resourceKey('settings')).toBe('settings')
   })
+
+  it('«s» на конце — не всегда множественное число', () => {
+    expect(resourceKey('dns')).toBe('dns')
+    expect(resourceKey('analytics')).toBe('analytics')
+    expect(resourceKey('blocked_ips')).toBe('blocked_ip')
+  })
 })
 
 describe('translateAuditAction', () => {
@@ -57,5 +67,26 @@ describe('translateAuditAction', () => {
 
   it('без перевода — глагол без подчёркиваний, а не ключ с разделом', () => {
     expect(translateAuditAction(t, 'violations.notify_violation_user')).toBe('notify violation user')
+  })
+})
+
+// Наличие ключей стережёт test_every_audit_action_is_translated на бэкенде;
+// здесь — что по ним находит сама цепочка поиска фронта
+describe('журнал на настоящих локалях', () => {
+  const ru = i18n.getFixedT('ru')
+  const en = i18n.getFixedT('en')
+
+  it('тост и лента — описание действия', () => {
+    expect(translateAuditAction(ru, 'finance.create_payment')).toBe('Добавлен платёж')
+    expect(translateAuditAction(ru, 'violations.notify_violation_user')).toBe('Предупреждение клиенту не отправлено')
+    expect(translateAuditAction(ru, 'support_events.create_support_event')).toBe('Получено событие внешней поддержки')
+    expect(translateAuditAction(en, 'dns.record.delete')).toBe('DNS record deleted')
+  })
+
+  it('строка журнала: раздел, действие, описание с целью', () => {
+    const { resource, action } = parseAction('dns.record.delete')
+    expect(getResourceLabel(ru, resource)).toBe('DNS')
+    expect(getActionLabelT(ru, action)).toBe('Удаление записи')
+    expect(getDescription(ru, resource, action, 'r1', null)).toBe('Удалена DNS-запись r1')
   })
 })

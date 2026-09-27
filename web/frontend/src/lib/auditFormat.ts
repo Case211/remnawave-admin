@@ -3,14 +3,18 @@ import { formatDateUtil } from '@/lib/useFormatters'
 
 /** Форматирование записей журнала аудита — общее для страницы журнала и истории в карточках. */
 
+// На «s», но не множественное число: «dns» не превращать в «dn»
+const NOT_PLURAL = new Set(['settings', 'dns', 'analytics'])
+
 // Обработчики пишут «user.create», API v3 — «users.create»: это один раздел
 export function resourceKey(resource: string): string {
-  return resource.endsWith('s') && resource !== 'settings' ? resource.slice(0, -1) : resource === 'setting' ? 'settings' : resource
+  if (resource === 'setting') return 'settings'
+  return resource.endsWith('s') && !NOT_PLURAL.has(resource) ? resource.slice(0, -1) : resource
 }
 
 export function resourceStyleKey(resource: string): string {
   const key = resourceKey(resource)
-  return key === 'settings' ? key : `${key}s`
+  return NOT_PLURAL.has(key) ? key : `${key}s`
 }
 
 export function getResourceLabel(t: TFunction, resource: string): string {

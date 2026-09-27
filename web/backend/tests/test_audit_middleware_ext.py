@@ -54,6 +54,11 @@ class TestMatchRoute:
         result = _match_route("POST", "/api/v2/users/bulk/delete")
         assert result == ("users", "bulk_delete", "delete")
 
+    def test_bulk_reset_traffic_action_uses_underscore(self):
+        # Перевод лежит под bulk_reset_traffic — с дефисом его не найти
+        result = _match_route("POST", "/api/v2/users/bulk/reset-traffic")
+        assert result == ("users", "bulk_reset_traffic", "reset-traffic")
+
     # Nodes
     def test_create_node(self):
         assert _match_route("POST", "/api/v2/nodes") == ("nodes", "create", None)

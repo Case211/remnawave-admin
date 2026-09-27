@@ -199,8 +199,10 @@ def _match_route(method: str, path: str) -> Optional[Tuple[str, str, Optional[st
         m = re.match(pattern, path)
         if m:
             groups = m.groups()
-            # Replace {1} placeholder in action with first capture group
-            action = action_tpl.replace("{1}", groups[0]) if groups and "{1}" in action_tpl else action_tpl
+            # Replace {1} placeholder in action with first capture group.
+            # Дефис из URL — в подчёркивание: «bulk_reset-traffic» не нашёл бы
+            # перевода, ключи действий везде через «_»
+            action = action_tpl.replace("{1}", groups[0].replace("-", "_")) if groups and "{1}" in action_tpl else action_tpl
             resource_id = groups[0] if groups else None
             return resource, action, resource_id
     return None

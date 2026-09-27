@@ -2481,7 +2481,21 @@
       "fleet": "Флот",
       "bedolaga_customer": "Клиенты Бедолаги",
       "bedolaga_marketing": "Маркетинг Бедолаги",
-      "bedolaga_promo": "Промокоды Бедолаги"
+      "bedolaga_promo": "Промокоды Бедолаги",
+      "2fa": "2FA",
+      "access_policy": "Политики доступа",
+      "analytics": "Аналитика",
+      "bedolaga": "Bedolaga",
+      "blocked_ip": "Заблокированные IP",
+      "bscheck": "Проверка БС",
+      "config_profile": "Профили конфигурации",
+      "dns": "DNS",
+      "hwid_blacklist": "Чёрный список HWID",
+      "oauth": "OAuth",
+      "public": "Внешний API",
+      "reputation": "Репутация IP",
+      "session": "Сессии",
+      "support_event": "События поддержки"
     },
     "actions": {
       "create": "Создание",
@@ -2497,7 +2511,267 @@
       "generate_token": "Генерация токена",
       "revoke_token": "Отзыв токена",
       "restart": "Перезапуск",
-      "resolve": "Решение"
+      "resolve": "Решение",
+      "add": "Добавление",
+      "remove": "Удаление",
+      "rename": "Переименование",
+      "reset": "Сброс",
+      "revoke": "Отзыв",
+      "rotate": "Перевыпуск",
+      "test": "Проверка",
+      "import": "Импорт",
+      "run": "Запуск",
+      "toggle": "Переключение",
+      "reorder": "Порядок",
+      "bulk_add": "Массовое добавление",
+      "bulk_delete": "Массовое удаление",
+      "bulk_disable": "Массовое отключение",
+      "bulk_enable": "Массовое включение",
+      "bulk_update": "Массовое изменение",
+      "creds": {
+        "set": "Сохранение доступа",
+        "clear": "Удаление доступа"
+      },
+      "token": {
+        "set": "Сохранение токена",
+        "clear": "Удаление токена"
+      },
+      "counter_reset": "Сброс счётчика",
+      "attach_admin": "Назначение админу",
+      "attach_role": "Назначение роли",
+      "login_telegram": "Вход через Telegram",
+      "oauth_del_link": "Отвязка OAuth",
+      "totp_confirm_setup": "Включение 2FA",
+      "totp_regen_backup": "Резервные коды",
+      "wa_delete_credential": "Удаление passkey",
+      "wa_register_finish": "Добавление passkey",
+      "revoke_others": "Отзыв остальных",
+      "provider": {
+        "set": "Настройка провайдера",
+        "clear": "Отключение провайдера"
+      },
+      "connect": "Подключение к магазину",
+      "disconnect": "Отключение от магазина",
+      "install_plugin": "Установка плагина",
+      "purchase": "Покупка",
+      "redeem": "Ввод кода",
+      "restart_backend": "Перезапуск бэкенда",
+      "start_trial": "Пробный период",
+      "sync_now": "Синхронизация лицензий",
+      "transfer_out": "Перенос лицензий",
+      "uninstall_plugin": "Удаление плагина",
+      "upload_plugin": "Загрузка плагина",
+      "export_ips": "Выгрузка IP",
+      "set_log_level_endpoint": "Уровень логов",
+      "start_series": "Запуск снимков",
+      "stop_series": "Остановка снимков",
+      "template_activate": "Активация шаблона",
+      "create_config_backup": "Бэкап конфигурации",
+      "create_db_backup": "Бэкап базы",
+      "delete_backup": "Удаление бэкапа",
+      "export_full_config": "Экспорт конфигурации",
+      "import_config": "Импорт конфигурации",
+      "import_full_config": "Импорт полной конфигурации",
+      "import_users": "Импорт пользователей",
+      "restore_db_backup": "Восстановление базы",
+      "rotate_backups_endpoint": "Ротация бэкапов",
+      "s3_delete": "Удаление из S3",
+      "s3_settings_update": "Настройки S3",
+      "s3_upload": "Выгрузка в S3",
+      "send_backup_telegram": "Отправка в Telegram",
+      "test_s3_connection": "Проверка S3",
+      "upload_backup": "Загрузка бэкапа",
+      "broadcast": {
+        "create": "Запуск рассылки",
+        "stop": "Остановка рассылки"
+      },
+      "campaign": {
+        "create": "Создание кампании",
+        "update": "Изменение кампании",
+        "delete": "Удаление кампании"
+      },
+      "partner": {
+        "commission": "Комиссия партнёра"
+      },
+      "promo": {
+        "create": "Создание промокода",
+        "update": "Изменение промокода",
+        "delete": "Удаление промокода"
+      },
+      "subscription": {
+        "create": "Выдача подписки",
+        "deactivate": "Деактивация подписки",
+        "devices": "Добавление устройств",
+        "extend": "Продление подписки",
+        "reset_devices": "Сброс устройств",
+        "traffic": "Добавление трафика"
+      },
+      "user": {
+        "balance": "Изменение баланса",
+        "update": "Изменение клиента"
+      },
+      "sync_blocklist": "Синхронизация блоклиста",
+      "add_to_blacklist": "В чёрный список",
+      "remove_from_blacklist": "Из чёрного списка",
+      "sync_blacklists": "Синхронизация списков",
+      "job": {
+        "create": "Создание задания",
+        "update": "Изменение задания",
+        "delete": "Удаление задания"
+      },
+      "node": {
+        "check": "Проверка ноды"
+      },
+      "probe": "Проба",
+      "scan": "Скан",
+      "scan_cancel": "Остановка скана",
+      "vless": "Тест VLESS",
+      "vless_cancel": "Остановка теста VLESS",
+      "record": {
+        "create": "Создание записи",
+        "update": "Изменение записи",
+        "delete": "Удаление записи"
+      },
+      "create_account": "Добавление аккаунта",
+      "update_account": "Изменение аккаунта",
+      "delete_account": "Удаление аккаунта",
+      "sync_account_now": "Синхронизация аккаунта",
+      "test_account": "Проверка аккаунта",
+      "create_category": "Создание категории",
+      "update_category": "Изменение категории",
+      "delete_category": "Удаление категории",
+      "create_item": "Создание записи",
+      "update_item": "Изменение записи",
+      "delete_item": "Удаление записи",
+      "mark_paid": "Отметка об оплате",
+      "skip_cycle": "Пропуск периода",
+      "create_payment": "Создание платежа",
+      "update_payment": "Изменение платежа",
+      "delete_payment": "Удаление платежа",
+      "create_provider": "Добавление хостера",
+      "update_provider": "Изменение хостера",
+      "delete_provider": "Удаление хостера",
+      "import_panel": "Импорт из панели",
+      "refresh_rates": "Обновление курсов",
+      "reset_rate_to_auto": "Автоматический курс",
+      "set_rate": "Установка курса",
+      "get": "Чтение",
+      "post": "Действие",
+      "patch": "Изменение",
+      "proxy_to_panel": "Запрос к панели",
+      "proxy_to_panel_root": "Запрос к панели",
+      "cancel_queue_item": "Отмена отправки",
+      "clear_old_queue": "Очистка очереди",
+      "create_domain": "Создание домена",
+      "update_domain": "Изменение домена",
+      "delete_domain": "Удаление домена",
+      "create_smtp_credential": "Создание SMTP-доступа",
+      "update_smtp_credential": "Изменение SMTP-доступа",
+      "delete_smtp_credential": "Удаление SMTP-доступа",
+      "delete_inbox_item": "Удаление письма",
+      "reply_to_message": "Ответ на письмо",
+      "retry_queue_item": "Повтор отправки",
+      "send_email": "Отправка письма",
+      "send_test_email": "Тестовое письмо",
+      "suppress_address": "В стоп-лист",
+      "unsuppress_address": "Из стоп-листа",
+      "bulk_generate_tokens": "Массовая выдача токенов",
+      "bulk_revoke_tokens": "Массовый отзыв токенов",
+      "bulk_install_commands": "Команды установки",
+      "create_external_server": "Добавление сервера",
+      "delete_external_server": "Удаление сервера",
+      "generate_agent_token": "Генерация токена",
+      "revoke_agent_token": "Отзыв токена",
+      "shaper": {
+        "update": "Настройка шейпера"
+      },
+      "create_channel": "Создание канала",
+      "update_channel": "Изменение канала",
+      "delete_channel": "Удаление канала",
+      "delete_notification": "Удаление уведомления",
+      "delete_old_notifications": "Очистка старых",
+      "delete_read_notifications": "Очистка прочитанных",
+      "set_dnd": "Не беспокоить",
+      "test_smtp_endpoint": "Проверка SMTP",
+      "update_smtp_config": "Настройки SMTP",
+      "sync_nodes": "Синхронизация нод",
+      "generate_report": "Формирование отчёта",
+      "send_report": "Отправка отчёта",
+      "delete_report": "Удаление отчёта",
+      "create_script": "Создание скрипта",
+      "update_script": "Изменение скрипта",
+      "delete_script": "Удаление скрипта",
+      "bulk_import_scripts": "Импорт скриптов",
+      "import_script_from_url": "Импорт по ссылке",
+      "exec_script": "Запуск скрипта",
+      "exec_script_bulk": "Массовый запуск",
+      "create_scheduled_task": "Создание задачи",
+      "update_scheduled_task": "Изменение задачи",
+      "delete_scheduled_task": "Удаление задачи",
+      "toggle_scheduled_task": "Переключение задачи",
+      "ip_whitelist_update": "Белый список IP",
+      "update_ip_whitelist": "Белый список IP",
+      "maxmind_update": "Обновление GeoIP",
+      "sync_trigger": "Запуск синхронизации",
+      "trigger_sync": "Запуск синхронизации",
+      "create_snippet": "Создание сниппета",
+      "update_snippet": "Изменение сниппета",
+      "delete_snippet": "Удаление сниппета",
+      "create_external_squad": "Создание внешнего сквада",
+      "update_external_squad": "Изменение внешнего сквада",
+      "delete_external_squad": "Удаление внешнего сквада",
+      "create_internal_squad": "Создание внутреннего сквада",
+      "update_internal_squad": "Изменение внутреннего сквада",
+      "delete_internal_squad": "Удаление внутреннего сквада",
+      "create_template": "Создание шаблона",
+      "update_template": "Изменение шаблона",
+      "delete_template": "Удаление шаблона",
+      "reorder_templates": "Порядок шаблонов",
+      "assign": "Взять в работу",
+      "unassign": "Снятие с себя",
+      "attach": "Ответ с вложением",
+      "reply": "Ответ",
+      "status": "Смена статуса",
+      "set_priority": "Приоритет",
+      "snooze": "Отсрочка",
+      "unsnooze": "Возврат из отложенных",
+      "attach_tag": "Добавление тега",
+      "detach_tag": "Снятие тега",
+      "create_tag": "Создание тега",
+      "create_macro": "Создание макроса",
+      "update_macro": "Изменение макроса",
+      "delete_macro": "Удаление макроса",
+      "set_customer_note": "Заметка о клиенте",
+      "run_sync": "Синхронизация обращений",
+      "create_support_event": "Событие поддержки",
+      "bulk_reassign": "Массовая передача",
+      "bulk_reset_traffic": "Массовый сброс трафика",
+      "bulk_unassign_admin": "Массовое открепление",
+      "drop_connections": "Сброс подключений",
+      "reassign": "Передача",
+      "unassign_admin": "Открепление",
+      "sync_hwid": "Синхронизация HWID",
+      "delete_user_hwid_device": "Удаление устройства",
+      "delete_all_user_hwid_devices": "Удаление всех устройств",
+      "create_preset": "Создание пресета",
+      "update_preset": "Изменение пресета",
+      "delete_preset": "Удаление пресета",
+      "annul": "Аннулирование",
+      "annul_bulk": "Массовое аннулирование",
+      "annul_global": "Аннулирование всех",
+      "client_notified": "Предупреждение клиенту",
+      "notice_template_updated": "Шаблон предупреждения",
+      "notify_violation_user": "Попытка предупредить",
+      "throttle": {
+        "add": "Ограничение скорости",
+        "remove": "Снятие ограничения"
+      },
+      "whitelist": {
+        "add": "В белый список",
+        "update": "Изменение белого списка",
+        "remove": "Из белого списка"
+      },
+      "redeliver": "Повторная доставка"
     },
     "details_map": {
       "username": "Имя",
@@ -2517,7 +2791,11 @@
         "host": "Создан хост",
         "admin": "Создан администратор",
         "role": "Создана роль",
-        "automation": "Создана автоматизация"
+        "automation": "Создана автоматизация",
+        "access_policy": "Создана политика доступа",
+        "api_key": "Создан API-ключ",
+        "webhook": "Создан вебхук",
+        "config_profile": "Создан профиль конфигурации"
       },
       "update": {
         "user": "Обновлён пользователь",
@@ -2526,7 +2804,11 @@
         "admin": "Обновлён администратор",
         "role": "Обновлена роль",
         "settings": "Изменены настройки",
-        "automation": "Обновлена автоматизация"
+        "automation": "Обновлена автоматизация",
+        "access_policy": "Обновлена политика доступа",
+        "api_key": "Обновлён API-ключ",
+        "webhook": "Обновлён вебхук",
+        "config_profile": "Обновлён профиль конфигурации"
       },
       "delete": {
         "user": "Удалён пользователь",
@@ -2534,25 +2816,34 @@
         "host": "Удалён хост",
         "admin": "Удалён администратор",
         "role": "Удалена роль",
-        "automation": "Удалена автоматизация"
+        "automation": "Удалена автоматизация",
+        "access_policy": "Удалена политика доступа",
+        "api_key": "Удалён API-ключ",
+        "webhook": "Удалён вебхук",
+        "config_profile": "Удалён профиль конфигурации",
+        "internal": "Удаление в панели через бота"
       },
       "enable": {
         "user": "Включён пользователь",
         "node": "Включена нода",
         "host": "Включён хост",
-        "admin": "Включён администратор"
+        "admin": "Включён администратор",
+        "2fa": "Включена 2FA"
       },
       "disable": {
         "user": "Отключён пользователь",
         "node": "Отключена нода",
         "host": "Отключён хост",
-        "admin": "Отключён администратор"
+        "admin": "Отключён администратор",
+        "2fa": "Отключена 2FA"
       },
       "login": {
-        "admin": "Вход в систему"
+        "admin": "Вход в систему",
+        "auth": "Вход в систему"
       },
       "logout": {
-        "admin": "Выход из системы"
+        "admin": "Выход из системы",
+        "auth": "Выход из системы"
       },
       "reset_traffic": {
         "user": "Сброшен трафик пользователя"
@@ -2561,7 +2852,8 @@
         "system": "Синхронизация системы"
       },
       "change_password": {
-        "admin": "Изменён пароль"
+        "admin": "Изменён пароль",
+        "auth": "Изменён пароль"
       },
       "generate_token": {
         "node": "Сгенерирован токен ноды"
@@ -2578,6 +2870,736 @@
       "automation": {
         "toggle_on": "Включил правило автоматизации",
         "toggle_off": "Отключил правило автоматизации"
+      },
+      "login_telegram": {
+        "auth": "Вход через Telegram"
+      },
+      "oauth_del_link": {
+        "auth": "Отвязан вход через OAuth"
+      },
+      "totp_confirm_setup": {
+        "auth": "Включена 2FA"
+      },
+      "totp_regen_backup": {
+        "auth": "Перевыпущены резервные коды 2FA"
+      },
+      "wa_delete_credential": {
+        "auth": "Удалён passkey"
+      },
+      "wa_register_finish": {
+        "auth": "Добавлен passkey"
+      },
+      "revoke": {
+        "session": "Отозвана сессия",
+        "user": "Отозвана подписка пользователя"
+      },
+      "revoke_others": {
+        "session": "Отозваны остальные сессии"
+      },
+      "provider": {
+        "set": {
+          "oauth": "Настроен провайдер OAuth"
+        },
+        "clear": {
+          "oauth": "Отключён провайдер OAuth"
+        }
+      },
+      "attach_admin": {
+        "access_policy": "Политика доступа назначена администратору"
+      },
+      "attach_role": {
+        "access_policy": "Политика доступа назначена роли"
+      },
+      "counter_reset": {
+        "admin": "Сброшен счётчик квоты администратора"
+      },
+      "connect": {
+        "admin_plugin": "Инстанс подключён к магазину плагинов"
+      },
+      "disconnect": {
+        "admin_plugin": "Инстанс отвязан от магазина плагинов"
+      },
+      "install_plugin": {
+        "admin_plugin": "Установлен плагин"
+      },
+      "purchase": {
+        "admin_plugin": "Куплен плагин"
+      },
+      "redeem": {
+        "admin_plugin": "Активирован код плагина"
+      },
+      "restart_backend": {
+        "admin_plugin": "Перезапущен бэкенд"
+      },
+      "start_trial": {
+        "admin_plugin": "Запущен пробный период плагина"
+      },
+      "sync_now": {
+        "admin_plugin": "Синхронизированы лицензии плагинов"
+      },
+      "transfer_out": {
+        "admin_plugin": "Лицензии перенесены на другой инстанс"
+      },
+      "uninstall_plugin": {
+        "admin_plugin": "Удалён плагин"
+      },
+      "upload_plugin": {
+        "admin_plugin": "Загружен плагин"
+      },
+      "export_ips": {
+        "analytics": "Выгружены IP-адреса"
+      },
+      "set_log_level_endpoint": {
+        "log": "Изменён уровень логирования"
+      },
+      "start_series": {
+        "diagnostic": "Запущена серия снимков для диагностики"
+      },
+      "stop_series": {
+        "diagnostic": "Остановлена серия снимков для диагностики"
+      },
+      "rotate": {
+        "api_key": "Перевыпущен API-ключ"
+      },
+      "test": {
+        "webhook": "Отправлен тестовый вебхук"
+      },
+      "redeliver": {
+        "webhook": "Событие вебхука отправлено повторно"
+      },
+      "import": {
+        "automation": "Импортированы автоматизации"
+      },
+      "run": {
+        "automation": "Автоматизация запущена вручную"
+      },
+      "template_activate": {
+        "automation": "Активирован шаблон автоматизации"
+      },
+      "toggle": {
+        "automation": "Переключена автоматизация"
+      },
+      "create_config_backup": {
+        "backup": "Создан бэкап конфигурации"
+      },
+      "create_db_backup": {
+        "backup": "Создан бэкап базы данных"
+      },
+      "delete_backup": {
+        "backup": "Удалён бэкап"
+      },
+      "export_full_config": {
+        "backup": "Выгружена полная конфигурация"
+      },
+      "import_config": {
+        "backup": "Импортирована конфигурация"
+      },
+      "import_full_config": {
+        "backup": "Импортирована полная конфигурация"
+      },
+      "import_users": {
+        "backup": "Импортированы пользователи"
+      },
+      "restore_db_backup": {
+        "backup": "База восстановлена из бэкапа"
+      },
+      "rotate_backups_endpoint": {
+        "backup": "Удалены старые бэкапы по ротации"
+      },
+      "s3_delete": {
+        "backup": "Удалён бэкап из S3"
+      },
+      "s3_settings_update": {
+        "backup": "Изменены настройки S3"
+      },
+      "s3_upload": {
+        "backup": "Бэкап выгружен в S3"
+      },
+      "send_backup_telegram": {
+        "backup": "Бэкап отправлен в Telegram"
+      },
+      "test_s3_connection": {
+        "backup": "Проверено подключение к S3"
+      },
+      "upload_backup": {
+        "backup": "Загружен бэкап"
+      },
+      "broadcast": {
+        "create": {
+          "bedolaga": "Запущена рассылка"
+        },
+        "stop": {
+          "bedolaga": "Остановлена рассылка"
+        }
+      },
+      "campaign": {
+        "create": {
+          "bedolaga": "Создана рекламная кампания"
+        },
+        "update": {
+          "bedolaga": "Изменена рекламная кампания"
+        },
+        "delete": {
+          "bedolaga": "Удалена рекламная кампания"
+        }
+      },
+      "partner": {
+        "commission": {
+          "bedolaga": "Изменена комиссия партнёра"
+        }
+      },
+      "promo": {
+        "create": {
+          "bedolaga": "Создан промокод"
+        },
+        "update": {
+          "bedolaga": "Изменён промокод"
+        },
+        "delete": {
+          "bedolaga": "Удалён промокод"
+        }
+      },
+      "subscription": {
+        "create": {
+          "bedolaga": "Клиенту выдана подписка"
+        },
+        "deactivate": {
+          "bedolaga": "Деактивирована подписка клиента"
+        },
+        "devices": {
+          "bedolaga": "Клиенту добавлены устройства"
+        },
+        "extend": {
+          "bedolaga": "Продлена подписка клиента"
+        },
+        "reset_devices": {
+          "bedolaga": "Сброшены устройства клиента"
+        },
+        "traffic": {
+          "bedolaga": "Клиенту добавлен трафик"
+        }
+      },
+      "user": {
+        "balance": {
+          "bedolaga": "Изменён баланс клиента"
+        },
+        "update": {
+          "bedolaga": "Изменены данные клиента"
+        }
+      },
+      "add": {
+        "blocked_ip": "IP добавлен в блоклист",
+        "hwid_blacklist": "HWID добавлен в чёрный список"
+      },
+      "bulk_add": {
+        "blocked_ip": "IP массово добавлены в блоклист",
+        "user_blacklist": "Telegram ID массово добавлены в чёрный список"
+      },
+      "remove": {
+        "blocked_ip": "IP удалён из блоклиста",
+        "hwid_blacklist": "HWID удалён из чёрного списка"
+      },
+      "sync_blocklist": {
+        "blocked_ip": "Блоклист синхронизирован с нодами"
+      },
+      "add_to_blacklist": {
+        "user_blacklist": "Telegram ID добавлен в чёрный список"
+      },
+      "remove_from_blacklist": {
+        "user_blacklist": "Telegram ID удалён из чёрного списка"
+      },
+      "sync_blacklists": {
+        "user_blacklist": "Синхронизированы чёрные списки"
+      },
+      "job": {
+        "create": {
+          "bscheck": "Создано задание проверки"
+        },
+        "update": {
+          "bscheck": "Изменено задание проверки"
+        },
+        "delete": {
+          "bscheck": "Удалено задание проверки"
+        }
+      },
+      "node": {
+        "check": {
+          "bscheck": "Проверена нода"
+        }
+      },
+      "probe": {
+        "bscheck": "Проверены адреса"
+      },
+      "scan": {
+        "bscheck": "Запущен скан адресов"
+      },
+      "scan_cancel": {
+        "bscheck": "Остановлен скан адресов"
+      },
+      "token": {
+        "set": {
+          "bscheck": "Сохранён токен Проверки БС",
+          "dns": "Сохранён токен DNS-провайдера"
+        },
+        "clear": {
+          "bscheck": "Удалён токен Проверки БС"
+        }
+      },
+      "vless": {
+        "bscheck": "Запущен тест VLESS"
+      },
+      "vless_cancel": {
+        "bscheck": "Остановлен тест VLESS"
+      },
+      "creds": {
+        "set": {
+          "reputation": "Сохранён токен сервиса репутации",
+          "dns": "Подключён DNS-провайдер"
+        },
+        "clear": {
+          "reputation": "Удалён токен сервиса репутации",
+          "dns": "Отключён DNS-провайдер"
+        }
+      },
+      "rename": {
+        "config_profile": "Переименован профиль конфигурации"
+      },
+      "record": {
+        "create": {
+          "dns": "Создана DNS-запись"
+        },
+        "update": {
+          "dns": "Изменена DNS-запись"
+        },
+        "delete": {
+          "dns": "Удалена DNS-запись"
+        }
+      },
+      "create_account": {
+        "finance": "Добавлен аккаунт хостера"
+      },
+      "update_account": {
+        "finance": "Изменён аккаунт хостера"
+      },
+      "delete_account": {
+        "finance": "Удалён аккаунт хостера"
+      },
+      "sync_account_now": {
+        "finance": "Синхронизирован аккаунт хостера"
+      },
+      "test_account": {
+        "finance": "Проверено подключение аккаунта хостера"
+      },
+      "create_category": {
+        "finance": "Создана категория"
+      },
+      "update_category": {
+        "finance": "Изменена категория"
+      },
+      "delete_category": {
+        "finance": "Удалена категория"
+      },
+      "create_item": {
+        "finance": "Создана финансовая запись"
+      },
+      "update_item": {
+        "finance": "Изменена финансовая запись"
+      },
+      "delete_item": {
+        "finance": "Удалена финансовая запись"
+      },
+      "mark_paid": {
+        "finance": "Запись отмечена оплаченной"
+      },
+      "skip_cycle": {
+        "finance": "Пропущен период оплаты"
+      },
+      "create_payment": {
+        "finance": "Добавлен платёж"
+      },
+      "update_payment": {
+        "finance": "Изменён платёж"
+      },
+      "delete_payment": {
+        "finance": "Удалён платёж"
+      },
+      "create_provider": {
+        "finance": "Добавлен хостер"
+      },
+      "update_provider": {
+        "finance": "Изменён хостер"
+      },
+      "delete_provider": {
+        "finance": "Удалён хостер"
+      },
+      "import_panel": {
+        "finance": "Импортированы данные биллинга из панели"
+      },
+      "refresh_rates": {
+        "finance": "Обновлены курсы валют"
+      },
+      "reset_rate_to_auto": {
+        "finance": "Курс валюты переведён на автоматический"
+      },
+      "set_rate": {
+        "finance": "Курс валюты задан вручную"
+      },
+      "bulk_delete": {
+        "host": "Массово удалены хосты",
+        "user": "Массово удалены пользователи"
+      },
+      "bulk_disable": {
+        "host": "Массово отключены хосты",
+        "user": "Массово отключены пользователи"
+      },
+      "bulk_enable": {
+        "host": "Массово включены хосты",
+        "user": "Массово включены пользователи"
+      },
+      "bulk_update": {
+        "host": "Массово изменены хосты"
+      },
+      "get": {
+        "internal": "Запрос к панели через бота"
+      },
+      "post": {
+        "internal": "Действие в панели через бота"
+      },
+      "patch": {
+        "internal": "Изменение в панели через бота"
+      },
+      "proxy_to_panel": {
+        "internal": "Запрос к панели через бота"
+      },
+      "proxy_to_panel_root": {
+        "internal": "Запрос к панели через бота"
+      },
+      "cancel_queue_item": {
+        "mailserver": "Отменена отправка письма"
+      },
+      "clear_old_queue": {
+        "mailserver": "Очищена очередь отправки"
+      },
+      "create_domain": {
+        "mailserver": "Создан почтовый домен"
+      },
+      "update_domain": {
+        "mailserver": "Изменён почтовый домен"
+      },
+      "delete_domain": {
+        "mailserver": "Удалён почтовый домен"
+      },
+      "create_smtp_credential": {
+        "mailserver": "Создан SMTP-доступ"
+      },
+      "update_smtp_credential": {
+        "mailserver": "Изменён SMTP-доступ"
+      },
+      "delete_smtp_credential": {
+        "mailserver": "Удалён SMTP-доступ"
+      },
+      "delete_inbox_item": {
+        "mailserver": "Удалено входящее письмо"
+      },
+      "reply_to_message": {
+        "mailserver": "Отправлен ответ на письмо"
+      },
+      "retry_queue_item": {
+        "mailserver": "Письмо поставлено на повторную отправку"
+      },
+      "send_email": {
+        "mailserver": "Отправлено письмо"
+      },
+      "send_test_email": {
+        "mailserver": "Отправлено тестовое письмо"
+      },
+      "suppress_address": {
+        "mailserver": "Адрес добавлен в стоп-лист"
+      },
+      "unsuppress_address": {
+        "mailserver": "Адрес убран из стоп-листа"
+      },
+      "bulk_generate_tokens": {
+        "node": "Массово выданы токены агентов"
+      },
+      "bulk_revoke_tokens": {
+        "node": "Массово отозваны токены агентов"
+      },
+      "bulk_install_commands": {
+        "node": "Получены команды установки агентов"
+      },
+      "create_external_server": {
+        "node": "Добавлен внешний сервер"
+      },
+      "delete_external_server": {
+        "node": "Удалён внешний сервер"
+      },
+      "generate_agent_token": {
+        "node": "Сгенерирован токен агента"
+      },
+      "revoke_agent_token": {
+        "node": "Отозван токен агента"
+      },
+      "reorder": {
+        "node": "Изменён порядок нод"
+      },
+      "shaper": {
+        "update": {
+          "node": "Изменены настройки шейпера ноды"
+        }
+      },
+      "create_channel": {
+        "notification": "Создан канал доставки"
+      },
+      "update_channel": {
+        "notification": "Изменён канал доставки"
+      },
+      "delete_channel": {
+        "notification": "Удалён канал доставки"
+      },
+      "delete_notification": {
+        "notification": "Удалено уведомление"
+      },
+      "delete_old_notifications": {
+        "notification": "Удалены старые уведомления"
+      },
+      "delete_read_notifications": {
+        "notification": "Удалены прочитанные уведомления"
+      },
+      "set_dnd": {
+        "notification": "Изменён режим «Не беспокоить»"
+      },
+      "test_smtp_endpoint": {
+        "notification": "Проверена отправка через SMTP"
+      },
+      "update_smtp_config": {
+        "notification": "Изменены настройки SMTP"
+      },
+      "sync_nodes": {
+        "public": "Запущена синхронизация нод"
+      },
+      "create_support_event": {
+        "support_event": "Получено событие внешней поддержки"
+      },
+      "generate_report": {
+        "report": "Сформирован отчёт"
+      },
+      "send_report": {
+        "report": "Отправлен отчёт"
+      },
+      "delete_report": {
+        "report": "Удалён отчёт"
+      },
+      "create_script": {
+        "script": "Создан скрипт"
+      },
+      "update_script": {
+        "script": "Изменён скрипт"
+      },
+      "delete_script": {
+        "script": "Удалён скрипт"
+      },
+      "bulk_import_scripts": {
+        "script": "Импортированы скрипты"
+      },
+      "import_script_from_url": {
+        "script": "Импортирован скрипт по ссылке"
+      },
+      "exec_script": {
+        "script": "Запущен скрипт на сервере"
+      },
+      "exec_script_bulk": {
+        "script": "Скрипт запущен на нескольких серверах"
+      },
+      "create_scheduled_task": {
+        "script": "Создана задача по расписанию"
+      },
+      "update_scheduled_task": {
+        "script": "Изменена задача по расписанию"
+      },
+      "delete_scheduled_task": {
+        "script": "Удалена задача по расписанию"
+      },
+      "toggle_scheduled_task": {
+        "script": "Переключена задача по расписанию"
+      },
+      "reset": {
+        "settings": "Настройка сброшена к значению по умолчанию"
+      },
+      "ip_whitelist_update": {
+        "settings": "Обновлён белый список IP"
+      },
+      "update_ip_whitelist": {
+        "settings": "Обновлён белый список IP"
+      },
+      "maxmind_update": {
+        "settings": "Обновлена база GeoIP"
+      },
+      "sync_trigger": {
+        "settings": "Запущена синхронизация"
+      },
+      "trigger_sync": {
+        "settings": "Запущена синхронизация"
+      },
+      "create_snippet": {
+        "snippet": "Создан сниппет"
+      },
+      "update_snippet": {
+        "snippet": "Изменён сниппет"
+      },
+      "delete_snippet": {
+        "snippet": "Удалён сниппет"
+      },
+      "create_external_squad": {
+        "squad": "Создан внешний сквад"
+      },
+      "update_external_squad": {
+        "squad": "Изменён внешний сквад"
+      },
+      "delete_external_squad": {
+        "squad": "Удалён внешний сквад"
+      },
+      "create_internal_squad": {
+        "squad": "Создан внутренний сквад"
+      },
+      "update_internal_squad": {
+        "squad": "Изменён внутренний сквад"
+      },
+      "delete_internal_squad": {
+        "squad": "Удалён внутренний сквад"
+      },
+      "create_template": {
+        "template": "Создан шаблон подписки"
+      },
+      "update_template": {
+        "template": "Изменён шаблон подписки"
+      },
+      "delete_template": {
+        "template": "Удалён шаблон подписки"
+      },
+      "reorder_templates": {
+        "template": "Изменён порядок шаблонов"
+      },
+      "assign": {
+        "support": "Обращение взято в работу"
+      },
+      "unassign": {
+        "support": "Обращение снято с админа"
+      },
+      "attach": {
+        "support": "Отправлен ответ с вложением"
+      },
+      "reply": {
+        "support": "Отправлен ответ клиенту"
+      },
+      "status": {
+        "support": "Изменён статус обращения"
+      },
+      "set_priority": {
+        "support": "Изменён приоритет обращения"
+      },
+      "snooze": {
+        "support": "Обращение отложено"
+      },
+      "unsnooze": {
+        "support": "Обращение возвращено из отложенных"
+      },
+      "attach_tag": {
+        "support": "Обращению добавлен тег"
+      },
+      "detach_tag": {
+        "support": "С обращения снят тег"
+      },
+      "create_tag": {
+        "support": "Создан тег"
+      },
+      "create_macro": {
+        "support": "Создан макрос ответа"
+      },
+      "update_macro": {
+        "support": "Изменён макрос ответа"
+      },
+      "delete_macro": {
+        "support": "Удалён макрос ответа"
+      },
+      "set_customer_note": {
+        "support": "Изменена заметка о клиенте"
+      },
+      "run_sync": {
+        "support": "Запущена синхронизация обращений"
+      },
+      "bulk_reset_traffic": {
+        "user": "Массово сброшен трафик пользователей"
+      },
+      "bulk_reassign": {
+        "user": "Пользователи массово переданы другому админу"
+      },
+      "bulk_unassign_admin": {
+        "user": "Пользователи массово откреплены от админа"
+      },
+      "drop_connections": {
+        "user": "Сброшены подключения пользователя"
+      },
+      "reassign": {
+        "user": "Пользователь передан другому админу"
+      },
+      "unassign_admin": {
+        "user": "Пользователь откреплён от админа"
+      },
+      "sync_hwid": {
+        "user": "Синхронизированы HWID-устройства"
+      },
+      "delete_user_hwid_device": {
+        "user": "Удалено HWID-устройство пользователя"
+      },
+      "delete_all_user_hwid_devices": {
+        "user": "Удалены все HWID-устройства пользователя"
+      },
+      "create_preset": {
+        "user_preset": "Создан пресет пользователя"
+      },
+      "update_preset": {
+        "user_preset": "Изменён пресет пользователя"
+      },
+      "delete_preset": {
+        "user_preset": "Удалён пресет пользователя"
+      },
+      "annul": {
+        "violation": "Нарушение аннулировано"
+      },
+      "annul_bulk": {
+        "violation": "Нарушения массово аннулированы"
+      },
+      "annul_global": {
+        "violation": "Аннулированы все нарушения"
+      },
+      "client_notified": {
+        "violation": "Клиент предупреждён о нарушении"
+      },
+      "notice_template_updated": {
+        "violation": "Изменён шаблон предупреждения"
+      },
+      "notify_violation_user": {
+        "violation": "Предупреждение клиенту не отправлено"
+      },
+      "throttle": {
+        "add": {
+          "violation": "Пользователю ограничена скорость"
+        },
+        "remove": {
+          "violation": "С пользователя снято ограничение скорости"
+        }
+      },
+      "whitelist": {
+        "add": {
+          "violation": "Пользователь добавлен в белый список"
+        },
+        "update": {
+          "violation": "Изменена запись белого списка"
+        },
+        "remove": {
+          "violation": "Пользователь удалён из белого списка"
+        }
       }
     },
     "feed": {

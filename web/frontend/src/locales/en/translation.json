@@ -2485,7 +2485,21 @@
       "fleet": "Fleet",
       "bedolaga_customer": "Bedolaga customers",
       "bedolaga_marketing": "Bedolaga marketing",
-      "bedolaga_promo": "Bedolaga promo"
+      "bedolaga_promo": "Bedolaga promo",
+      "2fa": "2FA",
+      "access_policy": "Access policies",
+      "analytics": "Analytics",
+      "bedolaga": "Bedolaga",
+      "blocked_ip": "Blocked IPs",
+      "bscheck": "BS-Check",
+      "config_profile": "Config profiles",
+      "dns": "DNS",
+      "hwid_blacklist": "HWID blacklist",
+      "oauth": "OAuth",
+      "public": "Public API",
+      "reputation": "IP reputation",
+      "session": "Sessions",
+      "support_event": "Support events"
     },
     "actions": {
       "create": "Create",
@@ -2501,7 +2515,267 @@
       "generate_token": "Generate token",
       "revoke_token": "Revoke token",
       "restart": "Restart",
-      "resolve": "Resolve"
+      "resolve": "Resolve",
+      "add": "Add",
+      "remove": "Remove",
+      "rename": "Rename",
+      "reset": "Reset",
+      "revoke": "Revoke",
+      "rotate": "Rotate",
+      "test": "Test",
+      "import": "Import",
+      "run": "Run",
+      "toggle": "Toggle",
+      "reorder": "Reorder",
+      "bulk_add": "Bulk add",
+      "bulk_delete": "Bulk delete",
+      "bulk_disable": "Bulk disable",
+      "bulk_enable": "Bulk enable",
+      "bulk_update": "Bulk update",
+      "creds": {
+        "set": "Save credentials",
+        "clear": "Remove credentials"
+      },
+      "token": {
+        "set": "Save token",
+        "clear": "Remove token"
+      },
+      "counter_reset": "Reset counter",
+      "attach_admin": "Attach to admin",
+      "attach_role": "Attach to role",
+      "login_telegram": "Telegram login",
+      "oauth_del_link": "Unlink OAuth",
+      "totp_confirm_setup": "Enable 2FA",
+      "totp_regen_backup": "Backup codes",
+      "wa_delete_credential": "Remove passkey",
+      "wa_register_finish": "Add passkey",
+      "revoke_others": "Revoke others",
+      "provider": {
+        "set": "Configure provider",
+        "clear": "Disable provider"
+      },
+      "connect": "Connect to store",
+      "disconnect": "Disconnect from store",
+      "install_plugin": "Install plugin",
+      "purchase": "Purchase",
+      "redeem": "Redeem code",
+      "restart_backend": "Restart backend",
+      "start_trial": "Start trial",
+      "sync_now": "Sync licenses",
+      "transfer_out": "Transfer licenses",
+      "uninstall_plugin": "Uninstall plugin",
+      "upload_plugin": "Upload plugin",
+      "export_ips": "Export IPs",
+      "set_log_level_endpoint": "Log level",
+      "start_series": "Start snapshots",
+      "stop_series": "Stop snapshots",
+      "template_activate": "Activate template",
+      "create_config_backup": "Config backup",
+      "create_db_backup": "Database backup",
+      "delete_backup": "Delete backup",
+      "export_full_config": "Export config",
+      "import_config": "Import config",
+      "import_full_config": "Import full config",
+      "import_users": "Import users",
+      "restore_db_backup": "Restore database",
+      "rotate_backups_endpoint": "Rotate backups",
+      "s3_delete": "Delete from S3",
+      "s3_settings_update": "S3 settings",
+      "s3_upload": "Upload to S3",
+      "send_backup_telegram": "Send to Telegram",
+      "test_s3_connection": "Test S3",
+      "upload_backup": "Upload backup",
+      "broadcast": {
+        "create": "Start broadcast",
+        "stop": "Stop broadcast"
+      },
+      "campaign": {
+        "create": "Create campaign",
+        "update": "Update campaign",
+        "delete": "Delete campaign"
+      },
+      "partner": {
+        "commission": "Partner commission"
+      },
+      "promo": {
+        "create": "Create promo code",
+        "update": "Update promo code",
+        "delete": "Delete promo code"
+      },
+      "subscription": {
+        "create": "Create subscription",
+        "deactivate": "Deactivate subscription",
+        "devices": "Add devices",
+        "extend": "Extend subscription",
+        "reset_devices": "Reset devices",
+        "traffic": "Add traffic"
+      },
+      "user": {
+        "balance": "Adjust balance",
+        "update": "Update customer"
+      },
+      "sync_blocklist": "Sync blocklist",
+      "add_to_blacklist": "Add to blacklist",
+      "remove_from_blacklist": "Remove from blacklist",
+      "sync_blacklists": "Sync blacklists",
+      "job": {
+        "create": "Create job",
+        "update": "Update job",
+        "delete": "Delete job"
+      },
+      "node": {
+        "check": "Check node"
+      },
+      "probe": "Probe",
+      "scan": "Scan",
+      "scan_cancel": "Cancel scan",
+      "vless": "VLESS test",
+      "vless_cancel": "Cancel VLESS test",
+      "record": {
+        "create": "Create record",
+        "update": "Update record",
+        "delete": "Delete record"
+      },
+      "create_account": "Add account",
+      "update_account": "Update account",
+      "delete_account": "Delete account",
+      "sync_account_now": "Sync account",
+      "test_account": "Test account",
+      "create_category": "Create category",
+      "update_category": "Update category",
+      "delete_category": "Delete category",
+      "create_item": "Create item",
+      "update_item": "Update item",
+      "delete_item": "Delete item",
+      "mark_paid": "Mark as paid",
+      "skip_cycle": "Skip cycle",
+      "create_payment": "Create payment",
+      "update_payment": "Update payment",
+      "delete_payment": "Delete payment",
+      "create_provider": "Add hoster",
+      "update_provider": "Update hoster",
+      "delete_provider": "Delete hoster",
+      "import_panel": "Import from panel",
+      "refresh_rates": "Refresh rates",
+      "reset_rate_to_auto": "Auto rate",
+      "set_rate": "Set rate",
+      "get": "Read",
+      "post": "Action",
+      "patch": "Edit",
+      "proxy_to_panel": "Panel request",
+      "proxy_to_panel_root": "Panel request",
+      "cancel_queue_item": "Cancel sending",
+      "clear_old_queue": "Clear queue",
+      "create_domain": "Create domain",
+      "update_domain": "Update domain",
+      "delete_domain": "Delete domain",
+      "create_smtp_credential": "Create SMTP credential",
+      "update_smtp_credential": "Update SMTP credential",
+      "delete_smtp_credential": "Delete SMTP credential",
+      "delete_inbox_item": "Delete email",
+      "reply_to_message": "Reply to email",
+      "retry_queue_item": "Retry sending",
+      "send_email": "Send email",
+      "send_test_email": "Test email",
+      "suppress_address": "Suppress address",
+      "unsuppress_address": "Unsuppress address",
+      "bulk_generate_tokens": "Bulk generate tokens",
+      "bulk_revoke_tokens": "Bulk revoke tokens",
+      "bulk_install_commands": "Install commands",
+      "create_external_server": "Add server",
+      "delete_external_server": "Delete server",
+      "generate_agent_token": "Generate token",
+      "revoke_agent_token": "Revoke token",
+      "shaper": {
+        "update": "Shaper settings"
+      },
+      "create_channel": "Create channel",
+      "update_channel": "Update channel",
+      "delete_channel": "Delete channel",
+      "delete_notification": "Delete notification",
+      "delete_old_notifications": "Clear old",
+      "delete_read_notifications": "Clear read",
+      "set_dnd": "Do not disturb",
+      "test_smtp_endpoint": "Test SMTP",
+      "update_smtp_config": "SMTP settings",
+      "sync_nodes": "Sync nodes",
+      "generate_report": "Generate report",
+      "send_report": "Send report",
+      "delete_report": "Delete report",
+      "create_script": "Create script",
+      "update_script": "Update script",
+      "delete_script": "Delete script",
+      "bulk_import_scripts": "Import scripts",
+      "import_script_from_url": "Import from URL",
+      "exec_script": "Run script",
+      "exec_script_bulk": "Bulk run",
+      "create_scheduled_task": "Create task",
+      "update_scheduled_task": "Update task",
+      "delete_scheduled_task": "Delete task",
+      "toggle_scheduled_task": "Toggle task",
+      "ip_whitelist_update": "IP whitelist",
+      "update_ip_whitelist": "IP whitelist",
+      "maxmind_update": "Update GeoIP",
+      "sync_trigger": "Trigger sync",
+      "trigger_sync": "Trigger sync",
+      "create_snippet": "Create snippet",
+      "update_snippet": "Update snippet",
+      "delete_snippet": "Delete snippet",
+      "create_external_squad": "Create external squad",
+      "update_external_squad": "Update external squad",
+      "delete_external_squad": "Delete external squad",
+      "create_internal_squad": "Create internal squad",
+      "update_internal_squad": "Update internal squad",
+      "delete_internal_squad": "Delete internal squad",
+      "create_template": "Create template",
+      "update_template": "Update template",
+      "delete_template": "Delete template",
+      "reorder_templates": "Reorder templates",
+      "assign": "Assign",
+      "unassign": "Unassign",
+      "attach": "Attachment",
+      "reply": "Reply",
+      "status": "Status change",
+      "set_priority": "Priority",
+      "snooze": "Snooze",
+      "unsnooze": "Unsnooze",
+      "attach_tag": "Add tag",
+      "detach_tag": "Remove tag",
+      "create_tag": "Create tag",
+      "create_macro": "Create macro",
+      "update_macro": "Update macro",
+      "delete_macro": "Delete macro",
+      "set_customer_note": "Customer note",
+      "run_sync": "Sync tickets",
+      "create_support_event": "Support event",
+      "bulk_reassign": "Bulk reassign",
+      "bulk_reset_traffic": "Bulk traffic reset",
+      "bulk_unassign_admin": "Bulk unassign",
+      "drop_connections": "Drop connections",
+      "reassign": "Reassign",
+      "unassign_admin": "Unassign",
+      "sync_hwid": "HWID sync",
+      "delete_user_hwid_device": "Delete device",
+      "delete_all_user_hwid_devices": "Delete all devices",
+      "create_preset": "Create preset",
+      "update_preset": "Update preset",
+      "delete_preset": "Delete preset",
+      "annul": "Annul",
+      "annul_bulk": "Bulk annul",
+      "annul_global": "Annul all",
+      "client_notified": "Warn customer",
+      "notice_template_updated": "Warning template",
+      "notify_violation_user": "Warning attempt",
+      "throttle": {
+        "add": "Throttle",
+        "remove": "Lift throttle"
+      },
+      "whitelist": {
+        "add": "Add to whitelist",
+        "update": "Update whitelist",
+        "remove": "Remove from whitelist"
+      },
+      "redeliver": "Redeliver"
     },
     "details_map": {
       "username": "Username",
@@ -2521,7 +2795,11 @@
         "host": "Host created",
         "admin": "Admin created",
         "role": "Role created",
-        "automation": "Automation created"
+        "automation": "Automation created",
+        "access_policy": "Access policy created",
+        "api_key": "API key created",
+        "webhook": "Webhook created",
+        "config_profile": "Config profile created"
       },
       "update": {
         "user": "User updated",
@@ -2530,7 +2808,11 @@
         "admin": "Admin updated",
         "role": "Role updated",
         "settings": "Settings changed",
-        "automation": "Automation updated"
+        "automation": "Automation updated",
+        "access_policy": "Access policy updated",
+        "api_key": "API key updated",
+        "webhook": "Webhook updated",
+        "config_profile": "Config profile updated"
       },
       "delete": {
         "user": "User deleted",
@@ -2538,25 +2820,34 @@
         "host": "Host deleted",
         "admin": "Admin deleted",
         "role": "Role deleted",
-        "automation": "Automation deleted"
+        "automation": "Automation deleted",
+        "access_policy": "Access policy deleted",
+        "api_key": "API key deleted",
+        "webhook": "Webhook deleted",
+        "config_profile": "Config profile deleted",
+        "internal": "Panel deletion via bot"
       },
       "enable": {
         "user": "User enabled",
         "node": "Node enabled",
         "host": "Host enabled",
-        "admin": "Admin enabled"
+        "admin": "Admin enabled",
+        "2fa": "2FA enabled"
       },
       "disable": {
         "user": "User disabled",
         "node": "Node disabled",
         "host": "Host disabled",
-        "admin": "Admin disabled"
+        "admin": "Admin disabled",
+        "2fa": "2FA disabled"
       },
       "login": {
-        "admin": "System login"
+        "admin": "System login",
+        "auth": "System login"
       },
       "logout": {
-        "admin": "System logout"
+        "admin": "System logout",
+        "auth": "System logout"
       },
       "reset_traffic": {
         "user": "User traffic reset"
@@ -2565,7 +2856,8 @@
         "system": "System sync"
       },
       "change_password": {
-        "admin": "Password changed"
+        "admin": "Password changed",
+        "auth": "Password changed"
       },
       "generate_token": {
         "node": "Node token generated"
@@ -2582,6 +2874,736 @@
       "automation": {
         "toggle_on": "Enabled the automation rule",
         "toggle_off": "Disabled the automation rule"
+      },
+      "login_telegram": {
+        "auth": "Telegram login"
+      },
+      "oauth_del_link": {
+        "auth": "OAuth sign-in unlinked"
+      },
+      "totp_confirm_setup": {
+        "auth": "2FA enabled"
+      },
+      "totp_regen_backup": {
+        "auth": "2FA backup codes regenerated"
+      },
+      "wa_delete_credential": {
+        "auth": "Passkey removed"
+      },
+      "wa_register_finish": {
+        "auth": "Passkey added"
+      },
+      "revoke": {
+        "session": "Session revoked",
+        "user": "User subscription revoked"
+      },
+      "revoke_others": {
+        "session": "Other sessions revoked"
+      },
+      "provider": {
+        "set": {
+          "oauth": "OAuth provider configured"
+        },
+        "clear": {
+          "oauth": "OAuth provider disabled"
+        }
+      },
+      "attach_admin": {
+        "access_policy": "Access policy attached to admin"
+      },
+      "attach_role": {
+        "access_policy": "Access policy attached to role"
+      },
+      "counter_reset": {
+        "admin": "Admin quota counter reset"
+      },
+      "connect": {
+        "admin_plugin": "Instance connected to the plugin store"
+      },
+      "disconnect": {
+        "admin_plugin": "Instance disconnected from the plugin store"
+      },
+      "install_plugin": {
+        "admin_plugin": "Plugin installed"
+      },
+      "purchase": {
+        "admin_plugin": "Plugin purchased"
+      },
+      "redeem": {
+        "admin_plugin": "Plugin code redeemed"
+      },
+      "restart_backend": {
+        "admin_plugin": "Backend restarted"
+      },
+      "start_trial": {
+        "admin_plugin": "Plugin trial started"
+      },
+      "sync_now": {
+        "admin_plugin": "Plugin licenses synced"
+      },
+      "transfer_out": {
+        "admin_plugin": "Licenses transferred to another instance"
+      },
+      "uninstall_plugin": {
+        "admin_plugin": "Plugin uninstalled"
+      },
+      "upload_plugin": {
+        "admin_plugin": "Plugin uploaded"
+      },
+      "export_ips": {
+        "analytics": "IP addresses exported"
+      },
+      "set_log_level_endpoint": {
+        "log": "Log level changed"
+      },
+      "start_series": {
+        "diagnostic": "Diagnostic snapshot series started"
+      },
+      "stop_series": {
+        "diagnostic": "Diagnostic snapshot series stopped"
+      },
+      "rotate": {
+        "api_key": "API key rotated"
+      },
+      "test": {
+        "webhook": "Test webhook sent"
+      },
+      "redeliver": {
+        "webhook": "Webhook delivery retried"
+      },
+      "import": {
+        "automation": "Automations imported"
+      },
+      "run": {
+        "automation": "Automation run manually"
+      },
+      "template_activate": {
+        "automation": "Automation template activated"
+      },
+      "toggle": {
+        "automation": "Automation toggled"
+      },
+      "create_config_backup": {
+        "backup": "Config backup created"
+      },
+      "create_db_backup": {
+        "backup": "Database backup created"
+      },
+      "delete_backup": {
+        "backup": "Backup deleted"
+      },
+      "export_full_config": {
+        "backup": "Full config exported"
+      },
+      "import_config": {
+        "backup": "Config imported"
+      },
+      "import_full_config": {
+        "backup": "Full config imported"
+      },
+      "import_users": {
+        "backup": "Users imported"
+      },
+      "restore_db_backup": {
+        "backup": "Database restored from backup"
+      },
+      "rotate_backups_endpoint": {
+        "backup": "Old backups rotated out"
+      },
+      "s3_delete": {
+        "backup": "Backup deleted from S3"
+      },
+      "s3_settings_update": {
+        "backup": "S3 settings changed"
+      },
+      "s3_upload": {
+        "backup": "Backup uploaded to S3"
+      },
+      "send_backup_telegram": {
+        "backup": "Backup sent to Telegram"
+      },
+      "test_s3_connection": {
+        "backup": "S3 connection tested"
+      },
+      "upload_backup": {
+        "backup": "Backup uploaded"
+      },
+      "broadcast": {
+        "create": {
+          "bedolaga": "Broadcast started"
+        },
+        "stop": {
+          "bedolaga": "Broadcast stopped"
+        }
+      },
+      "campaign": {
+        "create": {
+          "bedolaga": "Campaign created"
+        },
+        "update": {
+          "bedolaga": "Campaign updated"
+        },
+        "delete": {
+          "bedolaga": "Campaign deleted"
+        }
+      },
+      "partner": {
+        "commission": {
+          "bedolaga": "Partner commission changed"
+        }
+      },
+      "promo": {
+        "create": {
+          "bedolaga": "Promo code created"
+        },
+        "update": {
+          "bedolaga": "Promo code updated"
+        },
+        "delete": {
+          "bedolaga": "Promo code deleted"
+        }
+      },
+      "subscription": {
+        "create": {
+          "bedolaga": "Subscription created for customer"
+        },
+        "deactivate": {
+          "bedolaga": "Customer subscription deactivated"
+        },
+        "devices": {
+          "bedolaga": "Devices added to subscription"
+        },
+        "extend": {
+          "bedolaga": "Customer subscription extended"
+        },
+        "reset_devices": {
+          "bedolaga": "Customer devices reset"
+        },
+        "traffic": {
+          "bedolaga": "Traffic added to subscription"
+        }
+      },
+      "user": {
+        "balance": {
+          "bedolaga": "Customer balance adjusted"
+        },
+        "update": {
+          "bedolaga": "Customer updated"
+        }
+      },
+      "add": {
+        "blocked_ip": "IP added to blocklist",
+        "hwid_blacklist": "HWID added to blacklist"
+      },
+      "bulk_add": {
+        "blocked_ip": "IPs bulk-added to blocklist",
+        "user_blacklist": "Telegram IDs bulk-added to blacklist"
+      },
+      "remove": {
+        "blocked_ip": "IP removed from blocklist",
+        "hwid_blacklist": "HWID removed from blacklist"
+      },
+      "sync_blocklist": {
+        "blocked_ip": "Blocklist synced to nodes"
+      },
+      "add_to_blacklist": {
+        "user_blacklist": "Telegram ID added to blacklist"
+      },
+      "remove_from_blacklist": {
+        "user_blacklist": "Telegram ID removed from blacklist"
+      },
+      "sync_blacklists": {
+        "user_blacklist": "Blacklists synced"
+      },
+      "job": {
+        "create": {
+          "bscheck": "Check job created"
+        },
+        "update": {
+          "bscheck": "Check job updated"
+        },
+        "delete": {
+          "bscheck": "Check job deleted"
+        }
+      },
+      "node": {
+        "check": {
+          "bscheck": "Node checked"
+        }
+      },
+      "probe": {
+        "bscheck": "Targets probed"
+      },
+      "scan": {
+        "bscheck": "Address scan started"
+      },
+      "scan_cancel": {
+        "bscheck": "Address scan cancelled"
+      },
+      "token": {
+        "set": {
+          "bscheck": "BS-Check token saved",
+          "dns": "DNS provider token saved"
+        },
+        "clear": {
+          "bscheck": "BS-Check token removed"
+        }
+      },
+      "vless": {
+        "bscheck": "VLESS test started"
+      },
+      "vless_cancel": {
+        "bscheck": "VLESS test cancelled"
+      },
+      "creds": {
+        "set": {
+          "reputation": "Reputation service token saved",
+          "dns": "DNS provider connected"
+        },
+        "clear": {
+          "reputation": "Reputation service token removed",
+          "dns": "DNS provider disconnected"
+        }
+      },
+      "rename": {
+        "config_profile": "Config profile renamed"
+      },
+      "record": {
+        "create": {
+          "dns": "DNS record created"
+        },
+        "update": {
+          "dns": "DNS record updated"
+        },
+        "delete": {
+          "dns": "DNS record deleted"
+        }
+      },
+      "create_account": {
+        "finance": "Hoster account added"
+      },
+      "update_account": {
+        "finance": "Hoster account updated"
+      },
+      "delete_account": {
+        "finance": "Hoster account deleted"
+      },
+      "sync_account_now": {
+        "finance": "Hoster account synced"
+      },
+      "test_account": {
+        "finance": "Hoster account connection tested"
+      },
+      "create_category": {
+        "finance": "Category created"
+      },
+      "update_category": {
+        "finance": "Category updated"
+      },
+      "delete_category": {
+        "finance": "Category deleted"
+      },
+      "create_item": {
+        "finance": "Finance item created"
+      },
+      "update_item": {
+        "finance": "Finance item updated"
+      },
+      "delete_item": {
+        "finance": "Finance item deleted"
+      },
+      "mark_paid": {
+        "finance": "Item marked as paid"
+      },
+      "skip_cycle": {
+        "finance": "Billing cycle skipped"
+      },
+      "create_payment": {
+        "finance": "Payment added"
+      },
+      "update_payment": {
+        "finance": "Payment updated"
+      },
+      "delete_payment": {
+        "finance": "Payment deleted"
+      },
+      "create_provider": {
+        "finance": "Hoster added"
+      },
+      "update_provider": {
+        "finance": "Hoster updated"
+      },
+      "delete_provider": {
+        "finance": "Hoster deleted"
+      },
+      "import_panel": {
+        "finance": "Billing data imported from panel"
+      },
+      "refresh_rates": {
+        "finance": "Exchange rates refreshed"
+      },
+      "reset_rate_to_auto": {
+        "finance": "Exchange rate set back to automatic"
+      },
+      "set_rate": {
+        "finance": "Exchange rate set manually"
+      },
+      "bulk_delete": {
+        "host": "Hosts bulk-deleted",
+        "user": "Users bulk-deleted"
+      },
+      "bulk_disable": {
+        "host": "Hosts bulk-disabled",
+        "user": "Users bulk-disabled"
+      },
+      "bulk_enable": {
+        "host": "Hosts bulk-enabled",
+        "user": "Users bulk-enabled"
+      },
+      "bulk_update": {
+        "host": "Hosts bulk-updated"
+      },
+      "get": {
+        "internal": "Panel read via bot"
+      },
+      "post": {
+        "internal": "Panel action via bot"
+      },
+      "patch": {
+        "internal": "Panel change via bot"
+      },
+      "proxy_to_panel": {
+        "internal": "Panel request via bot"
+      },
+      "proxy_to_panel_root": {
+        "internal": "Panel request via bot"
+      },
+      "cancel_queue_item": {
+        "mailserver": "Email sending cancelled"
+      },
+      "clear_old_queue": {
+        "mailserver": "Outbound queue cleared"
+      },
+      "create_domain": {
+        "mailserver": "Mail domain created"
+      },
+      "update_domain": {
+        "mailserver": "Mail domain updated"
+      },
+      "delete_domain": {
+        "mailserver": "Mail domain deleted"
+      },
+      "create_smtp_credential": {
+        "mailserver": "SMTP credential created"
+      },
+      "update_smtp_credential": {
+        "mailserver": "SMTP credential updated"
+      },
+      "delete_smtp_credential": {
+        "mailserver": "SMTP credential deleted"
+      },
+      "delete_inbox_item": {
+        "mailserver": "Inbox email deleted"
+      },
+      "reply_to_message": {
+        "mailserver": "Email reply sent"
+      },
+      "retry_queue_item": {
+        "mailserver": "Email queued for retry"
+      },
+      "send_email": {
+        "mailserver": "Email sent"
+      },
+      "send_test_email": {
+        "mailserver": "Test email sent"
+      },
+      "suppress_address": {
+        "mailserver": "Address added to suppression list"
+      },
+      "unsuppress_address": {
+        "mailserver": "Address removed from suppression list"
+      },
+      "bulk_generate_tokens": {
+        "node": "Agent tokens bulk-generated"
+      },
+      "bulk_revoke_tokens": {
+        "node": "Agent tokens bulk-revoked"
+      },
+      "bulk_install_commands": {
+        "node": "Agent install commands generated"
+      },
+      "create_external_server": {
+        "node": "External server added"
+      },
+      "delete_external_server": {
+        "node": "External server deleted"
+      },
+      "generate_agent_token": {
+        "node": "Agent token generated"
+      },
+      "revoke_agent_token": {
+        "node": "Agent token revoked"
+      },
+      "reorder": {
+        "node": "Nodes reordered"
+      },
+      "shaper": {
+        "update": {
+          "node": "Node shaper settings changed"
+        }
+      },
+      "create_channel": {
+        "notification": "Delivery channel created"
+      },
+      "update_channel": {
+        "notification": "Delivery channel updated"
+      },
+      "delete_channel": {
+        "notification": "Delivery channel deleted"
+      },
+      "delete_notification": {
+        "notification": "Notification deleted"
+      },
+      "delete_old_notifications": {
+        "notification": "Old notifications deleted"
+      },
+      "delete_read_notifications": {
+        "notification": "Read notifications deleted"
+      },
+      "set_dnd": {
+        "notification": "Do-not-disturb changed"
+      },
+      "test_smtp_endpoint": {
+        "notification": "SMTP delivery tested"
+      },
+      "update_smtp_config": {
+        "notification": "SMTP settings changed"
+      },
+      "sync_nodes": {
+        "public": "Node sync triggered"
+      },
+      "create_support_event": {
+        "support_event": "External support event received"
+      },
+      "generate_report": {
+        "report": "Report generated"
+      },
+      "send_report": {
+        "report": "Report sent"
+      },
+      "delete_report": {
+        "report": "Report deleted"
+      },
+      "create_script": {
+        "script": "Script created"
+      },
+      "update_script": {
+        "script": "Script updated"
+      },
+      "delete_script": {
+        "script": "Script deleted"
+      },
+      "bulk_import_scripts": {
+        "script": "Scripts imported"
+      },
+      "import_script_from_url": {
+        "script": "Script imported from URL"
+      },
+      "exec_script": {
+        "script": "Script run on server"
+      },
+      "exec_script_bulk": {
+        "script": "Script run on multiple servers"
+      },
+      "create_scheduled_task": {
+        "script": "Scheduled task created"
+      },
+      "update_scheduled_task": {
+        "script": "Scheduled task updated"
+      },
+      "delete_scheduled_task": {
+        "script": "Scheduled task deleted"
+      },
+      "toggle_scheduled_task": {
+        "script": "Scheduled task toggled"
+      },
+      "reset": {
+        "settings": "Setting reset to default"
+      },
+      "ip_whitelist_update": {
+        "settings": "IP whitelist updated"
+      },
+      "update_ip_whitelist": {
+        "settings": "IP whitelist updated"
+      },
+      "maxmind_update": {
+        "settings": "GeoIP database updated"
+      },
+      "sync_trigger": {
+        "settings": "Sync triggered"
+      },
+      "trigger_sync": {
+        "settings": "Sync triggered"
+      },
+      "create_snippet": {
+        "snippet": "Snippet created"
+      },
+      "update_snippet": {
+        "snippet": "Snippet updated"
+      },
+      "delete_snippet": {
+        "snippet": "Snippet deleted"
+      },
+      "create_external_squad": {
+        "squad": "External squad created"
+      },
+      "update_external_squad": {
+        "squad": "External squad updated"
+      },
+      "delete_external_squad": {
+        "squad": "External squad deleted"
+      },
+      "create_internal_squad": {
+        "squad": "Internal squad created"
+      },
+      "update_internal_squad": {
+        "squad": "Internal squad updated"
+      },
+      "delete_internal_squad": {
+        "squad": "Internal squad deleted"
+      },
+      "create_template": {
+        "template": "Subscription template created"
+      },
+      "update_template": {
+        "template": "Subscription template updated"
+      },
+      "delete_template": {
+        "template": "Subscription template deleted"
+      },
+      "reorder_templates": {
+        "template": "Templates reordered"
+      },
+      "assign": {
+        "support": "Ticket assigned"
+      },
+      "unassign": {
+        "support": "Ticket unassigned"
+      },
+      "attach": {
+        "support": "Reply with attachment sent"
+      },
+      "reply": {
+        "support": "Reply sent to customer"
+      },
+      "status": {
+        "support": "Ticket status changed"
+      },
+      "set_priority": {
+        "support": "Ticket priority changed"
+      },
+      "snooze": {
+        "support": "Ticket snoozed"
+      },
+      "unsnooze": {
+        "support": "Ticket unsnoozed"
+      },
+      "attach_tag": {
+        "support": "Tag added to ticket"
+      },
+      "detach_tag": {
+        "support": "Tag removed from ticket"
+      },
+      "create_tag": {
+        "support": "Tag created"
+      },
+      "create_macro": {
+        "support": "Reply macro created"
+      },
+      "update_macro": {
+        "support": "Reply macro updated"
+      },
+      "delete_macro": {
+        "support": "Reply macro deleted"
+      },
+      "set_customer_note": {
+        "support": "Customer note changed"
+      },
+      "run_sync": {
+        "support": "Ticket sync triggered"
+      },
+      "bulk_reset_traffic": {
+        "user": "Users' traffic bulk-reset"
+      },
+      "bulk_reassign": {
+        "user": "Users bulk-reassigned to another admin"
+      },
+      "bulk_unassign_admin": {
+        "user": "Users bulk-unassigned from admin"
+      },
+      "drop_connections": {
+        "user": "User connections dropped"
+      },
+      "reassign": {
+        "user": "User reassigned to another admin"
+      },
+      "unassign_admin": {
+        "user": "User unassigned from admin"
+      },
+      "sync_hwid": {
+        "user": "HWID devices synced"
+      },
+      "delete_user_hwid_device": {
+        "user": "User HWID device deleted"
+      },
+      "delete_all_user_hwid_devices": {
+        "user": "All user HWID devices deleted"
+      },
+      "create_preset": {
+        "user_preset": "User preset created"
+      },
+      "update_preset": {
+        "user_preset": "User preset updated"
+      },
+      "delete_preset": {
+        "user_preset": "User preset deleted"
+      },
+      "annul": {
+        "violation": "Violation annulled"
+      },
+      "annul_bulk": {
+        "violation": "Violations bulk-annulled"
+      },
+      "annul_global": {
+        "violation": "All violations annulled"
+      },
+      "client_notified": {
+        "violation": "Customer warned about violation"
+      },
+      "notice_template_updated": {
+        "violation": "Warning template updated"
+      },
+      "notify_violation_user": {
+        "violation": "Customer warning not sent"
+      },
+      "throttle": {
+        "add": {
+          "violation": "User throttled"
+        },
+        "remove": {
+          "violation": "User throttle lifted"
+        }
+      },
+      "whitelist": {
+        "add": {
+          "violation": "User added to whitelist"
+        },
+        "update": {
+          "violation": "Whitelist entry updated"
+        },
+        "remove": {
+          "violation": "User removed from whitelist"
+        }
       }
     },
     "feed": {
