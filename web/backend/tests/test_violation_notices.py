@@ -281,6 +281,8 @@ async def test_without_bedolaga_email_goes_via_own_server(monkeypatch):
     assert result["email"] == {"sent": True, "via": "mail_server"}
     assert mails[0]["to_email"] == "person@example.com"
     assert mails[0]["subject"] == "Устройства на подписке"
+    # Клиента зовут ответить на письмо — ответ должен куда-то прийти
+    assert mails[0]["reply_mailbox"] == "support"
     assert any("violation_notices" in sql for sql in conn.executed)
 
 

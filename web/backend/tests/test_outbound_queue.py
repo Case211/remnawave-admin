@@ -7,20 +7,21 @@ from shared.mail_queue import effective_hourly_limit, within_rate_limit
 from web.backend.core.mail.outbound_queue import OutboundMailQueue
 
 
-def _row(from_email: str, body_html: str | None = None) -> dict:
+def _row(from_email: str, body_html: str | None = None, headers: dict | None = None) -> dict:
     return {
         "subject": "Test",
         "from_email": from_email,
         "from_name": None,
         "to_email": "user@example.com",
-        "domain": "stijoin.com",
+        "domain": "example.com",
         "body_text": "Hello",
         "body_html": body_html,
+        "headers": headers,
     }
 
 
 def test_noreply_mail_marked_and_gets_notice():
-    msg = OutboundMailQueue()._build_message(_row("noreply@stijoin.com"))
+    msg = OutboundMailQueue()._build_message(_row("noreply@example.com"))
 
     assert msg["Auto-Submitted"] == "auto-generated"
     assert msg["X-Auto-Response-Suppress"] == "All"
@@ -31,7 +32,7 @@ def test_noreply_mail_marked_and_gets_notice():
 
 def test_noreply_notice_inserted_before_body_close():
     html = "<html><body><p>Hi</p></body></html>"
-    msg = OutboundMailQueue()._build_message(_row("noreply@stijoin.com", body_html=html))
+    msg = OutboundMailQueue()._build_message(_row("noreply@example.com", body_html=html))
 
     html_part = msg.get_body(preferencelist=("html",)).get_content()
     assert "ответы не доходят" in html_part
@@ -39,9 +40,37 @@ def test_noreply_notice_inserted_before_body_close():
     assert html_part.index("ответы не доходят") < html_part.rindex("</body>")
 
 
+def test_noreply_with_reply_to_drops_notice():
+    """Ответы ждут на Reply-To — просьбы «не отвечайте» в письме нет, пометки автописьма остаются."""
+    html = "<html><body><p>Hi</p></body></html>"
+    msg = OutboundMailQueue()._build_message(
+        _row("noreply@example.com", body_html=html, headers={"Reply-To": "support@example.com"})
+    )
+
+    assert msg["Reply-To"] == "support@example.com"
+    assert msg["Auto-Submitted"] == "auto-generated"
+    assert "ответы не доходят" not in msg.get_body(preferencelist=("plain",)).get_content()
+    assert "ответы не доходят" not in msg.get_body(preferencelist=("html",)).get_content()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("inbound, reply_to", [(True, "support@example.com"), (False, None)])
+async def test_send_email_sets_reply_to_only_with_inbound(inbound, reply_to):
+    """Reply-To — только когда домен принимает почту, иначе ответ отскочит."""
+    domain = {"domain": "example.com", "inbound_enabled": inbound, "from_name": "Support"}
+    enqueue = AsyncMock(return_value=1)
+    with patch("shared.mail_queue.active_outbound_domain", AsyncMock(return_value=domain)), \
+            patch("shared.mail_queue.enqueue", enqueue):
+        from shared.mail_queue import send_email
+        await send_email("user@example.com", "Тема", body_text="Текст", reply_mailbox="support")
+
+    headers = enqueue.await_args.kwargs["headers"]
+    assert (headers or {}).get("Reply-To") == reply_to
+
+
 def test_relayed_user_mail_is_untouched():
     """Mail relayed from a real user mailbox must not be marked or annotated."""
-    msg = OutboundMailQueue()._build_message(_row("ceo@stijoin.com"))
+    msg = OutboundMailQueue()._build_message(_row("ceo@example.com"))
 
     assert msg["Auto-Submitted"] is None
     assert msg["X-Auto-Response-Suppress"] is None
@@ -134,7 +163,7 @@ async def test_send_one_via_brevo_skips_mx_and_smtp():
     """В режиме brevo письмо уходит в API; MX и SMTP не трогаются, статус — sent."""
     q = OutboundMailQueue()
     db, conn = _db_mock()
-    row = {**_row("noreply@stijoin.com", body_html="<p>Hi</p>"),
+    row = {**_row("noreply@example.com", body_html="<p>Hi</p>"),
            "id": 7, "attempts": 0, "max_attempts": 5}
     settings = {"mailserver_delivery_mode": "brevo", "mailserver_brevo_api_key": "xkeysib-1"}
     cfg = MagicMock()
@@ -150,7 +179,7 @@ async def test_send_one_via_brevo_skips_mx_and_smtp():
 
     api_key, payload = send.call_args.args
     assert api_key == "xkeysib-1"
-    assert payload["sender"] == {"email": "noreply@stijoin.com"}
+    assert payload["sender"] == {"email": "noreply@example.com"}
     assert payload["to"] == [{"email": "user@example.com"}]
     assert "<p>Hi</p>" in payload["htmlContent"]
     assert "ответы не доходят" in payload["textContent"]
@@ -162,7 +191,7 @@ async def test_send_one_via_brevo_without_key_fails_gracefully():
     """Нет ключа — письмо помечается failed с понятной причиной, а не падает исключением."""
     q = OutboundMailQueue()
     db, conn = _db_mock()
-    row = {**_row("noreply@stijoin.com"), "id": 8, "attempts": 0, "max_attempts": 5}
+    row = {**_row("noreply@example.com"), "id": 8, "attempts": 0, "max_attempts": 5}
     cfg = MagicMock()
     cfg.get.side_effect = lambda key, default=None: {"mailserver_delivery_mode": "brevo"}.get(key, default)
 

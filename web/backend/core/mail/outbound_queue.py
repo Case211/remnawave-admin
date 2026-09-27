@@ -280,22 +280,6 @@ class OutboundMailQueue:
         body_text = row.get("body_text") or ""
         body_html = row.get("body_html")
 
-        # Mark auto-generated mail sent from a noreply mailbox so clients suppress
-        # auto-replies and discourage replies (the noreply mailbox does not accept mail).
-        # Relayed user mail (submission server) keeps its own From and is left untouched.
-        if from_email.lower().startswith("noreply@"):
-            msg["Auto-Submitted"] = "auto-generated"
-            msg["X-Auto-Response-Suppress"] = "All"
-            body_text = f"{body_text}{_NOREPLY_NOTICE_TEXT}"
-            if body_html:
-                body_html = _append_noreply_notice_html(body_html)
-
-        if body_html:
-            msg.set_content(body_text, subtype="plain", charset="utf-8")
-            msg.add_alternative(body_html, subtype="html", charset="utf-8")
-        else:
-            msg.set_content(body_text, subtype="plain", charset="utf-8")
-
         # Заголовки ветки переписки: без них ответ у получателя открывается
         # отдельным письмом, а не под исходным сообщением.
         extra = row.get("headers") or {}
@@ -305,11 +289,34 @@ class OutboundMailQueue:
                 extra = json.loads(extra)
             except ValueError:
                 extra = {}
+        headers: Dict[str, str] = {}
         if isinstance(extra, dict):
             for name in self._ALLOWED_EXTRA_HEADERS:
                 value = extra.get(name) or extra.get(name.lower())
-                if value and name not in msg:
-                    msg[name] = str(value)[:2000]
+                if value:
+                    headers[name] = str(value)[:2000]
+
+        # Mark auto-generated mail sent from a noreply mailbox so clients suppress
+        # auto-replies and discourage replies (the noreply mailbox does not accept mail).
+        # Relayed user mail (submission server) keeps its own From and is left untouched.
+        if from_email.lower().startswith("noreply@"):
+            msg["Auto-Submitted"] = "auto-generated"
+            msg["X-Auto-Response-Suppress"] = "All"
+            # С Reply-To ответы ждут на другом ящике — просьба не отвечать тогда врёт
+            if "Reply-To" not in headers:
+                body_text = f"{body_text}{_NOREPLY_NOTICE_TEXT}"
+                if body_html:
+                    body_html = _append_noreply_notice_html(body_html)
+
+        if body_html:
+            msg.set_content(body_text, subtype="plain", charset="utf-8")
+            msg.add_alternative(body_html, subtype="html", charset="utf-8")
+        else:
+            msg.set_content(body_text, subtype="plain", charset="utf-8")
+
+        for name, value in headers.items():
+            if name not in msg:
+                msg[name] = value
 
         for att in attachments or []:
             content_type = att.get("content_type") or "application/octet-stream"

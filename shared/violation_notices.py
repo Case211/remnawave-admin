@@ -363,6 +363,8 @@ async def _send_own_email(to_email: str, subject: str, body_text: str, body_html
             body_html=body_html,
             category="violation_notice",
             priority=1,
+            # Клиента зовут ответить, если предупреждение ошибочное
+            reply_mailbox="support",
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Письмо-предупреждение нашим сервером не ушло: %s", exc)

@@ -152,12 +152,21 @@ async def send_email(
     body_html: Optional[str] = None,
     category: Optional[str] = None,
     priority: int = 0,
+    reply_mailbox: Optional[str] = None,
 ) -> Optional[int]:
-    """Письмо от noreply@ первого активного домена. None — домена нет или очередь отказала."""
+    """Письмо от noreply@ первого активного домена. None — домена нет или очередь отказала.
+
+    ``reply_mailbox`` — ящик на том же домене, куда ждём ответы (например, ``support``).
+    Ставится в Reply-To, только если домен принимает входящую почту: иначе ответ
+    отскочит, и честнее оставить пометку «отвечать не нужно».
+    """
     domain = await active_outbound_domain()
     if not domain:
         logger.warning("No active outbound domain configured")
         return None
+    headers = None
+    if reply_mailbox and domain.get("inbound_enabled"):
+        headers = {"Reply-To": f"{reply_mailbox}@{domain['domain']}"}
     return await enqueue(
         from_email=f"noreply@{domain['domain']}",
         to_email=to_email,
@@ -167,4 +176,5 @@ async def send_email(
         from_name=domain.get("from_name"),
         category=category,
         priority=priority,
+        headers=headers,
     )
