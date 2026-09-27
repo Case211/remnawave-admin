@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, memo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useUserLinkProps } from '@/lib/useOpenUser'
+import { translateAuditAction } from '@/lib/auditFormat'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Users,
@@ -1253,63 +1254,6 @@ function UpdateCheckerCard() {
 
 // ── ActivityFeedCard ─────────────────────────────────────────────
 
-/** Plurals→singular map for audit entity normalization */
-const ENTITY_SINGULAR: Record<string, string> = {
-  users: 'user', nodes: 'node', hosts: 'host',
-  admins: 'admin', roles: 'role', violations: 'violation',
-}
-
-/** Verb aliases for descriptions lookup */
-const VERB_ALIASES: Record<string, string> = {
-  generate_agent_token: 'generate_token',
-  revoke_agent_token: 'revoke_token',
-}
-
-/**
- * Translate dotted audit action (e.g. "users.sync_hwid") into a human-readable string.
- * Lookup chain: audit.feed.{action} → audit.descriptions.{verb}.{singular} → audit.actions.{verb} + audit.resources.{singular} → humanized raw
- */
-function translateAuditAction(action: string, t: (key: string) => string): string {
-  // Try direct feed translation (handles any format)
-  const feedKey = `audit.feed.${action}`
-  const feedResult = t(feedKey)
-  if (feedResult !== feedKey) return feedResult
-
-  const dotIdx = action.indexOf('.')
-  if (dotIdx <= 0) {
-    const ak = `audit.actions.${action}`
-    const al = t(ak)
-    return al !== ak ? al : action.replace(/_/g, ' ')
-  }
-
-  const entity = action.slice(0, dotIdx)
-  const verb = action.slice(dotIdx + 1)
-  const singular = ENTITY_SINGULAR[entity] || entity
-
-  // Try audit.descriptions.{verb}.{singular}
-  const descKey = `audit.descriptions.${verb}.${singular}`
-  const desc = t(descKey)
-  if (desc !== descKey) return desc
-
-  // Try verb alias (generate_agent_token → generate_token)
-  const aliasVerb = VERB_ALIASES[verb]
-  if (aliasVerb) {
-    const aliasKey = `audit.descriptions.${aliasVerb}.${singular}`
-    const aliasResult = t(aliasKey)
-    if (aliasResult !== aliasKey) return aliasResult
-  }
-
-  // Compose from actions + resources
-  const actionLabel = t(`audit.actions.${verb}`)
-  const resourceLabel = t(`audit.resources.${singular}`)
-  if (actionLabel !== `audit.actions.${verb}` && resourceLabel !== `audit.resources.${singular}`) {
-    return `${actionLabel}: ${resourceLabel}`
-  }
-  if (actionLabel !== `audit.actions.${verb}`) return actionLabel
-
-  return verb.replace(/_/g, ' ')
-}
-
 /** Extract a short label from audit entry details JSON (username, name, setting key, etc.) */
 /** Extract a concise context string from audit entry details JSON. */
 function extractDetailLabel(details: string | null): string | null {
@@ -1397,7 +1341,7 @@ const ActivityFeedCard = memo(function ActivityFeedCard({
         ) : items.length > 0 ? (
           <div className="space-y-0.5 max-h-[200px] overflow-auto">
             {items.map((entry) => {
-              const label = translateAuditAction(entry.action, t)
+              const label = translateAuditAction(t, entry.action)
               const detail = extractDetailLabel(entry.details)
               return (
                 <div key={entry.id} className="flex items-center gap-2 py-1 text-xs">

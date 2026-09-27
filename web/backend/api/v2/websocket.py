@@ -306,11 +306,18 @@ async def broadcast_audit_event(
     action: str,
     resource: str,
     resource_id: str = None,
+    admin_id: Optional[int] = None,
 ):
-    """Broadcast an audit log event for real-time admin notifications."""
+    """Broadcast an audit log event for real-time admin notifications.
+
+    admin_id — аккаунт автора: по нему вкладка узнаёт своё действие и не
+    показывает о нём тост. Имя для этого не годится — фронт помнит то, под
+    которым входили (ник Telegram, passkey, OAuth), а не имя аккаунта.
+    """
     await manager.broadcast({
         "type": "audit",
         "data": {
+            "admin_id": admin_id,
             "admin_username": admin_username,
             "action": action,
             "resource": resource,

@@ -43,8 +43,10 @@ _DETAILS_MAX = 4000
 _VALUE_MAX = 300
 
 # Общая запись аудита для маршрутов, которых нет в _ROUTE_MAP и чей обработчик
-# сам ничего не пишет. Исключены чтения под видом POST и служебный шум
-# (отметки «прочитано», присутствие в тикете, приём данных от агентов).
+# сам ничего не пишет. Исключены чтения под видом POST, служебный шум
+# (отметки «прочитано», присутствие в тикете, приём данных от агентов) и
+# неушедшее предупреждение клиенту: ушедшее обработчик пишет сам
+# (violations.client_notified), а попытка без отправки ничего не меняет.
 _GENERIC_SKIP_MODULES = {"collector", "me_devices"}
 _GENERIC_SKIP = {
     ("logs", "ingest_frontend_logs"),
@@ -53,6 +55,7 @@ _GENERIC_SKIP = {
     ("users", "fetch_user_ips"),
     ("users", "fetch_users_ips_by_node"),
     ("violations", "lookup_ips"),
+    ("violations", "notify_violation_user"),
     ("automations", "test_automation"),
     ("notifications", "mark_notifications_read"),
     ("notifications", "create_notification_endpoint"),
@@ -469,6 +472,7 @@ async def _write_audit_entry(
                 action=f"{resource}.{action}",
                 resource=resource,
                 resource_id=resource_id,
+                admin_id=admin_id,
             )
         except Exception:
             pass

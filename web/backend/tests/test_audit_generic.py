@@ -28,12 +28,17 @@ def _app():
     async def lookup():
         return {"ok": True}
 
+    async def notify_violation_user(violation_id: int):
+        return {"sent": False, "reason": "no_template"}
+
     for fn, path in ((create_payment, "/api/v2/finance/items/{item_id}/pay"),
                      (delete_category, "/api/v2/finance/categories/{item_id}")):
         fn.__module__ = "web.backend.api.v2.finance"
         app.add_api_route(path, fn, methods=["POST"])
     lookup.__module__ = "web.backend.api.v2.reputation"
     app.add_api_route("/api/v2/reputation/lookup", lookup, methods=["POST"])
+    notify_violation_user.__module__ = "web.backend.api.v2.violations"
+    app.add_api_route("/api/v2/violations/{violation_id}/notify", notify_violation_user, methods=["POST"])
     return app
 
 
@@ -71,6 +76,48 @@ async def test_handler_audit_is_not_duplicated(written):
 async def test_read_like_post_skipped(written):
     await _post("/api/v2/reputation/lookup")
     assert written == []
+
+
+@pytest.mark.asyncio
+async def test_unsent_client_warning_not_logged(written):
+    """Не ушло — фиксировать нечего; ушедшее обработчик пишет сам (client_notified)."""
+    await _post("/api/v2/violations/5/notify", json={})
+    assert written == []
+
+
+@pytest.mark.asyncio
+async def test_audit_event_carries_author_account(monkeypatch):
+    """По admin_id вкладка автора узнаёт своё действие: имя, под которым
+    входили через Telegram, с именем аккаунта не совпадает."""
+    from starlette.requests import Request
+
+    from web.backend.api import deps
+    from web.backend.api.v2 import websocket
+    from web.backend.core import rbac
+
+    sent = []
+
+    async def fake_broadcast(**kwargs):
+        sent.append(kwargs)
+
+    async def fake_account(telegram_id):
+        return {"id": 5, "username": "admin"}
+
+    async def fake_write(**kwargs):
+        pass
+
+    monkeypatch.setattr(audit_middleware, "decode_token", lambda token, token_type=None: {"sub": "366945364"})
+    monkeypatch.setattr(rbac, "get_admin_account_by_telegram_id", fake_account)
+    monkeypatch.setattr(rbac, "write_audit_log", fake_write)
+    monkeypatch.setattr(websocket, "broadcast_audit_event", fake_broadcast)
+    monkeypatch.setattr(deps, "get_client_ip", lambda request: "127.0.0.1")
+
+    request = Request({"type": "http", "method": "POST", "path": "/api/v2/finance/items/7/pay",
+                       "headers": [(b"authorization", b"Bearer t")]})
+    await audit_middleware._write_audit_entry(request, "finance", "create_payment", "7", require_actor=True)
+
+    assert sent == [{"admin_username": "admin", "action": "finance.create_payment",
+                     "resource": "finance", "resource_id": "7", "admin_id": 5}]
 
 
 def test_sensitive_keys_dropped_from_details():

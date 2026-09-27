@@ -15,7 +15,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from './authStore'
+import { usePermissionStore } from './permissionStore'
 import { authApi } from '../api/auth'
+import { translateAuditAction } from '../lib/auditFormat'
 
 interface WsMessage {
   type: string
@@ -45,30 +47,18 @@ function getWsUrl(): string {
   return `${base}/ws`
 }
 
-function formatAuditAction(action: string, resource: string, t: (key: string) => string): string {
-  // Try exact i18n description: audit.descriptions.{action}.{resource}
-  const descKey = `audit.descriptions.${action}.${resource}`
-  const desc = t(descKey)
-  if (desc !== descKey) return desc
-
-  // Try splitting compound action (e.g., create_user → create + user)
-  const idx = action.indexOf('_')
-  if (idx > 0) {
-    const verb = action.slice(0, idx)
-    const noun = action.slice(idx + 1)
-    const compoundKey = `audit.descriptions.${verb}.${noun}`
-    const compoundDesc = t(compoundKey)
-    if (compoundDesc !== compoundKey) return compoundDesc
-  }
-
-  // Compose from action + resource labels
-  const actionKey = `audit.actions.${action}`
-  const actionLabel = t(actionKey)
-  const resourceKey = `audit.resources.${resource}`
-  const resourceLabel = t(resourceKey)
-  const resolvedAction = actionLabel !== actionKey ? actionLabel : action
-  const resolvedResource = resourceLabel !== resourceKey ? resourceLabel : resource
-  return resolvedResource ? `${resolvedAction}: ${resolvedResource}` : resolvedAction
+/**
+ * Своё ли действие пришло из журнала. Сверка по аккаунту из /auth/me: имя в
+ * authStore — то, под которым входили (ник Telegram, «passkey», провайдер
+ * OAuth), с именем аккаунта оно расходится, и админу прилетал тост о его же
+ * нажатии. По имени — только без аккаунта (вход из .env без записи в БД).
+ */
+function isOwnAuditEvent(data: Record<string, unknown> | undefined): boolean {
+  const authorId = data?.admin_id
+  const accountId = usePermissionStore.getState().accountId
+  if (typeof authorId === 'number' && accountId != null) return authorId === accountId
+  const username = useAuthStore.getState().user?.username
+  return !username || data?.admin_username === username
 }
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]
@@ -195,15 +185,12 @@ export function useRealtimeUpdates() {
             debouncedInvalidate(['audit-stats'])
             debouncedInvalidate(['dashboard-audit-feed'])
 
-            const currentUser = useAuthStore.getState().user
             const auditAdmin = msg.data?.admin_username as string | undefined
-            if (auditAdmin && currentUser?.username && auditAdmin !== currentUser.username) {
-              const action = (msg.data?.action as string) || ''
-              const resource = (msg.data?.resource as string) || ''
-              toast.info(
-                `${auditAdmin}: ${formatAuditAction(action, resource, t)}`,
-                { duration: 4000 },
-              )
+            if (auditAdmin && !isOwnAuditEvent(msg.data)) {
+              const text = translateAuditAction(t, (msg.data?.action as string) || '')
+              // Интеграция по API-ключу пишется как «apikey:<имя>» — в тосте это
+              // шум, действие говорит само за себя; какой ключ — видно в журнале
+              toast.info(auditAdmin.startsWith('apikey:') ? text : `${auditAdmin}: ${text}`, { duration: 4000 })
             }
             break
           }

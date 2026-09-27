@@ -31,6 +31,58 @@ export function parseAction(fullAction: string): { resource: string; action: str
   return { resource: fullAction.slice(0, dot), action: fullAction.slice(dot + 1) }
 }
 
+/** Verb aliases for descriptions lookup */
+const VERB_ALIASES: Record<string, string> = {
+  generate_agent_token: 'generate_token',
+  revoke_agent_token: 'revoke_token',
+}
+
+/**
+ * Действие целиком («users.sync_hwid») человеческим текстом — для ленты на
+ * дашборде и тостов о действиях других админов.
+ * Порядок: audit.feed.{action} → audit.descriptions.{verb}.{раздел} →
+ * audit.actions.{verb} + audit.resources.{раздел} → глагол без подчёркиваний.
+ */
+export function translateAuditAction(t: TFunction, action: string): string {
+  // Try direct feed translation (handles any format)
+  const feedKey = `audit.feed.${action}`
+  const feedResult = t(feedKey)
+  if (feedResult !== feedKey) return feedResult
+
+  const dotIdx = action.indexOf('.')
+  if (dotIdx <= 0) {
+    const ak = `audit.actions.${action}`
+    const al = t(ak)
+    return al !== ak ? al : action.replace(/_/g, ' ')
+  }
+
+  const verb = action.slice(dotIdx + 1)
+  const singular = resourceKey(action.slice(0, dotIdx))
+
+  // Try audit.descriptions.{verb}.{singular}
+  const descKey = `audit.descriptions.${verb}.${singular}`
+  const desc = t(descKey)
+  if (desc !== descKey) return desc
+
+  // Try verb alias (generate_agent_token → generate_token)
+  const aliasVerb = VERB_ALIASES[verb]
+  if (aliasVerb) {
+    const aliasKey = `audit.descriptions.${aliasVerb}.${singular}`
+    const aliasResult = t(aliasKey)
+    if (aliasResult !== aliasKey) return aliasResult
+  }
+
+  // Compose from actions + resources
+  const actionLabel = t(`audit.actions.${verb}`)
+  const resourceLabel = t(`audit.resources.${singular}`)
+  if (actionLabel !== `audit.actions.${verb}` && resourceLabel !== `audit.resources.${singular}`) {
+    return `${actionLabel}: ${resourceLabel}`
+  }
+  if (actionLabel !== `audit.actions.${verb}`) return actionLabel
+
+  return verb.replace(/_/g, ' ')
+}
+
 export function getActionColor(action: string): string {
   // Semantic: destructive actions stay red
   if (action.includes('delete') || action === 'disable' || action.includes('revoke'))

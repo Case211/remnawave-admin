@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { TFunction } from 'i18next'
-import { formatDetailValue, getDescription, getVisibleDetails, resourceKey } from '@/lib/auditFormat'
+import { formatDetailValue, getDescription, getVisibleDetails, resourceKey, translateAuditAction } from '@/lib/auditFormat'
 
 // i18next-заглушка: возвращает defaultValue, а для известного ключа — перевод
 const dict: Record<string, string> = {
   'audit.descriptions.update.user': 'Изменён пользователь',
+  'audit.descriptions.enable.user': 'Включён пользователь',
+  'audit.feed.users.sync_hwid': 'Синхронизация HWID',
+  'audit.actions.create': 'Создание',
+  'audit.resources.finance': 'Финансы',
 }
 const t = ((key: string, opts?: { defaultValue?: string }) => dict[key] ?? opts?.defaultValue ?? key) as unknown as TFunction
 
@@ -35,5 +39,23 @@ describe('auditFormat', () => {
     expect(resourceKey('users')).toBe('user')
     expect(resourceKey('setting')).toBe('settings')
     expect(resourceKey('settings')).toBe('settings')
+  })
+})
+
+describe('translateAuditAction', () => {
+  it('готовая строка ленты — первой', () => {
+    expect(translateAuditAction(t, 'users.sync_hwid')).toBe('Синхронизация HWID')
+  })
+
+  it('раздел во множественном числе находит описание в единственном', () => {
+    expect(translateAuditAction(t, 'users.enable')).toBe('Включён пользователь')
+  })
+
+  it('без описания собирается из действия и раздела', () => {
+    expect(translateAuditAction(t, 'finance.create')).toBe('Создание: Финансы')
+  })
+
+  it('без перевода — глагол без подчёркиваний, а не ключ с разделом', () => {
+    expect(translateAuditAction(t, 'violations.notify_violation_user')).toBe('notify violation user')
   })
 })
