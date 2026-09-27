@@ -158,7 +158,7 @@ async def _warn_after_auto_action(violation: dict) -> None:
     if not config_service.get("violations_warn_on_action", True):
         return
     try:
-        from web.backend.core.violation_notices import send_notice
+        from shared.violation_notices import send_notice
 
         result = await send_notice(violation, sent_by="auto", auto=True)
         if not result.get("sent"):

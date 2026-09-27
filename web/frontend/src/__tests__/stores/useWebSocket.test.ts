@@ -85,6 +85,8 @@ afterEach(() => {
 })
 
 import { useAuthStore } from '@/store/authStore'
+import { usePermissionStore } from '@/store/permissionStore'
+import { toast } from 'sonner'
 import { renderHook, act } from '@testing-library/react'
 
 describe('useWebSocket / useRealtimeUpdates', () => {
@@ -230,12 +232,64 @@ describe('getWsUrl', () => {
   })
 })
 
-describe('formatAuditAction', () => {
-  it('is used internally for audit messages', async () => {
-    // formatAuditAction is an internal function, tested through the hook
-    // This test verifies the module can be imported without errors
-    const mod = await import('@/store/useWebSocket')
-    expect(mod.useRealtimeUpdates).toBeDefined()
+describe('audit toast', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    // Вход через Telegram: в authStore ник, а в журнале — имя аккаунта
+    useAuthStore.setState({
+      user: { username: 'ispanec_nn', firstName: 'Ispanec', authMethod: 'telegram' },
+      accessToken: 'test-jwt-token',
+      refreshToken: null,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    })
+    usePermissionStore.setState({ accountId: 5 })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    usePermissionStore.setState({ accountId: null })
+  })
+
+  async function receiveAudit(data: Record<string, unknown>) {
+    const { useRealtimeUpdates } = await import('@/store/useWebSocket')
+    MockWebSocket.lastInstance = null
+    renderHook(() => useRealtimeUpdates())
+    await act(async () => {
+      vi.advanceTimersByTime(10)
+    })
+    act(() => {
+      MockWebSocket.lastInstance!.onmessage?.(
+        new MessageEvent('message', { data: JSON.stringify({ type: 'audit', data }) }),
+      )
+    })
+  }
+
+  it('своё действие не показывается, хотя имя при входе другое', async () => {
+    await receiveAudit({ admin_id: 5, admin_username: 'admin', action: 'violations.resolve', resource: 'violations' })
+    expect(toast.info).not.toHaveBeenCalled()
+  })
+
+  it('действие другого админа — через переводчик журнала, а не сырым ключом', async () => {
+    await receiveAudit({ admin_id: 9, admin_username: 'moder', action: 'users.enable', resource: 'users' })
+    // t в тесте возвращает ключ, поэтому доходит до запасного варианта — глагола
+    expect(toast.info).toHaveBeenCalledWith('moder: enable', { duration: 4000 })
+  })
+
+  it('действие по API-ключу — без технического «apikey:…»', async () => {
+    await receiveAudit({
+      admin_id: null, admin_username: 'apikey:helpdesk',
+      action: 'support_events.create_support_event', resource: 'support_events',
+    })
+    expect(toast.info).toHaveBeenCalledWith('create support event', { duration: 4000 })
+  })
+
+  it('без аккаунта сверяет по имени', async () => {
+    usePermissionStore.setState({ accountId: null })
+    await receiveAudit({ admin_id: null, admin_username: 'ispanec_nn', action: 'users.enable', resource: 'users' })
+    expect(toast.info).not.toHaveBeenCalled()
   })
 })
 

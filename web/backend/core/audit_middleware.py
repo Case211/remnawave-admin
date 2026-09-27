@@ -43,8 +43,10 @@ _DETAILS_MAX = 4000
 _VALUE_MAX = 300
 
 # Общая запись аудита для маршрутов, которых нет в _ROUTE_MAP и чей обработчик
-# сам ничего не пишет. Исключены чтения под видом POST и служебный шум
-# (отметки «прочитано», присутствие в тикете, приём данных от агентов).
+# сам ничего не пишет. Исключены чтения под видом POST, служебный шум
+# (отметки «прочитано», присутствие в тикете, приём данных от агентов) и
+# неушедшее предупреждение клиенту: ушедшее обработчик пишет сам
+# (violations.client_notified), а попытка без отправки ничего не меняет.
 _GENERIC_SKIP_MODULES = {"collector", "me_devices"}
 _GENERIC_SKIP = {
     ("logs", "ingest_frontend_logs"),
@@ -53,6 +55,7 @@ _GENERIC_SKIP = {
     ("users", "fetch_user_ips"),
     ("users", "fetch_users_ips_by_node"),
     ("violations", "lookup_ips"),
+    ("violations", "notify_violation_user"),
     ("automations", "test_automation"),
     ("notifications", "mark_notifications_read"),
     ("notifications", "create_notification_endpoint"),
@@ -196,8 +199,10 @@ def _match_route(method: str, path: str) -> Optional[Tuple[str, str, Optional[st
         m = re.match(pattern, path)
         if m:
             groups = m.groups()
-            # Replace {1} placeholder in action with first capture group
-            action = action_tpl.replace("{1}", groups[0]) if groups and "{1}" in action_tpl else action_tpl
+            # Replace {1} placeholder in action with first capture group.
+            # Дефис из URL — в подчёркивание: «bulk_reset-traffic» не нашёл бы
+            # перевода, ключи действий везде через «_»
+            action = action_tpl.replace("{1}", groups[0].replace("-", "_")) if groups and "{1}" in action_tpl else action_tpl
             resource_id = groups[0] if groups else None
             return resource, action, resource_id
     return None
@@ -469,6 +474,7 @@ async def _write_audit_entry(
                 action=f"{resource}.{action}",
                 resource=resource,
                 resource_id=resource_id,
+                admin_id=admin_id,
             )
         except Exception:
             pass

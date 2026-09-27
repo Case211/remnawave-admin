@@ -9,6 +9,7 @@
 настроек остались traffic_rate_* — они лежат в базе у всех установок.
 """
 import asyncio
+import json
 import logging
 from collections import defaultdict, deque
 from datetime import datetime, timezone
@@ -162,10 +163,16 @@ class TrafficRateMonitor:
 
                 logger.debug("Traffic rate check: threshold=%.1f GB, window=%d min, users tracked=%d",
                             cfg["threshold_gb"], cfg["window_minutes"], len(self._snapshots))
-                await self._check_traffic_rates(cfg)
+                await asyncio.create_task(self._check_traffic_rates(cfg))
 
             except asyncio.CancelledError:
-                break
+                # Как у синка: отмена, прилетевшая из проверки (её роняет
+                # сетевой клиент на обрыве), монитор не останавливает — только
+                # stop() или отмена его собственной задачи
+                task = asyncio.current_task()
+                if not self._running or (task is not None and task.cancelling()):
+                    break
+                logger.error("Traffic rate check was cancelled from inside; the next one runs on schedule")
             except Exception as e:
                 logger.error("Traffic rate monitor error: %s", e, exc_info=True)
                 await asyncio.sleep(30)
@@ -217,20 +224,13 @@ class TrafficRateMonitor:
                 if len(users_list) < 100:
                     break
         except Exception as e:
-            logger.warning("Failed to fetch users from API, falling back to DB: %s", e)
-            # Fallback: use DB data
-            try:
-                async with db_service.acquire() as conn:
-                        rows = await conn.fetch(
-                            select_sql(USERS_TABLE, "uuid::text, username, used_traffic_bytes",
-                                "WHERE used_traffic_bytes > 0")
-                        )
-                for row in rows:
-                    traffic_map[row["uuid"]] = int(row["used_traffic_bytes"])
-                    username_map[row["uuid"]] = row["username"] or row["uuid"][:8]
-            except Exception as e2:
-                logger.warning("Failed to fetch user traffic from DB: %s", e2)
-                return
+            # Без панели проверку пропускаем. Подставлять цифры из базы нельзя:
+            # они отстают на интервал синка, а если синк встал — на часы, и
+            # разница со следующим ответом панели выходит не расходом за окно,
+            # а всем трафиком за время простоя. 27.09.2026 так пришло «70 ГБ
+            # за 55 минут»: свежая цифра панели минус полусуточная из базы.
+            logger.warning("Traffic rate check skipped, panel API unavailable: %s", e)
+            return
 
         logger.info("Traffic rate check: %d users fetched, threshold=%.1f GB", len(traffic_map), cfg["threshold_gb"])
 
@@ -484,13 +484,24 @@ class TrafficRateMonitor:
             auto_block_gb = cfg.get("auto_block_gb", 50.0)
             rec_action = "hard_block" if auto_action == "block_user" and delta_gb >= auto_block_gb else "monitor"
 
+            # Шкала та же, что у остальных нарушений, 0–100: ГБ в час, не выше
+            # сотни. Раньше делили на 10 — «76 ГБ/ч» становились скором 7,6,
+            # ниже любого настоящего нарушения.
+            score = min(rate, 100.0)
             violation_id, violation_created = await db_service.save_violation(
                 user_uuid=user_uuid,
                 username=username,
-                score=min(rate / 10, 10.0),  # normalize: 10 GB/h → 1.0, 100 GB/h → 10.0
+                score=score,
                 recommended_action=rec_action,
                 confidence=0.9,
                 reasons=[reason],
+                # Метка вида: по ней предупреждение берёт шаблон «Расход трафика»
+                raw_breakdown=json.dumps({"traffic_rate": {
+                    "score": score, "delta_gb": delta_gb, "minutes": elapsed,
+                }}),
+                # Своя запись на каждую карточку: повторы сдерживает кулдаун
+                # монитора, а склейка отдавала её висящему торренту
+                dedup=False,
             )
 
             if violation_created:
@@ -499,7 +510,7 @@ class TrafficRateMonitor:
                     "violation_id": violation_id,
                     "user_uuid": user_uuid,
                     "username": username,
-                    "score": min(rate / 10, 10.0),
+                    "score": score,
                     "recommended_action": rec_action,
                     "reasons": [reason],
                     "source": "traffic_rate",

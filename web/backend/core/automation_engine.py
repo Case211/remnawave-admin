@@ -1625,7 +1625,7 @@ class AutomationEngine:
             row = await conn.fetchrow("SELECT * FROM violations WHERE id = $1", int(violation_id))
         if not row:
             return {"action": "warn_user", "skipped": True, "reason": "violation_not_found"}
-        from web.backend.core.violation_notices import send_notice
+        from shared.violation_notices import send_notice
         result = await send_notice(dict(row), sent_by="automation", force=bool(config.get("force")), auto=True)
         if not result.get("sent"):
             return {"action": "warn_user", "skipped": True, "reason": result.get("reason") or "not_sent"}

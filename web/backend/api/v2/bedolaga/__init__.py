@@ -4,23 +4,18 @@ import logging
 from fastapi import APIRouter, HTTPException
 from httpx import HTTPStatusError, ConnectError, TimeoutException
 
-from web.backend.core.config import get_web_settings
-from shared.bedolaga_client import bedolaga_client
+from shared.bedolaga_client import ensure_configured as _configure_client
 
 logger = logging.getLogger(__name__)
 
 
 def ensure_configured():
     """Lazily configure the Bedolaga client from settings."""
-    if bedolaga_client.is_configured:
-        return
-    settings = get_web_settings()
-    if not settings.bedolaga_api_url or not settings.bedolaga_api_token:
+    if not _configure_client():
         raise HTTPException(
             status_code=503,
             detail="Bedolaga API is not configured. Set BEDOLAGA_API_URL and BEDOLAGA_API_TOKEN.",
         )
-    bedolaga_client.configure(settings.bedolaga_api_url, settings.bedolaga_api_token)
 
 
 def upstream_status(code: int) -> int:

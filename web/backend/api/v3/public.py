@@ -997,8 +997,8 @@ async def violations_summary(
 
     notice = None
     if not whitelisted and (data.get("telegram_id") or telegram_id):
-        from web.backend.core.notice_markup import telegram_to_text
-        from web.backend.core.violation_notices import last_notice_for_user
+        from shared.notice_markup import telegram_to_text
+        from shared.violation_notices import last_notice_for_user
 
         raw_notice = await last_notice_for_user(int(data.get("telegram_id") or telegram_id or 0))
         if raw_notice:

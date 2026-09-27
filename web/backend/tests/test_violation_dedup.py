@@ -74,6 +74,19 @@ class TestSaveViolationDedup:
         conn.fetchval.assert_awaited()
 
     @pytest.mark.asyncio
+    async def test_dedup_off_creates_even_under_higher_pending(self):
+        """Расход трафика со скором ниже висящего торрента раньше исчезал:
+        карточка в Telegram была, а записи в списке — нет."""
+        conn = _make_conn(existing_row={"id": 42, "score": 100.0}, insert_id=125)
+        p1, p2 = _patch_db(conn)
+        with p1, p2:
+            vid, created = await db_service.save_violation(
+                user_uuid=USER_UUID, score=75.9, recommended_action="monitor", dedup=False,
+            )
+        assert (vid, created) == (125, True)
+        conn.fetchrow.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_dedup_query_is_window_bounded(self):
         """SQL дедупа обязан ограничивать pending по detected_at, иначе
         нарушение годовалой давности глушит новые записи вечно."""
@@ -182,7 +195,7 @@ class TestHandleViolationCreatedGate:
             collector.config_service, "get",
             side_effect=lambda key, default=None: True if key == "violations_warn_on_action" else default,
         ), patch(
-            "web.backend.core.violation_notices.send_notice",
+            "shared.violation_notices.send_notice",
             new=AsyncMock(side_effect=RuntimeError("delivery unavailable")),
         ) as send:
             await collector._warn_after_auto_action(warning)
@@ -193,7 +206,7 @@ class TestHandleViolationCreatedGate:
     async def test_warning_setting_can_disable_auto_action_notice(self):
         warning = {"id": 51, "user_uuid": USER_UUID}
         with patch.object(collector.config_service, "get", return_value=False), patch(
-            "web.backend.core.violation_notices.send_notice", new_callable=AsyncMock,
+            "shared.violation_notices.send_notice", new_callable=AsyncMock,
         ) as send:
             await collector._warn_after_auto_action(warning)
 

@@ -4,7 +4,7 @@ Telegram отвергает сообщение целиком из-за одно
 ничего — поэтому проверка при сохранении шаблона должна ловить ровно то, на
 чём спотыкается Telegram, и не мешать тому, что он принимает.
 """
-from web.backend.core.notice_markup import (
+from shared.notice_markup import (
     EMAIL_STYLE,
     describe_issue,
     telegram_markup_issues,

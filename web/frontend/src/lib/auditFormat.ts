@@ -3,14 +3,18 @@ import { formatDateUtil } from '@/lib/useFormatters'
 
 /** Форматирование записей журнала аудита — общее для страницы журнала и истории в карточках. */
 
+// На «s», но не множественное число: «dns» не превращать в «dn»
+const NOT_PLURAL = new Set(['settings', 'dns', 'analytics'])
+
 // Обработчики пишут «user.create», API v3 — «users.create»: это один раздел
 export function resourceKey(resource: string): string {
-  return resource.endsWith('s') && resource !== 'settings' ? resource.slice(0, -1) : resource === 'setting' ? 'settings' : resource
+  if (resource === 'setting') return 'settings'
+  return resource.endsWith('s') && !NOT_PLURAL.has(resource) ? resource.slice(0, -1) : resource
 }
 
 export function resourceStyleKey(resource: string): string {
   const key = resourceKey(resource)
-  return key === 'settings' ? key : `${key}s`
+  return NOT_PLURAL.has(key) ? key : `${key}s`
 }
 
 export function getResourceLabel(t: TFunction, resource: string): string {
@@ -29,6 +33,58 @@ export function parseAction(fullAction: string): { resource: string; action: str
   const dot = fullAction.indexOf('.')
   if (dot === -1) return { resource: '', action: fullAction }
   return { resource: fullAction.slice(0, dot), action: fullAction.slice(dot + 1) }
+}
+
+/** Verb aliases for descriptions lookup */
+const VERB_ALIASES: Record<string, string> = {
+  generate_agent_token: 'generate_token',
+  revoke_agent_token: 'revoke_token',
+}
+
+/**
+ * Действие целиком («users.sync_hwid») человеческим текстом — для ленты на
+ * дашборде и тостов о действиях других админов.
+ * Порядок: audit.feed.{action} → audit.descriptions.{verb}.{раздел} →
+ * audit.actions.{verb} + audit.resources.{раздел} → глагол без подчёркиваний.
+ */
+export function translateAuditAction(t: TFunction, action: string): string {
+  // Try direct feed translation (handles any format)
+  const feedKey = `audit.feed.${action}`
+  const feedResult = t(feedKey)
+  if (feedResult !== feedKey) return feedResult
+
+  const dotIdx = action.indexOf('.')
+  if (dotIdx <= 0) {
+    const ak = `audit.actions.${action}`
+    const al = t(ak)
+    return al !== ak ? al : action.replace(/_/g, ' ')
+  }
+
+  const verb = action.slice(dotIdx + 1)
+  const singular = resourceKey(action.slice(0, dotIdx))
+
+  // Try audit.descriptions.{verb}.{singular}
+  const descKey = `audit.descriptions.${verb}.${singular}`
+  const desc = t(descKey)
+  if (desc !== descKey) return desc
+
+  // Try verb alias (generate_agent_token → generate_token)
+  const aliasVerb = VERB_ALIASES[verb]
+  if (aliasVerb) {
+    const aliasKey = `audit.descriptions.${aliasVerb}.${singular}`
+    const aliasResult = t(aliasKey)
+    if (aliasResult !== aliasKey) return aliasResult
+  }
+
+  // Compose from actions + resources
+  const actionLabel = t(`audit.actions.${verb}`)
+  const resourceLabel = t(`audit.resources.${singular}`)
+  if (actionLabel !== `audit.actions.${verb}` && resourceLabel !== `audit.resources.${singular}`) {
+    return `${actionLabel}: ${resourceLabel}`
+  }
+  if (actionLabel !== `audit.actions.${verb}`) return actionLabel
+
+  return verb.replace(/_/g, ' ')
 }
 
 export function getActionColor(action: string): string {

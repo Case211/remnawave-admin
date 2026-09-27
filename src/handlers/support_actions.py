@@ -21,25 +21,6 @@ router = Router()
 SNOOZE_MINUTES = 60
 
 
-def _ensure_bedolaga() -> bool:
-    """Настроить клиент бота Bedolaga: у процесса бота его никто не поднимал."""
-    from shared.bedolaga_client import bedolaga_client
-
-    if bedolaga_client.is_configured:
-        return True
-    try:
-        from web.backend.core.config import get_web_settings
-
-        settings = get_web_settings()
-        if not settings.bedolaga_api_url or not settings.bedolaga_api_token:
-            return False
-        bedolaga_client.configure(settings.bedolaga_api_url, settings.bedolaga_api_token)
-        return True
-    except Exception as exc:  # noqa: BLE001 — не настроено: скажем об этом кнопкой
-        logger.warning("Support action: клиент Bedolaga не настроен: %s", exc)
-        return False
-
-
 @router.callback_query(F.data.startswith("sact:"))
 async def handle_support_action(callback: CallbackQuery, admin: BotAdmin) -> None:
     parts = (callback.data or "").split(":", 2)
@@ -91,15 +72,18 @@ async def handle_support_action(callback: CallbackQuery, admin: BotAdmin) -> Non
             await callback.answer(f"Отложено на {SNOOZE_MINUTES} мин")
 
         elif action == "close":
-            if not _ensure_bedolaga():
+            # Настройки Bedolaga — из shared: пакета web в образе бота нет, и
+            # раньше кнопка всегда отвечала «не настроен»
+            from shared.bedolaga_client import bedolaga_client, ensure_configured
+
+            if not ensure_configured():
                 await callback.answer("Bedolaga API не настроен", show_alert=True)
                 return
-            from shared.bedolaga_client import bedolaga_client
-            from web.backend.core.support_sync import sync_ticket
 
-            # Статус живёт в боте — закрываем через него, проекция догоняет следом.
+            # Статус живёт в боте Bedolaga — закрываем через него. Проекцию в
+            # панели обновит бэкенд по событию ticket.status_changed (или синк
+            # раз в 5 минут): у бота нет кода проекции, он живёт в вебе.
             await bedolaga_client.set_ticket_status(ticket_id, "closed")
-            await sync_ticket(ticket_id)
             await callback.answer(f"Обращение #{ticket_id} закрыто")
 
         else:

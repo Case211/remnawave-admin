@@ -13,6 +13,10 @@
 Клиенту не сообщают, ЧТО именно увидел детектор: ни стран, ни числа устройств,
 ни скоринга. Это инструкция по обходу — человек просто разнесёт подключения.
 Наружу идут факт и последствие, подробности остаются в панели.
+
+Модуль живёт в shared, а не в вебе: предупреждает и бот — кнопкой под
+уведомлением и вместе с мерой, — а пакета web в его образе нет. Раньше такое
+предупреждение падало с «No module named 'web'», и клиенту не уходило ничего.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import json
 import logging
 from typing import Optional
 
-from web.backend.core.notice_markup import (
+from shared.notice_markup import (
     describe_issue,
     telegram_markup_issues,
     telegram_to_email_html,
@@ -131,6 +135,9 @@ def violation_kind(violation: dict) -> str:
         except ValueError:
             raw = None
     if isinstance(raw, dict):
+        # Расход трафика — не анализатор детектора, у записи своя метка
+        if "traffic_rate" in raw:
+            return "traffic_rate"
         breakdown = raw.get("breakdown") if isinstance(raw.get("breakdown"), dict) else raw
         dominant = dominant_analyzer(breakdown)
         if dominant in NOTICE_KINDS:
@@ -303,13 +310,10 @@ async def _deliver_via_bedolaga(
     Каналы — отдельными вызовами: текст бот кладёт и в Telegram, и в текстовую
     часть письма, а у Telegram в нём теги.
     """
-    from shared.bedolaga_client import bedolaga_client
-    from web.backend.api.v2.bedolaga import ensure_configured
+    from shared.bedolaga_client import bedolaga_client, ensure_configured
 
-    try:
-        ensure_configured()
-    except Exception as exc:  # noqa: BLE001 — Bedolaga не настроена
-        logger.info("Bedolaga не настроена — предупреждение %s без бота: %s", violation_id, exc)
+    if not ensure_configured():
+        logger.info("Bedolaga не настроена — предупреждение %s без бота", violation_id)
         return None, "bedolaga_not_configured"
 
     try:
@@ -350,15 +354,17 @@ async def _deliver_via_bedolaga(
 async def _send_own_email(to_email: str, subject: str, body_text: str, body_html: str) -> bool:
     """Письмо нашим почтовым сервером. False — сервер не настроен (нет домена отправки) или сбой."""
     try:
-        from web.backend.core.mail.mail_service import mail_service
+        from shared.mail_queue import send_email
 
-        queue_id = await mail_service.send_email(
+        queue_id = await send_email(
             to_email=to_email,
             subject=subject,
             body_text=body_text,
             body_html=body_html,
             category="violation_notice",
             priority=1,
+            # Клиента зовут ответить, если предупреждение ошибочное
+            reply_mailbox="support",
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Письмо-предупреждение нашим сервером не ушло: %s", exc)

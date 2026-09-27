@@ -79,26 +79,6 @@ async def suppress(email_addr: str, reason: str, detail: str = "",
         logger.error("Failed to suppress %s: %s", email_addr, e)
 
 
-async def is_suppressed(email_addr: str) -> bool:
-    """Стоит ли адрес в списке подавленных прямо сейчас.
-
-    Истёкшие мягкие отказы не считаются: строка остаётся ради истории, но
-    писать по адресу снова можно.
-    """
-    from shared.database import db_service
-    try:
-        async with db_service.acquire() as conn:
-            return bool(await conn.fetchval(
-                select_sql(EMAIL_SUPPRESSION_TABLE, "1",
-                    "WHERE lower(email) = lower($1) "
-                    "AND (expires_at IS NULL OR expires_at > NOW())"),
-                email_addr,
-            ))
-    except Exception:
-        # Недоступная база не повод молча проглотить письмо.
-        return False
-
-
 # ── Отказы в доставке ─────────────────────────────────────────────
 
 _STATUS_RE = re.compile(r"^Status:\s*([245])\.(\d+)\.(\d+)", re.MULTILINE | re.IGNORECASE)
