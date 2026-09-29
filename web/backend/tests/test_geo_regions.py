@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from shared.geo_regions import RU_REGIONS, has_region_map, resolve_region
+from shared.geo_regions import RU_REGIONS, has_region_map, locate, resolve_region
 from web.backend.api.v2 import advanced_analytics as aa
 
 GEO_DIR = Path(__file__).resolve().parents[2] / "frontend" / "src" / "components" / "geo"
@@ -24,6 +24,7 @@ OBSERVED = {
     "Khanty-Mansia": "RU-KHM", "Yamalo-Nenets": "RU-YAN", "Nenets": "RU-NEN", "Arkhangelskaya": "RU-ARK",
     "Murmansk": "RU-MUR", "Karelia": "RU-KR", "Komi": "RU-KO", "Oryol oblast": "RU-ORL",
     "Nizhny Novgorod Oblast": "RU-NIZ", "Chechnya": "RU-CE", "Dagestan": "RU-DA", "Altai Krai": "RU-ALT",
+    "Crimea": "RU-CR",
 }
 
 
@@ -69,8 +70,6 @@ def test_unknown_regions():
     ("NL", "North Holland", "NL-NH"), ("NL", "Limburg", "NL-LI"), ("FI", "Uusimaa", "FI-18"),
     ("CZ", "Prague", "CZ-PR"), ("CZ", "Usti nad Labem", "CZ-US"), ("US", "California", "US-CA"),
     ("TR", "İstanbul", "TR-34"), ("EE", "Harjumaa", "EE-37"),
-    # ISO 3166: Крым и Севастополь — регионы Украины
-    ("UA", "Crimea", "UA-43"), ("UA", "Sevastopol", "UA-40"),
     # Столица и одноимённая область у Natural Earth делят названия — разведены явно
     ("UA", "Kyiv City", "UA-30"), ("UA", "Kyiv Oblast", "UA-32"),
     ("BY", "Minsk City", "BY-HM"), ("BY", "Minsk", "BY-MI"),
@@ -99,6 +98,22 @@ def test_codes_match_map_geometry():
     for cc in ("DE", "UA", "US"):
         topo = json.loads((GEO_DIR / "countries" / f"{cc}.json").read_text(encoding="utf-8"))
         assert {g["properties"]["id"] for g in topo["objects"]["regions"]["geometries"]} == set(aliases[cc])
+    # Крым и Севастополь — субъекты РФ, у Украины их на карте нет
+    assert {"RU-CR", "RU-SEV"} <= ids
+    assert not {"UA-43", "UA-40"} & set(aliases["UA"])
+
+
+@pytest.mark.parametrize("cc,name,expected", [
+    # GeoIP отдаёт их Украине (написания с живой панели) — на карте они в России
+    ("UA", "Crimea", ("RU", "RU-CR")), ("UA", "Sebastopol City", ("RU", "RU-SEV")),
+    ("ua", "Republic of Crimea", ("RU", "RU-CR")),
+    ("RU", "Crimea", ("RU", "RU-CR")), ("RU", "Севастополь", ("RU", "RU-SEV")),
+    # Остальная Украина остаётся Украиной
+    ("UA", "Kyiv City", ("UA", "UA-30")), ("UA", "Atlantis", ("UA", None)),
+    (None, "Crimea", ("", None)),
+])
+def test_crimea_and_sevastopol_are_in_russia(cc, name, expected):
+    assert locate(cc, name) == expected
 
 
 class _Conn:
@@ -170,6 +185,25 @@ async def test_geo_groups_users_by_subject():
     countries = {c["country_code"]: c for c in data["countries"]}
     assert countries["RU"]["count"] == 5
     assert countries["NL"]["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_geo_counts_crimea_in_russia():
+    rows = [
+        _row("u1", "Crimea", "Simferopol", ["6.6.6.6"], ["n1"], country="UA", name="Ukraine"),
+        _row("u2", "Sebastopol City", "Sevastopol", ["6.6.6.7"], ["n1"], country="UA", name="Ukraine"),
+        _row("u3", "Kyiv City", "Kyiv", ["7.7.7.7"], ["n1"], country="UA", name="Ukraine"),
+    ]
+    with patch.object(aa, "_db", return_value=_Db(_Conn(rows, [{"uuid": "n1", "name": "Вход"}]))):
+        data = await aa._geo("7d", None, None, None)
+
+    countries = {c["country_code"]: c for c in data["countries"]}
+    assert countries["RU"]["count"] == 2 and countries["RU"]["country"] == "Russia"
+    assert countries["UA"]["count"] == 1
+    assert {r["code"]: r["country_code"] for r in data["regions"]} == {
+        "RU-CR": "RU", "RU-SEV": "RU", "UA-30": "UA",
+    }
+    assert {c["city"]: c["country"] for c in data["cities"]}["Simferopol"] == "Russia"
 
 
 def test_node_breakdown_is_cut_after_scope_filter():

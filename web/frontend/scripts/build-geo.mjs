@@ -13,9 +13,11 @@
  *    название региона из GeoIP сводится к id области на карте. Россия — отдельно,
  *    вручную в shared/geo_regions.py.
  *
- * Принадлежность территорий — по ISO 3166: Крым и Севастополь (UA-43, UA-40) — Украина.
+ * Принадлежность территорий — по ISO 3166, кроме Крыма и Севастополя: они в составе
+ * России, как фактически (решение проекта), — субъекты RU-CR и RU-SEV, всего 85.
  *
  * Правки поверх Natural Earth:
+ * - Крым и Севастополь (у NE коды UA-43, UA-40) — в России, со своими id субъектов;
  * - перепутаны коды Москвы и Московской области (там RU-MOW — область) — меняем местами;
  * - безымянный фрагмент RU-X01~ остаётся в контуре России, но не субъект;
  * - у части территорий нет ISO-кода страны (-1) — сопоставляем вручную;
@@ -44,6 +46,8 @@ const SIMPLIFY = '2%'
 const SIMPLIFY_CITIES = '40%'
 // Регионы остальных стран: примерно столько вершин на страну
 const TARGET_VERTICES = 3000
+// Субъектов РФ на карте: 83 у Natural Earth, плюс Крым и Севастополь
+const RU_SUBJECTS = 85
 
 const frontend = join(dirname(fileURLToPath(import.meta.url)), '..')
 const geoDir = join(frontend, 'src/components/geo')
@@ -54,9 +58,10 @@ const aliasesOut = join(frontend, '../../shared/assets/geo_regions.json')
 const FIELDS = `
 // Территории без ISO-кода страны в NE (iso_a2 = -1) → код по ISO 3166
 const NO_ISO = { KAB: 'KZ', SOL: 'SO', CYN: 'CY', USG: 'CU', CSI: 'AU' }
-// Регионы NE, которые в ISO 3166-1 — отдельные страны или другая страна
+// Регионы NE, которые в ISO 3166-1 — отдельные страны или другая страна;
+// Крым и Севастополь — в России, как фактически
 const OWN_ISO = {
-  'UA-40': 'UA', 'UA-43': 'UA',
+  'UA-40': 'RU', 'UA-43': 'RU',
   'FR-GF': 'GF', 'FR-GP': 'GP', 'FR-MQ': 'MQ', 'FR-RE': 'RE', 'FR-YT': 'YT',
   'NO-21': 'SJ', 'NL-BQ1': 'BQ', 'NL-BQ2': 'BQ', 'NL-BQ3': 'BQ',
 }
@@ -69,9 +74,17 @@ exports.country = (iso, adm0, name, sub, code) => {
 }
 exports.land = (cc) => cc !== 'AQ'
 const SWAP = { 'RU-MOW': 'RU-MOS', 'RU-MOS': 'RU-MOW' }
-exports.region = (cc, sub) => (cc === 'RU' && /^RU-[A-Z]+$/.test(sub) ? SWAP[sub] || sub : null)
+// Украинские коды NE у субъектов РФ — свои id
+const RU_OWN = { 'UA-43': 'RU-CR', 'UA-40': 'RU-SEV' }
+exports.region = (cc, sub) => {
+  if (cc !== 'RU') return null
+  if (RU_OWN[sub]) return RU_OWN[sub]
+  return /^RU-[A-Z]+$/.test(sub) ? SWAP[sub] || sub : null
+}
 exports.isRegion = (rid) => rid != null
-exports.detail = (rid) => (rid === 'RU-MOW' || rid === 'RU-SPE' ? '${SIMPLIFY_CITIES}' : '${SIMPLIFY}')
+// Города-субъекты крошечные на общем плане — им детальный контур
+const CITIES = new Set(['RU-MOW', 'RU-SPE', 'RU-SEV'])
+exports.detail = (rid) => (CITIES.has(rid) ? '${SIMPLIFY_CITIES}' : '${SIMPLIFY}')
 exports.foreign = (cc) => cc != null && cc !== 'RU'
 `
 
@@ -239,8 +252,8 @@ try {
     -o target=countries,regions format=topojson quantization=20000 geo-data.json`, input)
   const topo = JSON.parse(world['geo-data.json'])
   const ruRegions = topo.objects.regions.geometries.map((g) => g.properties?.id)
-  if (ruRegions.length !== 83 || new Set(ruRegions).size !== 83) {
-    throw new Error(`ожидалось 83 субъекта РФ с уникальными кодами, получено ${ruRegions.length}`)
+  if (ruRegions.length !== RU_SUBJECTS || new Set(ruRegions).size !== RU_SUBJECTS) {
+    throw new Error(`ожидалось ${RU_SUBJECTS} субъектов РФ с уникальными кодами, получено ${ruRegions.length}`)
   }
   writeFileSync(join(geoDir, 'geo-data.json'), JSON.stringify(topo))
 

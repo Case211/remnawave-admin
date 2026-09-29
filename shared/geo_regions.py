@@ -7,7 +7,9 @@
 по координатам не угадываем, у адреса без региона MaxMind ставит точку
 в центре страны, и такие юзеры все оказались бы в одной области.
 
-Субъекты РФ — вручную ниже (коды ISO 3166-2). Остальные страны — из
+Субъекты РФ — вручную ниже (коды ISO 3166-2). Крым и Севастополь — тоже
+субъекты РФ (RU-CR, RU-SEV), как фактически; GeoIP отдаёт их Украине, и
+``locate`` переносит такие адреса в Россию. Остальные страны — из
 shared/assets/geo_regions.json: его пишет вместе с геометрией карты
 web/frontend/scripts/build-geo.mjs (написания из Natural Earth, в том числе
 имена GeoNames — их отдаёт MaxMind), так что id совпадают с картой.
@@ -39,6 +41,8 @@ RU_REGIONS: Dict[str, Tuple[str, ...]] = {
     "RU-CHE": ("Chelyabinsk Oblast", "Челябинская область"),
     "RU-CHU": ("Chukotka", "Чукотский автономный округ", "Chukotka Autonomous Okrug",
                "Chukotskiy Avtonomnyy Okrug", "Чукотка"),
+    "RU-CR": ("Crimea", "Республика Крым", "Republic of Crimea", "Autonomous Republic of Crimea", "Krym",
+              "Respublika Krym", "Avtonomna Respublika Krym", "Крым"),
     "RU-CU": ("Chuvashia", "Чувашия", "Chuvash Republic", "Chuvashiya", "Чувашская Республика"),
     "RU-DA": ("Dagestan", "Дагестан", "Republic of Dagestan", "Республика Дагестан"),
     "RU-IN": ("Ingushetia", "Ингушетия", "Ingushetiya Republic", "Republic of Ingushetia",
@@ -96,6 +100,8 @@ RU_REGIONS: Dict[str, Tuple[str, ...]] = {
     "RU-SAR": ("Saratov Oblast", "Саратовская область"),
     "RU-SE": ("North Ossetia–Alania", "Северная Осетия — Алания", "North Ossetia", "North Ossetia-Alania",
               "Republic of North Ossetia-Alania", "Республика Северная Осетия — Алания", "Северная Осетия"),
+    "RU-SEV": ("Sevastopol", "Севастополь", "Sevastopol City", "City of Sevastopol", "Sebastopol",
+               "Sebastopol City", "Misto Sevastopol", "город Севастополь"),
     "RU-SMO": ("Smolensk Oblast", "Смоленская область"),
     "RU-SPE": ("Saint Petersburg", "Санкт-Петербург", "St.-Petersburg", "St Petersburg", "Sankt-Peterburg",
                "Petersburg", "Петербург"),
@@ -190,3 +196,21 @@ def resolve_region(country_code: Optional[str], region: Optional[str]) -> Option
     exact, loose = tables
     key = _norm(region)
     return exact.get(key) or loose.get(_strip(key))
+
+
+# Субъекты РФ, которые GeoIP (MaxMind и др.) отдаёт Украине
+_FROM_UA = frozenset({"RU-CR", "RU-SEV"})
+
+
+def locate(country_code: Optional[str], region: Optional[str]) -> Tuple[str, Optional[str]]:
+    """(Код страны, id области на карте) для адреса из GeoIP; id None — регион не узнали.
+
+    Крым и Севастополь переносятся в Россию и на карте мира, и в субъектах —
+    иначе юзеры оттуда считались бы в Украине.
+    """
+    cc = (country_code or "").upper()
+    if cc == "UA":
+        code = resolve_region("RU", region)
+        if code in _FROM_UA:
+            return "RU", code
+    return cc, resolve_region(cc, region)

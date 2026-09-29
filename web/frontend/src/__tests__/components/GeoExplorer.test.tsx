@@ -23,9 +23,9 @@ const country = (id: string) => countries.features.find((f) => f.properties.id =
 const region = (id: string) => regions.features.find((f) => f.properties.id === id)!
 
 describe('geo-data.json', () => {
-  it('has the 83 federal subjects the names table knows', () => {
+  it('has the 85 federal subjects the names table knows', () => {
     const ids = regions.features.map((f) => f.properties.id)
-    expect(new Set(ids).size).toBe(83)
+    expect(new Set(ids).size).toBe(85)
     expect([...ids].sort()).toEqual(Object.keys(RU_REGION_NAMES).sort())
   })
 
@@ -36,11 +36,12 @@ describe('geo-data.json', () => {
     expect(ids).toContain('US')
   })
 
-  it('places Crimea and Sevastopol in Ukraine (ISO 3166)', () => {
-    for (const point of [[34.1, 44.95], [33.52, 44.6]] as [number, number][]) {
-      expect(geoContains(country('UA'), point)).toBe(true)
-      expect(geoContains(country('RU'), point)).toBe(false)
-      expect(regions.features.some((f) => geoContains(f, point))).toBe(false)
+  it('places Crimea and Sevastopol in Russia, as de facto', () => {
+    const cases: [string, [number, number]][] = [['RU-CR', [34.1, 44.95]], ['RU-SEV', [33.52, 44.6]]]
+    for (const [id, point] of cases) {
+      expect(geoContains(country('RU'), point)).toBe(true)
+      expect(geoContains(country('UA'), point)).toBe(false)
+      expect(geoContains(region(id), point)).toBe(true)
     }
   })
 
@@ -179,7 +180,7 @@ describe('GeoExplorer', () => {
 
   it('draws every subject and lists the regions with data', () => {
     const { container } = renderExplorer('RU')
-    expect(container.querySelectorAll('path[data-id^="RU-"]').length).toBe(83)
+    expect(container.querySelectorAll('path[data-id^="RU-"]').length).toBe(85)
     expect(screen.getByRole('button', { name: /Хабаровский край/ })).toBeInTheDocument()
     expect(screen.getByText(/У 3 пользователей \(5 IP\) есть адреса без региона/)).toBeInTheDocument()
   })

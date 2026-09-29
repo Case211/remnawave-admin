@@ -1,6 +1,7 @@
 /**
  * Названия субъектов РФ по коду ISO 3166-2 — тем же, что у геометрии карты
- * (geo-data.json) и у бэкенда (shared/geo_regions.py).
+ * (geo-data.json) и у бэкенда (shared/geo_regions.py). Крым и Севастополь,
+ * у которых в ISO 3166-2 российских кодов нет, — RU-CR и RU-SEV.
  */
 export const RU_REGION_NAMES: Record<string, readonly [ru: string, en: string]> = {
   'RU-AD': ['Адыгея', 'Adygea'],
@@ -16,6 +17,7 @@ export const RU_REGION_NAMES: Record<string, readonly [ru: string, en: string]> 
   'RU-CE': ['Чечня', 'Chechnya'],
   'RU-CHE': ['Челябинская область', 'Chelyabinsk Oblast'],
   'RU-CHU': ['Чукотский АО', 'Chukotka'],
+  'RU-CR': ['Республика Крым', 'Crimea'],
   'RU-CU': ['Чувашия', 'Chuvashia'],
   'RU-DA': ['Дагестан', 'Dagestan'],
   'RU-IN': ['Ингушетия', 'Ingushetia'],
@@ -65,6 +67,7 @@ export const RU_REGION_NAMES: Record<string, readonly [ru: string, en: string]> 
   'RU-SAM': ['Самарская область', 'Samara Oblast'],
   'RU-SAR': ['Саратовская область', 'Saratov Oblast'],
   'RU-SE': ['Северная Осетия', 'North Ossetia'],
+  'RU-SEV': ['Севастополь', 'Sevastopol'],
   'RU-SMO': ['Смоленская область', 'Smolensk Oblast'],
   'RU-SPE': ['Санкт-Петербург', 'Saint Petersburg'],
   'RU-STA': ['Ставропольский край', 'Stavropol Krai'],

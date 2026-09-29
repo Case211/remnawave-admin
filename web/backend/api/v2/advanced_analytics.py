@@ -150,7 +150,7 @@ def _geo_visible_nodes(data: Dict[str, Any], node_scope: Optional[List[str]]) ->
 
 async def _geo(period: str, date_from: Optional[str], date_to: Optional[str],
                scope: Optional[List[str]]) -> Dict[str, Any]:
-    from shared.geo_regions import has_region_map, resolve_region
+    from shared.geo_regions import has_region_map, locate
 
     db_service = _db()
     since, until = _bounds(period, date_from, date_to)
@@ -199,18 +199,20 @@ async def _geo(period: str, date_from: Optional[str], date_to: Optional[str],
     unknown: Dict[str, Dict[str, set]] = {}
     for r in rows:
         ips = [str(ip) for ip in (r["ips"] or [])]
+        # Крым и Севастополь GeoIP отдаёт Украине, а на карте они в России
+        cc, code = locate(r["country_code"], r["region"])
+        country_name = "Russia" if cc != (r["country_code"] or "").upper() else r["country_name"]
         # По коду, а не имени: провайдеры GeoIP пишут «Russia» и «Russian Federation»
-        c = countries.setdefault((r["country_code"] or r["country_name"]).upper(), {
-            "country": r["country_name"], "country_code": r["country_code"],
+        c = countries.setdefault((cc or country_name).upper(), {
+            "country": country_name, "country_code": cc or None,
             "users": set(), "ips": set(),
         })
         c["users"].add(r["uuid"])
         c["ips"].update(ips)
 
-        code = resolve_region(r["country_code"], r["region"])
         if code:
             reg = regions.setdefault(code, {
-                "code": code, "country_code": r["country_code"], "ips": set(), "users": {},
+                "code": code, "country_code": cc, "ips": set(), "users": {},
                 "cities": defaultdict(lambda: {"city": None, "users": set()}),
                 "nodes": defaultdict(set),
             })
@@ -226,18 +228,18 @@ async def _geo(period: str, date_from: Optional[str], date_to: Optional[str],
                 reg_city["users"].add(r["uuid"])
             for node in r["nodes"] or []:
                 reg["nodes"][str(node)].add(r["uuid"])
-        elif has_region_map(r["country_code"]):
-            unk = unknown.setdefault(r["country_code"], {"users": set(), "ips": set()})
+        elif has_region_map(cc):
+            unk = unknown.setdefault(cc, {"users": set(), "ips": set()})
             unk["users"].add(r["uuid"])
             unk["ips"].update(ips)
 
         if not r["city"] or r["latitude"] is None or r["longitude"] is None:
             continue
-        key = (_normalize_city_name(r["city"]), r["country_name"])
+        key = (_normalize_city_name(r["city"]), country_name)
         city = cities.get(key)
         if city is None:
             city = cities[key] = {
-                "city": r["city"], "country": r["country_name"],
+                "city": r["city"], "country": country_name,
                 "lat_sum": 0.0, "lon_sum": 0.0, "weight": 0,
                 "ips": set(), "users": {},
             }
