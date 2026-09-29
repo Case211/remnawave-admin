@@ -10,7 +10,12 @@ import pytest
 from shared.mail_queue import TRANSACTIONAL_CATEGORIES, suppression_applies
 from web.backend.core.mail.outbound_queue import OutboundMailQueue
 from web.backend.core.mail.processor import unsubscribe_sender
-from web.backend.core.mail.submission_server import sender_domain_allowed
+from web.backend.core.mail.submission_server import (
+    SUBMISSION_BULK_CATEGORY,
+    SUBMISSION_CATEGORY,
+    sender_domain_allowed,
+    submission_category,
+)
 
 
 class TestUnsubscribeSender:
@@ -98,6 +103,35 @@ class TestSuppressionScope:
         # человеку — личные: отписка от рассылок не должна их глушить.
         assert suppression_applies("unsubscribe", "violation_notice") is False
         assert suppression_applies("unsubscribe", "manual") is False
+
+
+def _submitted(headers: str):
+    import email
+    return email.message_from_string(f"From: a@mail.example\nSubject: s\n{headers}\nbody\n")
+
+
+class TestSubmissionCategory:
+    def test_plain_message_is_personal(self):
+        assert submission_category(_submitted("")) == SUBMISSION_CATEGORY
+
+    def test_precedence_marks_a_mailing(self):
+        for value in ("bulk", "list", "Bulk ", "junk"):
+            assert submission_category(_submitted(f"Precedence: {value}\n")) == SUBMISSION_BULK_CATEGORY
+
+    def test_other_precedence_is_personal(self):
+        assert submission_category(_submitted("Precedence: first-class\n")) == SUBMISSION_CATEGORY
+
+    def test_list_headers_mark_a_mailing(self):
+        assert submission_category(
+            _submitted("List-Id: <promo.mail.example>\n")) == SUBMISSION_BULK_CATEGORY
+        assert submission_category(
+            _submitted("List-Unsubscribe: <mailto:u@mail.example>\n")) == SUBMISSION_BULK_CATEGORY
+
+    def test_unsubscribe_blocks_submitted_mailing_but_not_personal_mail(self):
+        assert suppression_applies("unsubscribe", SUBMISSION_BULK_CATEGORY) is True
+        assert suppression_applies("unsubscribe", SUBMISSION_CATEGORY) is False
+        assert SUBMISSION_CATEGORY in TRANSACTIONAL_CATEGORIES
+        assert SUBMISSION_BULK_CATEGORY not in TRANSACTIONAL_CATEGORIES
 
 
 class TestSenderDomainAllowed:

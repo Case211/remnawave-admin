@@ -210,6 +210,31 @@ class SubmissionAuthenticator:
             logger.debug("Failed to update last login for credential %d: %s", cred_id, e)
 
 
+# Категории писем, ретранслированных через submission. Личное письмо (код,
+# ссылка, ответ) отписка не блокирует; рассылку — блокирует.
+SUBMISSION_CATEGORY = "smtp_submission"
+SUBMISSION_BULK_CATEGORY = "smtp_submission_bulk"
+
+_BULK_PRECEDENCE = frozenset({"bulk", "list", "junk"})
+
+
+def submission_category(msg) -> str:
+    """Рассылка это или личное письмо — по заголовкам самого письма.
+
+    Внешний клиент шлёт через submission и коды подтверждения, и промо.
+    Отличить одно от другого может только отправитель, и способ для этого
+    давно есть: рассылка помечается ``Precedence: bulk`` (или ``list``),
+    ``List-Id`` либо собственным ``List-Unsubscribe``. Письмо без этих
+    заголовков считается личным.
+    """
+    precedence = str(msg.get("Precedence", "") or "").strip().lower()
+    if precedence in _BULK_PRECEDENCE:
+        return SUBMISSION_BULK_CATEGORY
+    if msg.get("List-Id") or msg.get("List-Unsubscribe"):
+        return SUBMISSION_BULK_CATEGORY
+    return SUBMISSION_CATEGORY
+
+
 def sender_domain_allowed(address: str, allowed_domains) -> bool:
     """Подходит ли домен адреса под ограничение учётки (пустой список — любой)."""
     if not allowed_domains:
@@ -301,6 +326,7 @@ class SubmissionHandler:
             username = getattr(session, "smtp_username", "unknown")
             attempted = len(envelope.rcpt_tos)
             queued = 0
+            category = submission_category(msg)
             for rcpt in envelope.rcpt_tos:
                 queue_id = await outbound_queue.enqueue(
                     from_email=from_email,
@@ -309,7 +335,7 @@ class SubmissionHandler:
                     body_text=body_text or None,
                     body_html=body_html or None,
                     from_name=from_name or None,
-                    category="smtp_submission",
+                    category=category,
                 )
                 if queue_id:
                     queued += 1
