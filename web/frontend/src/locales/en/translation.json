@@ -5632,6 +5632,10 @@
         "label": "Remind this many days ahead",
         "description": "Comma-separated list of days before the charge (for example 7,3,1). Overdue payments are always reminded about"
       },
+      "finance_reminder_hour": {
+        "label": "Reminder hour",
+        "description": "Hour of the day (0–23) from which the daily reminders are sent. Both the hour and the day itself follow the panel time zone, not UTC"
+      },
       "finance_autosync_enabled": {
         "label": "Auto-sync hosting provider APIs",
         "description": "Periodically pull balance and services from connected hosting provider APIs"

@@ -358,6 +358,7 @@ Infrastructure spending and income: reporting currency, exchange rates, payment 
 | **Auto-update exchange rates** | `finance_rates_auto_update` | `true` | Refresh rates once a day (CBR, falling back to open.er-api.com). Manually edited rates are left alone |
 | **Payment reminders** | `finance_reminders_enabled` | `true` | Send notifications about upcoming and overdue payments to Telegram and the panel |
 | **Remind this many days ahead** | `finance_reminder_days` | `7,3,1` | Comma-separated list of days before the charge (for example 7,3,1). Overdue payments are always reminded about |
+| **Reminder hour** | `finance_reminder_hour` | `10` | Hour of the day (0–23) from which the daily reminders are sent. Both the hour and the day itself follow the panel time zone, not UTC |
 | **Auto-sync hosting provider APIs** | `finance_autosync_enabled` | `true` | Periodically pull balance and services from connected hosting provider APIs |
 | **Auto-sync interval (hours)** | `finance_autosync_interval_hours` | `6` | How often to poll provider APIs for balance, services and charge dates |
 | **Pull charge dates** | `finance_autosync_update_due_dates` | `true` | Update next_due_at from provider data, matching services by name within a provider |
