@@ -12,11 +12,13 @@ The panel stays the source of data: it decides whom to warn and about what, and 
 | Bedolaga bot | 4.16.0 or newer | the `POST /users/{id}/notify` sending endpoint and the cabinet endpoints for the banner |
 | Bedolaga cabinet | with violations support | the customer banner and the operator tab — the changes are in [PR #613](https://github.com/BEDOLAGA-DEV/bedolaga-cabinet/pull/613), awaiting review |
 
-Warnings in Telegram and by email work without the cabinet: it is only needed for the banner and the tab.
+## Step 1. Connect the panel and the bot
 
-## Step 1. Connect the panel to the bot
+The connection goes both ways: the panel sends warnings through the bot, and the bot asks the panel for the verdict and the history to show them in the cabinet.
 
-The panel talks to the bot's external API (Web API). The same connection is used by the Tickets section and the Bedolaga customer cards — if they already work for you, go to step 2.
+### Panel → bot
+
+The panel talks to the bot's external API (Web API). The same connection is used by the Tickets section and the Bedolaga customer cards — if they already work for you, this half is done.
 
 **Bot** `.env`:
 
@@ -36,7 +38,29 @@ BEDOLAGA_API_TOKEN=a-long-random-string   # the same token
 
 If the bot and the panel share a docker network, the address can be internal: `http://remnawave_bot:8080`.
 
-Apply: `docker compose up -d bot` for the bot, `docker compose up -d` for the panel.
+### Bot → panel
+
+1. **Enable the panel's external API** — in its `.env`:
+
+   ```bash
+   EXTERNAL_API_ENABLED=true
+   ```
+
+2. **Create a key.** **API & Webhooks → API keys → Create**, scope — **only `violations:read`**: the bot only reads the verdict and the history. Leave the allowed addresses empty or enter the bot server's address.
+3. **Configure the bot** `.env`:
+
+   ```bash
+   ABUSE_API_ENABLED=true
+   ABUSE_API_URL=https://panel.example.com/api/v3
+   ABUSE_API_KEY=rwa_…
+   ABUSE_API_TIMEOUT=5
+   ```
+
+This half is used by the cabinet: without it warnings still go out, but the banner and the operator tab have nothing to show. The cabinet itself never calls the panel — its frontend runs in the customer's browser, and a key that ended up there would be the customer's. The key lives only on the bot's server.
+
+### Apply
+
+`docker compose up -d bot` for the bot, `docker compose up -d` for the panel.
 
 ::: tip up -d, not restart
 Variables from `.env` get into a container only when it is created. `restart` starts the old container with the old values, `up -d` recreates it with the new ones.
@@ -64,24 +88,13 @@ Telegram markup, the email and previews are covered in [Client warnings](/en/gui
 - Channels are independent: a customer who blocked the bot still gets the email.
 - The “customer was warned” mark is set only if at least one channel delivered. Sending again for the same violation happens only explicitly.
 
-## Step 4. Banner and tab in the cabinet
+## Banner and tab in the cabinet
 
-This step is optional. The cabinet shows the customer the latest warning, and the operator the verdict and the history. The cabinet never calls the panel itself: the bot asks it, with a key that lives only on the bot's server.
+They appear once the cabinet is updated to a version with violations support, provided the “bot → panel” connection is set up.
 
-1. **Enable the panel's external API.** `EXTERNAL_API_ENABLED=true` in the panel `.env`, then `docker compose up -d web-backend`.
-2. **Create a key.** **API & Webhooks → API keys → Create**, scope — **only `violations:read`**. Leave the allowed addresses empty or enter the bot server's address.
-3. **Configure the bot** `.env` and recreate its container — `docker compose up -d bot`:
+**The customer** gets a banner on the home screen with exactly the warning they were sent and a button to contact support. The customer sees no history, no scores and no violation types: that data is not in the response their browser receives.
 
-   ```bash
-   ABUSE_API_ENABLED=true
-   ABUSE_API_URL=https://panel.example.com/api/v3
-   ABUSE_API_KEY=rwa_…
-   ABUSE_API_TIMEOUT=5
-   ```
-
-4. **Update the cabinet** to a version with violations support.
-
-**What appears.** The customer gets a banner on the home screen with exactly the warning they were sent and a button to contact support. The operator gets a “Flagged” or “Limited” chip next to the name in the customer card and an “Abuse” tab; the `users:read` permission is enough.
+**The operator** gets a “Flagged” or “Limited” chip next to the name in the customer card and an “Abuse” tab with the history; the `users:read` permission is enough.
 
 **When there is no banner:**
 
@@ -92,7 +105,9 @@ This step is optional. The cabinet shows the customer the latest warning, and th
 
 ## Checking
 
-The bot-to-panel connection is checked with a single request from the bot's server:
+**Panel → bot.** The Tickets section shows customer tickets — the connection works.
+
+**Bot → panel.** A single request from the bot's server:
 
 ```bash
 curl -s -H "X-API-Key: rwa_…" "https://panel.example.com/api/v3/violations/summary?telegram_id=1"
@@ -110,7 +125,7 @@ If a warning did not go out, the panel names the reason:
 
 | Reason | What to do |
 |--------|------------|
-| “The Bedolaga bot rejected the warning” | the bot is older than 4.16.0 or unavailable — update it and check step 1 |
+| “The Bedolaga bot rejected the warning” | the bot is older than 4.16.0 or unavailable — update it and check the “panel → bot” connection |
 | “The customer is not found in the Bedolaga bot” | the customer was created in the panel bypassing the bot, and there is no email: no address or Email is off in the template — add an email to the customer in the panel |
 | “The customer's email is not confirmed and Telegram is unavailable” | ask the customer to confirm the email in the cabinet |
 | “Nothing to deliver with” | the customer has no contacts for the channels checked in the template — enable the second channel in the template |
