@@ -128,6 +128,7 @@ async def check_and_send_reminders() -> int:
                 severity=severity,
                 source="finance",
                 source_id=str(item["id"]),
+                link="/finance",
                 group_key=f"finance:{item['id']}",
                 channels=["telegram", "in_app"],
                 topic_type="finance",

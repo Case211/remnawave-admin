@@ -64,7 +64,7 @@ async def _notify_new_mail(from_header: str, subject: str, rcpt: str) -> None:
             channels=["in_app", "telegram"],
             topic_type="service",
             source="mailserver",
-            link="/admin/mail-server",
+            link="/mailserver",
             # Поток писем от одного отправителя схлопывается в одно
             # уведомление: рассылка на десяток адресов не должна звонить
             # десять раз.

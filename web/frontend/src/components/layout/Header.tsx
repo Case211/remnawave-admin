@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { usePermissionStore } from '@/store/permissionStore'
 import { notificationsApi, type Notification } from '@/api/notifications'
 import { cn } from '@/lib/utils'
+import { useOpenNotification } from '@/lib/useOpenNotification'
 import client from '@/api/client'
 import { toast } from 'sonner'
 
@@ -42,6 +43,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
   const queryClient = useQueryClient()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const openNotification = useOpenNotification()
 
   // Unread count
   const { data: unreadData } = useQuery({
@@ -268,10 +270,8 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
                       <button
                         key={n.id}
                         onClick={() => {
-                          if (n.link) {
-                            navigate(n.link)
-                            setDropdownOpen(false)
-                          }
+                          openNotification(n, '/notifications')
+                          setDropdownOpen(false)
                         }}
                         className={cn(
                           'w-full text-left px-4 py-3 hover:bg-[var(--glass-bg-hover)] transition-all border-l-2',

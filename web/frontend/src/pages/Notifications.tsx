@@ -7,7 +7,8 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTabParam } from '@/lib/useTabParam'
-import { Link, useNavigate } from 'react-router-dom'
+import { useOpenNotification } from '@/lib/useOpenNotification'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -103,7 +104,7 @@ export default function Notifications() {
 function NotificationsTab() {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
-  const navigate = useNavigate()
+  const openNotification = useOpenNotification()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [filterRead, setFilterRead] = useState<string>('all')
@@ -239,10 +240,10 @@ function NotificationsTab() {
               {items.map((n) => (
                 <div
                   key={n.id}
-                  onClick={() => { if (n.link) navigate(n.link) }}
+                  onClick={() => openNotification(n)}
                   className={cn(
                     'flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-l-2 hover:bg-[var(--glass-bg-hover)]/30 transition-colors',
-                    n.link && 'cursor-pointer',
+                    (n.link || !n.is_read) && 'cursor-pointer',
                     n.is_read ? 'border-l-transparent opacity-60' : `border-l-2 ${n.severity === 'critical' ? 'border-l-red-500' : n.severity === 'warning' ? 'border-l-yellow-500' : 'border-l-cyan-500'}`,
                   )}
                 >

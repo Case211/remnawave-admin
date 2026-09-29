@@ -463,6 +463,7 @@ class TrafficRateMonitor:
                 severity="warning",
                 source="traffic_rate_monitor",
                 source_id=user_uuid,
+                link=f"/users/{user_uuid}",
                 group_key=f"traffic_rate:{user_uuid}",
                 channels=["telegram", "in_app", "push"],
                 topic_type="violations",

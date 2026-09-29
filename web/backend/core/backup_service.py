@@ -553,6 +553,7 @@ async def _notify_backup_failed(title: str, body: str, group_key: str = "backup_
             topic_type="errors",
             source="backup",
             group_key=group_key,
+            link="/backups",
         )
     except Exception as exc:
         logger.warning("Failed to send backup alert: %s", exc)

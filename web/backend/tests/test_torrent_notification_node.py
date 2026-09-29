@@ -17,6 +17,10 @@ def _config():
 
 
 async def _send(**kwargs) -> str:
+    return (await _notify(**kwargs))["telegram_body"]
+
+
+async def _notify(**kwargs) -> dict:
     vn._violation_notification_cache.clear()
     notify = AsyncMock()
     db = MagicMock()
@@ -34,7 +38,13 @@ async def _send(**kwargs) -> str:
             **kwargs,
         )
     assert notify.await_count == 1
-    return notify.call_args.kwargs["telegram_body"]
+    return notify.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_opens_user_card_from_admin():
+    # Без ссылки клик по уведомлению в колокольчике не делал ничего
+    assert (await _notify())["link"] == "/users/11111111-1111-1111-1111-111111111111"
 
 
 @pytest.mark.asyncio

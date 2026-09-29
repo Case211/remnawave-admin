@@ -107,6 +107,8 @@ class TestSendViolationNotification:
         assert call_kwargs.kwargs["severity"] == "warning"
         assert call_kwargs.kwargs["source"] == "collector"
         assert call_kwargs.kwargs["source_id"] == "uuid-123"
+        # клик по уведомлению в админке ведёт в карточку юзера
+        assert call_kwargs.kwargs["link"] == "/users/uuid-123"
 
         # Check throttle cache updated
         assert "uuid-123" in _violation_notification_cache

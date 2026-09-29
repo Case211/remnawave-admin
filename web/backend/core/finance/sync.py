@@ -71,6 +71,7 @@ async def _maybe_alert_low_balance(account: Dict[str, Any], balance: float, curr
             severity="warning",
             source="finance",
             source_id=str(account["id"]),
+            link="/finance",
             group_key=f"finance:balance:{account['id']}",
             channels=["telegram", "in_app"],
             topic_type="finance",

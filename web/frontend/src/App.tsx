@@ -104,6 +104,8 @@ function ProtectedShell() {
             <Route path="/dns" element={<Dns />} />
             <Route path="/bscheck" element={<BsCheck />} />
             <Route path="/billing" element={<Navigate to="/finance" replace />} />
+            {/* Сюда вели уведомления о новых письмах, пока ссылка была неверной */}
+            <Route path="/admin/mail-server" element={<Navigate to="/mailserver" replace />} />
             <Route path="/backups" element={<Backup />} />
             <Route path="/support" element={<Support />} />
             <Route path="/api-keys" element={<ApiKeys />} />
