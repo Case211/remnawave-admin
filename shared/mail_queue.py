@@ -15,12 +15,17 @@ from shared.db_schema import DOMAIN_CONFIG_TABLE, EMAIL_QUEUE_TABLE, EMAIL_SUPPR
 logger = logging.getLogger(__name__)
 
 
-# Письма, которые человек ждёт, а не получает рассылкой: коды и ссылки,
-# ретранслированные через submission, ответы на его же обращения, проверка
-# настроек, уведомления (в т.ч. сброс пароля). Отписка (List-Unsubscribe)
-# относится к рассылкам и такие письма не блокирует; жёсткий отказ доставки
-# (bounce) блокирует всё — туда писать бесполезно в любом случае.
-TRANSACTIONAL_CATEGORIES = frozenset({"smtp_submission", "reply", "test", "notification"})
+# Письма, которые адресованы лично человеку, а не приходят рассылкой: коды и
+# ссылки, ретранслированные через submission, ответы на его же обращения,
+# письмо администратора конкретному адресату (manual), предупреждение перед
+# мерой (violation_notice — отписавшийся иначе не узнает, что к нему применят
+# ограничение), проверка настроек, уведомления (в т.ч. сброс пароля).
+# Отписка (List-Unsubscribe) относится к рассылкам и такие письма не
+# блокирует; жёсткий отказ доставки (bounce) блокирует всё — туда писать
+# бесполезно в любом случае.
+TRANSACTIONAL_CATEGORIES = frozenset({
+    "smtp_submission", "reply", "manual", "violation_notice", "test", "notification",
+})
 
 
 def suppression_applies(reason: Optional[str], category: Optional[str]) -> bool:

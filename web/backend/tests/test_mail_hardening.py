@@ -22,8 +22,30 @@ class TestUnsubscribeSender:
 
     def test_address_is_normalised(self):
         assert unsubscribe_sender(
-            " User@Example.org ", "", spf="none", dkim="pass", dmarc="none", is_spam=False,
+            " User@Example.org ", "", spf="none", dkim="pass", dmarc="pass", is_spam=False,
         ) == "user@example.org"
+
+    def test_aligned_dkim_via_dmarc_is_accepted(self):
+        # SPF не прошёл (пересылка), но DMARC pass — значит, есть выровненная подпись.
+        assert unsubscribe_sender(
+            "user@example.org", "user@example.org",
+            spf="softfail", dkim="pass", dmarc="pass", is_spam=False,
+        ) == "user@example.org"
+
+    def test_dkim_of_a_foreign_domain_does_not_authenticate_the_sender(self):
+        # Envelope и From — адрес жертвы, подпись — d=attacker.example. DKIM pass
+        # ставится за любую валидную подпись; у домена жертвы SPF ~all и DMARC
+        # p=none, так что письмо не набирает порог подозрительного.
+        assert unsubscribe_sender(
+            "victim@example.org", "victim@example.org",
+            spf="softfail", dkim="pass", dmarc="fail", is_spam=False,
+        ) is None
+
+    def test_dkim_pass_alone_is_not_enough(self):
+        assert unsubscribe_sender(
+            "victim@example.org", "victim@example.org",
+            spf="none", dkim="pass", dmarc="none", is_spam=False,
+        ) is None
 
     def test_forged_envelope_without_authentication_is_ignored(self):
         # Любой сервер может назвать чужой MAIL FROM — без SPF/DKIM/DMARC pass не верим.
@@ -70,6 +92,12 @@ class TestSuppressionScope:
         assert suppression_applies("unsubscribe", None) is True
         for category in TRANSACTIONAL_CATEGORIES:
             assert suppression_applies("unsubscribe", category) is False
+
+    def test_personal_mail_is_not_a_mailing(self):
+        # Предупреждение перед мерой и письмо администратора конкретному
+        # человеку — личные: отписка от рассылок не должна их глушить.
+        assert suppression_applies("unsubscribe", "violation_notice") is False
+        assert suppression_applies("unsubscribe", "manual") is False
 
 
 class TestSenderDomainAllowed:

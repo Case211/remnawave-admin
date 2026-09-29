@@ -332,9 +332,16 @@ def unsubscribe_sender(mail_from: str, from_header: str, spf: str, dkim: str,
 
     Envelope ``MAIL FROM`` — строка, которую отправляющий сервер называет сам:
     любой может прислать письмо «от» чужого адреса и тем самым занести его в
-    подавленные. Поэтому отписка принимается только когда письмо прошло
-    аутентификацию (SPF, DKIM или DMARC ``pass``), не помечено подозрительным
-    и домен заголовка ``From`` совпадает с envelope-доменом.
+    подавленные. Поэтому отписка принимается только когда результат проверки
+    привязан к домену отправителя: SPF ``pass`` (сервер разрешён для
+    envelope-домена) или DMARC ``pass`` (есть выровненный SPF или DKIM для
+    ``From``), письмо не помечено подозрительным и домен заголовка ``From``
+    совпадает с envelope-доменом.
+
+    Сам по себе DKIM ``pass`` не годится: он ставится за валидную подпись
+    любого домена, ``d=`` с отправителем не сверяется. Письмо «от» чужого
+    адреса с подписью своего домена иначе прошло бы — у доменов с SPF
+    ``~all`` и DMARC ``p=none`` оно не набирает порог подозрительного.
     """
     from email.utils import parseaddr
 
@@ -343,7 +350,7 @@ def unsubscribe_sender(mail_from: str, from_header: str, spf: str, dkim: str,
         return None
     if is_spam:
         return None
-    if "pass" not in (spf or "", dkim or "", dmarc or ""):
+    if spf != "pass" and dmarc != "pass":
         return None
     header_addr = parseaddr(from_header or "")[1].strip().lower()
     if header_addr and "@" in header_addr:
