@@ -337,7 +337,8 @@ export interface NoticeResult {
 
 const NOTICE_REASONS = new Set([
   'no_violation', 'no_recipient', 'already_notified', 'no_template', 'no_channel',
-  'bedolaga_not_configured', 'user_not_found', 'delivery_failed', 'mail_failed', 'not_delivered',
+  'bedolaga_not_configured', 'user_not_found', 'delivery_failed', 'mail_failed', 'email_not_verified',
+  'not_delivered',
 ])
 
 /** Что сказать оператору после попытки предупредить: успех или понятная причина отказа. */

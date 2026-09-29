@@ -246,15 +246,20 @@ async def send_notice(
     telegram_ok = bool(((result or {}).get("telegram") or {}).get("sent"))
     email_ok = bool(((result or {}).get("email") or {}).get("sent"))
     email_result = (result or {}).get("email")
+    # Клиент не подтвердил почту: адрес мог оказаться чужим, и письмо о нарушении
+    # туда не уходит — ни от бота, ни от нас. В панели та же почта, что и в боте.
+    email_unverified = (email_result or {}).get("reason") == "email_not_verified"
 
     # Письмо бот не доставил (не настроен, без ручки /notify, клиента не нашёл,
     # у клиента в боте нет почты) — отправляем своим почтовым сервером.
-    if want_email and not email_ok:
+    if want_email and not email_ok and not email_unverified:
         if await _send_own_email(email, subject, plain, email_html):
             email_ok = True
             email_result = {"sent": True, "via": "mail_server"}
         elif not telegram_ok:
             reason = "mail_failed"
+    elif email_unverified and not telegram_ok:
+        reason = "email_not_verified"
 
     delivered = [name for name, ok in (("telegram", telegram_ok), ("email", email_ok)) if ok]
 
@@ -342,7 +347,7 @@ async def _deliver_via_bedolaga(
     for channel, payload in calls:
         try:
             answer = await bedolaga_client.notify_user(bot_user_id, **payload)
-        except Exception as exc:  # noqa: BLE001 — бот недоступен или без ручки /notify (#3270)
+        except Exception as exc:  # noqa: BLE001 — бот недоступен или старше 4.16.0 (без ручки /notify)
             logger.warning("Предупреждение по нарушению %s ботом не доставлено (%s): %s", violation_id, channel, exc)
             continue
         result[channel] = (answer or {}).get(channel)

@@ -156,9 +156,11 @@ Sending requires the `violations:resolve` permission — the same as blocking: t
 
 Telegram goes through the Bedolaga bot — the same bot the customer already talks to. Email goes through it too, and if the bot did not deliver it (not connected, did not find the customer, the customer has no email in the bot), it is sent by the panel's **built-in mail server**, provided a sending domain is set up. Any customer with an email gets the letter, whether they have Telegram or not.
 
+The exception is an **unconfirmed email**. The bot does not write to such an address: anyone could have entered it, and the violation letter would reach a stranger. The panel does not send this letter either — it holds the same email as the bot. If there are no other channels, the operator sees the reason "email not confirmed".
+
 Channels report separately: a customer who blocked the bot still gets the email. If the customer has no contacts for the enabled channels, the warning is not sent, and the operator sees why.
 
-Telegram requires a bot with the `POST /users/{id}/notify` endpoint in its external API and `BEDOLAGA_API_URL` with `BEDOLAGA_API_TOKEN` filled in — the same ones tickets and customer cards work with.
+Telegram requires Bedolaga bot 4.16.0 or newer — that release added the `POST /users/{id}/notify` external API endpoint — and `BEDOLAGA_API_URL` with `BEDOLAGA_API_TOKEN` filled in, the same ones tickets and customer cards work with.
 
 ### Warn first, act later
 

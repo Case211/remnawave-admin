@@ -288,7 +288,7 @@ async def test_without_bedolaga_email_goes_via_own_server(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_bot_without_notify_falls_back_to_email(monkeypatch):
-    """У прод-бота нет ручки /notify (#3270 не принят) — письмо уходит нашим сервером."""
+    """У бота старше 4.16.0 нет ручки /notify — письмо уходит нашим сервером."""
     conn = _Conn({"default": _template(kind="default", min_score=0)})
     monkeypatch.setattr("shared.database.db_service", _db(conn))
     monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
@@ -330,6 +330,61 @@ async def test_template_email_is_completed_when_bot_sent_only_telegram(monkeypat
     assert result["sent"] is True
     assert result["telegram"]["sent"] is True
     assert result["email"]["via"] == "mail_server" and len(mails) == 1
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_email_is_not_completed_by_us(monkeypatch):
+    """Бот отказал в письме: почта не подтверждена и могла оказаться чужой.
+
+    В панели та же почта, что и в боте, — досылать её нашим сервером значит
+    отправить письмо о нарушении постороннему человеку.
+    """
+    conn = _Conn({"default": _template(kind="default", min_score=0, send_email=True)})
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
+
+    async def fake_user(telegram_id):
+        return {"id": 7}
+
+    async def fake_notify(user_id, **kwargs):
+        if kwargs["channels"] == ["email"]:
+            return {"email": {"sent": False, "reason": "email_not_verified"}}
+        return {"telegram": {"sent": True}}
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_user_by_telegram", fake_user)
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.notify_user", fake_notify)
+    mails = _own_mail(monkeypatch)
+
+    result = await notices.send_notice({**_VIOLATION, "telegram_id": 42, "email": "person@example.com"})
+
+    assert mails == [], "на неподтверждённую почту своим сервером не пишем"
+    assert result["sent"] is True, "Telegram дошёл — предупреждение состоялось"
+    assert result["email"] == {"sent": False, "reason": "email_not_verified"}
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_email_without_telegram_tells_why(monkeypatch):
+    """Клиент только с почтой, и та не подтверждена — оператор видит причину."""
+    conn = _Conn({"default": _template(kind="default", min_score=0, send_email=True)})
+    monkeypatch.setattr("shared.database.db_service", _db(conn))
+    monkeypatch.setattr("shared.bedolaga_client.ensure_configured", lambda: True)
+
+    async def fake_user(email):
+        return {"id": 7}
+
+    async def fake_notify(user_id, **kwargs):
+        return {"email": {"sent": False, "reason": "email_not_verified"}}
+
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.get_user_by_email", fake_user)
+    monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.notify_user", fake_notify)
+    mails = _own_mail(monkeypatch)
+
+    result = await notices.send_notice({**_VIOLATION, "telegram_id": None, "email": "person@example.com"})
+
+    assert mails == []
+    assert result["sent"] is False
+    assert result["reason"] == "email_not_verified"
+    assert not any("violation_notices" in sql for sql in conn.executed), "не дошло — отметки нет"
 
 
 @pytest.mark.asyncio

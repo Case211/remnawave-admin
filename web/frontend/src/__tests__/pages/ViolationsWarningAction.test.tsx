@@ -79,6 +79,11 @@ describe('noticeFeedback', () => {
       .toEqual({ ok: false, key: 'violations.warnReasons.already_notified' })
   })
 
+  it('explains that an unconfirmed email is not written to', () => {
+    expect(noticeFeedback({ sent: false, reason: 'email_not_verified' }))
+      .toEqual({ ok: false, key: 'violations.warnReasons.email_not_verified' })
+  })
+
   it('falls back for unknown reasons and empty answers', () => {
     expect(noticeFeedback({ sent: false, reason: 'something_new' }).key).toBe('violations.warnReasons.unknown')
     expect(noticeFeedback(undefined)).toEqual({ ok: false, key: 'violations.warnReasons.unknown' })

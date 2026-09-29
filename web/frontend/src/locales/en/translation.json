@@ -2035,6 +2035,7 @@
       "user_not_found": "The customer is not found in the Bedolaga bot, and there will be no email: no email address or Email is off in the template",
       "delivery_failed": "The Bedolaga bot rejected the warning, and there will be no email: no email address or Email is off in the template",
       "mail_failed": "The bot did not deliver and our mail server could not send the email — check its settings",
+      "email_not_verified": "The customer's email is not confirmed and Telegram is unavailable. We don't write to unconfirmed addresses: one may belong to someone else",
       "not_delivered": "Neither Telegram nor email delivered the warning",
       "unknown": "The warning was not sent",
       "no_channel": "Nothing to deliver with: the customer has no Telegram or email for the channels enabled in the template"
