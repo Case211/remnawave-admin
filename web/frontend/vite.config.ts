@@ -87,17 +87,18 @@ export default defineConfig({
             return 'vendor-radix'
           }
 
+          // Map geometry math (d3-geo + topojson) — only the Analytics geo
+          // map uses it; checked before the generic d3-* rule below.
+          if (id.includes('/d3-geo/') || id.includes('/topojson-client/')) {
+            return 'vendor-maps'
+          }
+
           // Charts — recharts must share the React chunk so its synchronous
           // `forwardRef` access never races a separate vendor file. d3-*
           // is recharts' transitive dep, keep it together to avoid
           // splitting recharts' internals across multiple chunks.
           if (id.includes('/recharts/') || id.includes('/d3-')) {
             return 'vendor-react'
-          }
-
-          // Maps (heavy — loaded only with Analytics page)
-          if (id.includes('/leaflet/') || id.includes('/react-leaflet/')) {
-            return 'vendor-maps'
           }
 
         },

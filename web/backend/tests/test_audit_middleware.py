@@ -214,7 +214,7 @@ class TestHandlerLoggedSkip:
 
     def test_v2_setting_update_skipped(self):
         from web.backend.core.audit_middleware import _logged_by_handler
-        assert _logged_by_handler("/api/v2/settings/map_tiles_api_key", "settings", "update")
+        assert _logged_by_handler("/api/v2/settings/finance_bedolaga_deposits_enabled", "settings", "update")
 
     def test_sync_hwid_still_logged(self):
         from web.backend.core.audit_middleware import _logged_by_handler
