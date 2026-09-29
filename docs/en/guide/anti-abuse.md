@@ -133,6 +133,8 @@ A violation is not yet a reason to cut access. People often do not know they are
 
 That is why you can write to the customer: from the violation card, from the Telegram notification with the **“⚠️ Warn”** button, or automatically together with the applied action.
 
+Step-by-step setup of the Bedolaga bot and cabinet side is in [Warnings via Bedolaga](/en/guide/bedolaga-warnings).
+
 ### Texts
 
 **Violations → Warnings tab.** One template per violation type: someone who shares a subscription and someone who downloads torrents need different words. Every template has a switch, a score threshold and channels — **Telegram** and **Email**: the warning goes strictly through the checked ones, and at least one always stays on.
