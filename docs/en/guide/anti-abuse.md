@@ -113,6 +113,8 @@ Several clients can sit behind one mobile carrier address — they share the cap
 
 The violation card shows which analyzers fired and with what weight, the addresses and sources, cities and providers, devices. Actions and the review note are made from there.
 
+A decision on a violation also closes its evidence. The User-Agent analyzer no longer raises subscription requests that were part of a reviewed violation — otherwise an old `curl` request in the subscription history would spawn a new violation every half hour. Suspicious requests made after the review are caught as usual. Annulling goes further: once the operator calls it a false positive, the detector stops treating that same User-Agent of this customer as suspicious. Torrents follow the same rule — see [Torrents](/en/guide/torrents).
+
 Nearby tools: **IP Lookup** for a single address, the connection geo map, and the shared-HWID tab with its live-trial counter.
 
 ## Torrents

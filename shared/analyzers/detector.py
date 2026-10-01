@@ -115,6 +115,7 @@ class IntelligentViolationDetector:
         prefetched_baseline: Optional[Dict[str, Any]] = None,
         prefetched_shared_hwids: Optional[List[Dict[str, Any]]] = None,
         prefetched_srh_records: Optional[List[Dict[str, Any]]] = None,
+        prefetched_ua_review: Optional[Dict[str, Any]] = None,
     ) -> Optional[ViolationScore]:
         """
         Проверить пользователя на нарушения.
@@ -262,7 +263,14 @@ class IntelligentViolationDetector:
                         ua_blacklist_extra = config_service.get("violation_ua_blacklist_extra", []) or []
                         self.user_agent_analyzer.set_extra_patterns(ua_whitelist_extra, ua_blacklist_extra)
                         max_age = int(config_service.get("violation_ua_max_age_days", 0) or 0)
-                        ua_score = self.user_agent_analyzer.analyze(srh_records, max_age_days=max_age)
+                        review = prefetched_ua_review
+                        if review is None:
+                            review = (await self._load_ua_reviews([user_uuid])).get(user_uuid, {})
+                        ua_score = self.user_agent_analyzer.analyze(
+                            srh_records, max_age_days=max_age,
+                            reviewed_until=review.get("reviewed_until"),
+                            accepted=review.get("accepted"),
+                        )
                 except Exception as ua_err:
                     logger.warning("UserAgent analysis failed for %s: %s", user_uuid, ua_err)
 
@@ -609,6 +617,19 @@ class IntelligentViolationDetector:
             )
             return None
     
+    async def _load_ua_reviews(self, user_uuids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Улики User-Agent, которые оператор уже разобрал (см. UserAgentAnalyzer.analyze).
+
+        Сбой здесь не должен глушить сам анализ: без отметок о разборе
+        детектор просто работает как раньше.
+        """
+        try:
+            state = await self.db.batch_get_ua_review_state(user_uuids)
+        except Exception as e:
+            logger.debug("UA review state fetch failed: %s", e)
+            return {}
+        return state if isinstance(state, dict) else {}
+
     async def _fetch_srh_records(self, user_uuid: str) -> Optional[List[Dict[str, Any]]]:
         """
         Получить Subscription Request History для юзера.
@@ -993,8 +1014,10 @@ class IntelligentViolationDetector:
 
         ua_enabled = config_service.get("violations_analyzer_user_agent", True)
         srh_map: Dict[str, List[Dict[str, Any]]] = {}
+        ua_reviews: Dict[str, Dict[str, Any]] = {}
         if ua_enabled:
             srh_map = await self.db.batch_get_srh_records(user_uuids, limit_per_user=100)
+            ua_reviews = await self._load_ua_reviews(user_uuids)
 
         # Convert raw active_conns rows to ActiveConnection dataclasses
         active_connections_map: Dict[str, List[ActiveConnection]] = dict(live_connections or {})
@@ -1036,6 +1059,7 @@ class IntelligentViolationDetector:
                     prefetched_baseline=baselines.get(uid),
                     prefetched_shared_hwids=shared_hwids_map.get(uid, []),
                     prefetched_srh_records=srh_normalized.get(uid),
+                    prefetched_ua_review=ua_reviews.get(uid, {}),
                 )
                 results[uid] = result
                 if uid not in baselines and histories_30d.get(uid):

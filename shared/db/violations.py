@@ -1915,6 +1915,56 @@ class ViolationsMixin:
             logger.warning("batch_get_srh_records failed: %s", e)
             return {}
 
+    async def batch_get_ua_review_state(
+        self, user_uuids: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Что из улик User-Agent анализатора клиента оператор уже разобрал.
+
+        ``reviewed_until`` — когда разобрано последнее нарушение с подозрительными
+        UA: запросы подписки до этого момента оператор уже видел. ``accepted`` —
+        пары (классификация, UA) из аннулированных нарушений: их признали ложным
+        срабатыванием для этого клиента.
+        """
+        if not self.is_connected or not user_uuids:
+            return {}
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT user_uuid::text AS user_uuid,
+                           MAX(action_taken_at) AS reviewed_until,
+                           jsonb_agg(suspicious_user_agents)
+                               FILTER (WHERE action_taken = 'annulled') AS annulled_agents
+                    FROM {VIOLATIONS_TABLE}
+                    WHERE user_uuid = ANY($1::uuid[])
+                      AND action_taken IS NOT NULL
+                      AND suspicious_user_agents IS NOT NULL
+                    GROUP BY user_uuid
+                    """,
+                    user_uuids,
+                )
+        except Exception as e:
+            logger.warning("batch_get_ua_review_state failed: %s", e)
+            return {}
+
+        result: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            groups = row["annulled_agents"]
+            if isinstance(groups, str):
+                groups = json.loads(groups)
+            accepted = {
+                (a["classification"], (a.get("user_agent") or "")[:200])
+                for agents in groups or []
+                for a in agents or []
+                if isinstance(a, dict) and a.get("classification")
+            }
+            result[row["user_uuid"]] = {
+                "reviewed_until": row["reviewed_until"],
+                "accepted": accepted,
+            }
+        return result
+
 
     # ==================== Ограничение скорости ====================
 
