@@ -14,6 +14,12 @@ from shared.db_query import select_sql, insert_sql, update_sql
 # Запас на странице под HOT-апдейты активных соединений (миграция 0105)
 CONNECTIONS_FILLFACTOR = 90
 
+# Торрент-нарушение узнаётся по первой причине. В ней всегда есть счётчики,
+# поэтому сравнение по префиксу: точное не совпадало ни разу.
+_TORRENT_REASON_MATCH = (
+    "EXISTS (SELECT 1 FROM unnest(reasons) AS r WHERE r LIKE 'Torrent traffic detected%')"
+)
+
 
 def _uuid_list(uuids: Optional[list]) -> Optional[list]:
     """Список uuid строками для ``$n::uuid[]``; None — без фильтра."""
@@ -778,11 +784,15 @@ class ConnectionsMixin:
             logger.error("batch_save_torrent_events failed: %s", e)
             return 0
 
-    async def count_recent_torrent_events(self, user_uuid: str, minutes: int = 30) -> int:
+    async def count_recent_torrent_events(
+        self, user_uuid: str, minutes: int = 30, since: Optional[datetime] = None,
+    ) -> int:
         """Сколько торрент-событий набралось у пользователя за окно.
 
         По этому числу отделяют обмен от шума: у настоящего роя счёт идёт на
         сотни за минуты, у ложного срабатывания событие ровно одно.
+        ``since`` — когда оператор разобрал прошлое нарушение: события до
+        этого момента уже в нём, повторно их не считаем.
         """
         if not self.is_connected:
             return 0
@@ -791,21 +801,26 @@ class ConnectionsMixin:
                 value = await conn.fetchval(
                     "SELECT count(*) FROM torrent_events "
                     "WHERE user_uuid = $1::uuid "
-                    "AND detected_at > NOW() - make_interval(mins => $2)",
-                    user_uuid, minutes,
+                    "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "AND ($3::timestamptz IS NULL OR detected_at > $3)",
+                    user_uuid, minutes, since,
                 )
             return int(value or 0)
         except Exception as e:
             logger.warning("count_recent_torrent_events failed: %s", e)
             return 0
 
-    async def count_recent_torrent_peers(self, user_uuid: str, minutes: int = 30) -> int:
+    async def count_recent_torrent_peers(
+        self, user_uuid: str, minutes: int = 30, since: Optional[datetime] = None,
+        ports: Optional[List[int]] = None,
+    ) -> int:
         """Со сколькими РАЗНЫМИ адресами шёл обмен за окно.
 
         Числа событий мало: их набивает и одно долгое соединение. Торрент
         отличается роем — клиент разговаривает с десятками пиров сразу.
         Пойманный случай: антивирус, восемь событий и ровно один адрес, —
         по счётчику событий это нарушение, по числу пиров очевидно нет.
+        ``ports`` — считать только пиров на этих портах (рой игрового лаунчера).
         """
         if not self.is_connected:
             return 0
@@ -814,15 +829,20 @@ class ConnectionsMixin:
                 value = await conn.fetchval(
                     "SELECT count(DISTINCT destination) FROM torrent_events "
                     "WHERE user_uuid = $1::uuid "
-                    "AND detected_at > NOW() - make_interval(mins => $2)",
-                    user_uuid, minutes,
+                    "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "AND ($3::timestamptz IS NULL OR detected_at > $3) "
+                    "AND ($4::int[] IS NULL "
+                    "OR substring(destination FROM ':([0-9]+)$')::int = ANY($4::int[]))",
+                    user_uuid, minutes, since, ports,
                 )
             return int(value or 0)
         except Exception as e:
             logger.warning("count_recent_torrent_peers failed: %s", e)
             return 0
 
-    async def recent_torrent_destinations(self, user_uuid: str, minutes: int = 30, limit: int = 10) -> list:
+    async def recent_torrent_destinations(
+        self, user_uuid: str, minutes: int = 30, limit: int = 10, since: Optional[datetime] = None,
+    ) -> list:
         """Адреса, с которыми шёл обмен за окно, — самые частые первыми."""
         if not self.is_connected:
             return []
@@ -832,8 +852,9 @@ class ConnectionsMixin:
                     "SELECT destination FROM torrent_events "
                     "WHERE user_uuid = $1::uuid "
                     "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "AND ($4::timestamptz IS NULL OR detected_at > $4) "
                     "GROUP BY destination ORDER BY count(*) DESC, destination LIMIT $3",
-                    user_uuid, minutes, limit,
+                    user_uuid, minutes, limit, since,
                 )
             return [r["destination"] for r in rows]
         except Exception as e:
@@ -879,12 +900,38 @@ class ConnectionsMixin:
                     select_sql(
                         VIOLATIONS_TABLE,
                         "id",
-                        "WHERE user_uuid = $1 AND detected_at > NOW() - make_interval(mins => $2) AND 'Torrent traffic detected' = ANY(reasons)",
+                        "WHERE user_uuid = $1 AND detected_at > NOW() - make_interval(mins => $2) "
+                        f"AND {_TORRENT_REASON_MATCH}",
                     ),
                     user_uuid, minutes,
                 )
         except Exception as e:
             logger.error("get_recent_torrent_violation failed: %s", e)
+            return None
+
+    async def last_torrent_review_at(self, user_uuid: str, minutes: int = 30) -> Optional[datetime]:
+        """Когда оператор последний раз разобрал торрент-нарушение клиента внутри окна.
+
+        Без этой отсечки «Аннулировать» не работало: окно за полчаса тут же
+        снова набирало те же события, и через минуты рождалось новое
+        нарушение с уведомлением — по уже разобранному обмену.
+        """
+        if not self.is_connected:
+            return None
+        try:
+            async with self.acquire() as conn:
+                return await conn.fetchval(
+                    select_sql(
+                        VIOLATIONS_TABLE,
+                        "MAX(action_taken_at)",
+                        "WHERE user_uuid = $1 AND action_taken IS NOT NULL "
+                        "AND action_taken_at > NOW() - make_interval(mins => $2) "
+                        f"AND {_TORRENT_REASON_MATCH}",
+                    ),
+                    user_uuid, minutes,
+                )
+        except Exception as e:
+            logger.warning("last_torrent_review_at failed: %s", e)
             return None
 
     async def get_torrent_stats(self, days: int = 7, user_uuids: Optional[list] = None) -> dict:

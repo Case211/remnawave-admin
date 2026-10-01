@@ -31,6 +31,10 @@ The event carries a `detected_by` field:
 
 When somebody asks why they were blocked, this field says what exactly caught them. Events recorded before the second source existed are marked `xray_routing` — there was nothing else.
 
+**Game launchers.** Some launchers ship updates over real BitTorrent, War Thunder's among them, so the verdict on them is correct. The peers are other players, so filtering by address owner only removes the publisher's servers. The whole swarm, however, sits on the launcher's port (27032 for War Thunder), while a regular torrent client's peers are spread across ports. When more than half of the distinct peers in the window are on that port, the detector treats the exchange as a game update and raises no violation. A mixed case (a game plus a torrent client) is still caught. To keep game traffic out of the VPN entirely, use a per-process or per-folder rule in the VPN client; game domains will not help.
+
+**A reviewed exchange is not counted again.** The half-hour window starts from the moment an operator annulled or otherwise resolved the customer's previous torrent violation. Otherwise the window would pick up the same events right away and a new violation would arrive within minutes. The violation in the panel and the Telegram card are built from the same window: the same event and peer counts, the same list of addresses.
+
 ## Fine-tuning
 
 Rarely needed, the toggle covers the normal case:

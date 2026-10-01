@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from shared.database import db_service
 from shared.db_schema import NODES_TABLE
 from web.backend.core import torrent_p2p_whitelist
+from web.backend.core.torrent_p2p_whitelist import GAME_SWARM_PORTS, is_game_swarm
 from shared.db_query import select_sql
 from shared.connection_monitor import ActiveConnection, ConnectionMonitor
 from shared.violation_detector import IntelligentViolationDetector
@@ -298,6 +299,10 @@ _INFRA_PORTS = frozenset({22, 80, 443, 2222, 8443})
 # За какое окно считаем накопленные торрент-события пользователя. Полчаса
 # ловят и короткую раздачу, и неспешную закачку, но не тянут вчерашний шум.
 _TORRENT_EVENT_WINDOW_MINUTES = 30
+
+# Сколько адресов окна кладём в причины нарушения — столько же показывает
+# карточка в Telegram, остальное хвостом «… and N more».
+_TORRENT_REASON_DESTINATIONS = 10
 
 
 async def _get_node_name(node_uuid: str) -> str:
@@ -921,35 +926,55 @@ async def _process_torrent_violations(
                     logger.debug("User %s is whitelisted for torrent, skipping", user_uuid)
                     continue
 
+                # Разобранный оператором обмен второй раз не считаем: иначе
+                # окно тут же снова набирало те же события, и после
+                # «Аннулировать» через минуты приходило новое нарушение.
+                reviewed_at = await db_service.last_torrent_review_at(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                )
+
                 # Одиночное срабатывание — это шум: настоящий обмен даёт сотни
                 # событий за минуты. Считаем накопленное по базе, а не по
                 # батчу: рой приезжает кусками, и в отдельном куске событий
                 # может быть немного.
                 recent = await db_service.count_recent_torrent_events(
-                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
                 )
-                if min_events > 1:
-                    if recent < min_events:
-                        logger.info(
-                            "Torrent: %d event(s) for %s in %d min — below threshold %d",
-                            recent, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_events,
-                        )
-                        continue
+                if recent < min_events:
+                    logger.info(
+                        "Torrent: %d event(s) for %s in %d min — below threshold %d",
+                        recent, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_events,
+                    )
+                    continue
 
                 # Событий может набить и одно долгое соединение — рой это не
                 # доказывает. У обмена десятки пиров сразу; у ложного
                 # срабатывания адрес один и тот же (ловился антивирус,
                 # которому эвристика приписала шифрованный BitTorrent).
                 peers = await db_service.count_recent_torrent_peers(
-                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
                 )
-                if min_peers > 1:
-                    if peers < min_peers:
-                        logger.info(
-                            "Torrent: %d peer(s) for %s in %d min — below threshold %d",
-                            peers, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_peers,
-                        )
-                        continue
+                if peers < min_peers:
+                    logger.info(
+                        "Torrent: %d peer(s) for %s in %d min — below threshold %d",
+                        peers, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_peers,
+                    )
+                    continue
+
+                # Лаунчер игры качает обновления настоящим BitTorrent, и пиры у
+                # него — другие игроки: по владельцу адреса их не отсеять. Зато
+                # весь рой сидит на порту лаунчера, а у обычного клиента порты
+                # пиров разбросаны.
+                game_peers = await db_service.count_recent_torrent_peers(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
+                    ports=sorted(GAME_SWARM_PORTS),
+                )
+                if is_game_swarm(peers, game_peers):
+                    logger.info(
+                        "Torrent: %s — рой игрового лаунчера (%d из %d пиров на портах игр), не нарушение",
+                        user_uuid[:8], game_peers, peers,
+                    )
+                    continue
 
                 # Dedup: skip if torrent violation exists within last 10 min
                 existing = await db_service.get_recent_torrent_violation(user_uuid, minutes=10)
@@ -975,6 +1000,22 @@ async def _process_torrent_violations(
                     continue
                 ips = list(set(e.ip_address for e in user_events))
 
+                # Нарушение и уведомление — по одному и тому же окну, на котором
+                # сработали пороги. Раньше запись брала один батч («6 событий»,
+                # пять адресов), а карточка в Telegram — окно (сотни событий и
+                # адресов), и веб выглядел беднее бота.
+                window_destinations = await torrent_p2p_whitelist.filter_destinations(
+                    await db_service.recent_torrent_destinations(
+                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
+                    )
+                ) or destinations
+                summary = (
+                    f"Torrent traffic detected ({recent} events, {peers} peers "
+                    f"in {_TORRENT_EVENT_WINDOW_MINUTES} min)"
+                )
+                shown = window_destinations[:_TORRENT_REASON_DESTINATIONS]
+                more = peers - len(shown)
+
                 # Save as violation (score=100)
                 violation_id, violation_created = await db_service.save_violation(
                     user_uuid=user_uuid,
@@ -986,9 +1027,10 @@ async def _process_torrent_violations(
                     confidence=1.0,
                     ip_addresses=ips,
                     reasons=[
-                        f"Torrent traffic detected ({len(user_events)} events)",
+                        summary,
                         *([f"Node: {node_name}"] if node_name else []),
-                        *[f"Destination: {d}" for d in destinations[:5]],
+                        *[f"Destination: {d}" for d in shown],
+                        *([f"… and {more} more destinations"] if more > 0 else []),
                     ],
                     simultaneous_connections=len(ips),
                     unique_ips_count=len(ips),
@@ -1005,7 +1047,7 @@ async def _process_torrent_violations(
                     "username": username,
                     "score": 100.0,
                     "recommended_action": "hard_block",
-                    "reasons": [f"Torrent traffic detected ({len(user_events)} events)"],
+                    "reasons": [summary],
                     "ip_addresses": ips,
                     "source": "torrent",
                 })
@@ -1034,11 +1076,6 @@ async def _process_torrent_violations(
                 # так, будто пороги не применились
                 try:
                     from web.backend.core.violation_notifier import send_torrent_notification
-                    window_destinations = await torrent_p2p_whitelist.filter_destinations(
-                        await db_service.recent_torrent_destinations(
-                            user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
-                        )
-                    ) or destinations
                     await send_torrent_notification(
                         user_uuid=user_uuid,
                         user_info=user_info,
@@ -1088,8 +1125,8 @@ async def _process_torrent_violations(
                         "user_uuid": user_uuid,
                         "username": username,
                         "score": 100.0,
-                        "destinations": destinations,
-                        "reasons": [f"Torrent traffic: {len(user_events)} events"],
+                        "destinations": window_destinations,
+                        "reasons": [summary],
                     })
                 except Exception as e:
                     logger.debug("WebSocket broadcast failed for torrent violation: %s", e)
