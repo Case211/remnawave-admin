@@ -125,3 +125,23 @@ async def test_mixed_swarm_is_still_a_violation():
     await _process(db)
 
     db.save_violation.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_one_touch_per_peer_is_not_an_exchange():
+    """Лаунчер и опрос DHT касаются каждого адреса по разу — это не обмен."""
+    db = _db()
+    db.count_recent_torrent_events = AsyncMock(return_value=12)  # 1,2 события на адрес
+    notify = await _process(db)
+
+    db.save_violation.assert_not_awaited()
+    notify.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_events_per_peer_check_can_be_disabled():
+    db = _db()
+    db.count_recent_torrent_events = AsyncMock(return_value=12)
+    await _process(db, {"torrent_min_events_per_peer": 1})
+
+    db.save_violation.assert_awaited_once()

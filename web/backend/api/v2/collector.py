@@ -917,6 +917,10 @@ async def _process_torrent_violations(
             min_peers = int(config_service.get("torrent_min_peers", 3) or 1)
         except (TypeError, ValueError):
             min_peers = 3
+        try:
+            min_per_peer = float(config_service.get("torrent_min_events_per_peer", 1.5) or 1)
+        except (TypeError, ValueError):
+            min_per_peer = 1.5
 
         for user_uuid, user_events in events_by_user.items():
             try:
@@ -958,6 +962,17 @@ async def _process_torrent_violations(
                     logger.info(
                         "Torrent: %d peer(s) for %s in %d min — below threshold %d",
                         peers, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_peers,
+                    )
+                    continue
+
+                # Обмен — это много событий с одними и теми же пирами: клиент
+                # качает подолгу. Игровой лаунчер и опрос DHT касаются каждого
+                # адреса по разу. На проде окна War Thunder давали 1,0–1,5
+                # события на адрес, окна торрент-клиентов — обычно 5–9.
+                if recent < peers * min_per_peer:
+                    logger.info(
+                        "Torrent: %s — %.2f event(s) per peer in %d min, below threshold %.2f",
+                        user_uuid[:8], recent / peers, _TORRENT_EVENT_WINDOW_MINUTES, min_per_peer,
                     )
                     continue
 

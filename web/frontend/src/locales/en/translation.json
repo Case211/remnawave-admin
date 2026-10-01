@@ -5433,6 +5433,10 @@
         "label": "Distinct peers threshold (swarm)",
         "description": "How many DIFFERENT addresses the exchange must span within half an hour. Torrent means a swarm of dozens of peers; events against one and the same address are what a long ordinary connection produces — antivirus traffic and game launchers were caught exactly this way. 1 disables the swarm check"
       },
+      "torrent_min_events_per_peer": {
+        "label": "Events per address (exchange depth)",
+        "description": "How many events per address, on average, the exchange must show within half an hour. A torrent client keeps trading with the same peers for a long time, so it has several events per address; a game launcher or a DHT lookup touches each address once. 1 disables the check"
+      },
       "violation_recap_days": {
         "label": "Violation history window (days)",
         "description": "The period used to count a user's violations for the repeat-offender badge and the history block. Annulled ones are shown separately — you see both how often the person was flagged and how much of that turned out to be a detector error"

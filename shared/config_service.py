@@ -1534,6 +1534,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 44,
     },
     {
+        "key": "torrent_min_events_per_peer",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Событий на адрес (глубина обмена)",
+        "description": "Сколько событий в среднем должно приходиться на один адрес за полчаса. Торрент-клиент подолгу качает с одних и тех же пиров, и событий на адрес у него в разы больше одного; игровой лаунчер и опрос DHT касаются каждого адреса по разу. 1 — не проверять",
+        "default_value": "1.5",
+        "sort_order": 44,
+    },
+    {
         "key": "torrent_notification_cooldown_minutes",
         "value_type": "int",
         "category": "violations",
