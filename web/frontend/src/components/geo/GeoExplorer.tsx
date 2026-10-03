@@ -67,8 +67,10 @@ export default function GeoExplorer({ data, view: rawView, onViewChange, metric,
 
   const openCountry = useCallback((code: string) => onViewChange(code), [onViewChange])
 
+  // grid-cols-1, а не неявная колонка: та растягивалась по самой длинной строке
+  // карточки справа (имя ноды, юзера), и на телефоне карта с панелью уезжали за экран
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.75fr)_minmax(280px,1fr)]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.75fr)_minmax(280px,1fr)]">
       <div className="min-w-0 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg bg-[var(--glass-bg)] p-0.5">

@@ -194,7 +194,9 @@ function AreaDetails({ view, metric, stats, data, names, namesReady, onSelect, o
           )}
         </div>
         {stat ? (
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          // Плитка не уже подписи «ПОЛЬЗОВАТЕЛИ»: три в ряд — только когда влезают,
+          // иначе третья уходит строкой ниже во всю ширину, а не наезжает на соседку
+          <div className="mt-3 flex flex-wrap gap-2">
             <Fact label={t('analytics.geo.map.metricUsers')} value={stat.users.toLocaleString()} accent={metric === 'users'} />
             <Fact label={t('analytics.geo.map.metricIps')} value={stat.ips.toLocaleString()} accent={metric === 'ips'} />
             {share !== null && <Fact label={t('analytics.geo.map.share')} value={`${share}%`} />}
@@ -288,8 +290,8 @@ function AreaDetails({ view, metric, stats, data, names, namesReady, onSelect, o
 
 function Fact({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="rounded-md bg-[var(--glass-bg)] px-2 py-1.5">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+    <div className="min-w-0 flex-1 basis-[108px] rounded-md bg-[var(--glass-bg)] px-2 py-1.5">
+      <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground" title={label}>{label}</p>
       <p className={cn('font-mono text-base font-semibold tabular-nums', accent ? 'text-primary-400' : 'text-white')}>{value}</p>
     </div>
   )

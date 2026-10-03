@@ -3762,7 +3762,10 @@
       "connectionsColumn": "Подключения",
       "uniqueUsersColumn": "Пользователи",
       "searchPlaceholder": "Поиск по городу или пользователю...",
-      "citiesCount": "{{count}} городов",
+      "citiesCount_one": "{{count}} город",
+      "citiesCount_few": "{{count}} города",
+      "citiesCount_many": "{{count}} городов",
+      "citiesCount_other": "{{count}} города",
       "allCountries": "Все страны",
       "sort": {
         "countDesc": "Подключения (убыв.)",

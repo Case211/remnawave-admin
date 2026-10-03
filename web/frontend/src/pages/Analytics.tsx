@@ -161,25 +161,27 @@ function DateRangePicker({
   onClear: () => void
 }) {
   const { t } = useTranslation()
+  // На телефоне — отдельной строкой во всю ширину, поля делят её поровну:
+  // по своей ширине два поля даты на узком экране не помещались
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex w-full items-center gap-1.5 sm:w-auto">
       <input
         type="date"
         value={dateFrom}
         onChange={(e) => onChange(e.target.value, dateTo)}
-        className="h-7 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+        className="h-7 w-0 min-w-0 flex-1 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50 sm:w-auto sm:flex-none"
       />
       <span className="text-xs text-muted-foreground">–</span>
       <input
         type="date"
         value={dateTo}
         onChange={(e) => onChange(dateFrom, e.target.value)}
-        className="h-7 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+        className="h-7 w-0 min-w-0 flex-1 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50 sm:w-auto sm:flex-none"
       />
       {(dateFrom || dateTo) && (
         <button
           onClick={onClear}
-          className="text-xs text-muted-foreground hover:text-white px-1.5 py-0.5 rounded hover:bg-[var(--glass-bg-hover)]"
+          className="shrink-0 text-xs text-muted-foreground hover:text-white px-1.5 py-0.5 rounded hover:bg-[var(--glass-bg-hover)]"
           title={t('common.clear', { defaultValue: 'Clear' })}
           aria-label={t('common.clear', { defaultValue: 'Clear' })}
         >
@@ -228,7 +230,7 @@ function GeoMapCard() {
               side="right"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {!hasCustomDates && (
               <PeriodSwitcher
                 value={geoPeriod}
@@ -454,7 +456,7 @@ function CityUsersList({
                   )}
                   {city.unique_users > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {city.unique_users} {t('analytics.geo.users').toLowerCase()}
+                      {t('analytics.geo.uniqueUsers', { count: city.unique_users })}
                     </Badge>
                   )}
                   {hasUsers && (
@@ -566,7 +568,7 @@ function TopUsersCard() {
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
       <CardHeader className="pb-2">
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-primary-400" />
               <CardTitle className="text-base">{t('analytics.topUsers.title')}</CardTitle>
@@ -953,7 +955,7 @@ function TrendsCard() {
               side="right"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {period !== 'all' && (
               <Button
                 variant={compare ? 'default' : 'outline'}
