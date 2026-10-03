@@ -489,6 +489,19 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 4,
     },
     {
+        "key": "finance_reminder_hour",
+        "value_type": "int",
+        "category": "finance",
+        "subcategory": "reminders",
+        "display_name": "Час отправки напоминаний",
+        "description": (
+            "С какого часа (0–23) слать напоминания за день. Час и сам «день» считаются "
+            "в часовом поясе панели, а не по UTC"
+        ),
+        "default_value": "10",
+        "sort_order": 5,
+    },
+    {
         "key": "finance_autosync_enabled",
         "value_type": "bool",
         "category": "finance",

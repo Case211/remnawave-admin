@@ -404,9 +404,10 @@ class TestReminders:
 
     @pytest.mark.asyncio
     async def test_skips_off_threshold_and_already_reminded(self):
+        from shared import timefmt
         from web.backend.core.finance import reminders as rem
 
-        today = date.today().isoformat()
+        today = timefmt.now().date().isoformat()
         db = AsyncMock()
         db.is_connected = True
         db.upcoming_finance_payments = AsyncMock(return_value=[

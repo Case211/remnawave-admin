@@ -2,19 +2,48 @@
 
 Суточная логика с защитой от дублей через finance_items.last_reminded_at:
 одно напоминание на запись в день, только на порогах finance_reminder_days
-(например 7/3/1 дней до списания) и при просрочке. Кнопки в Telegram:
+(например 7/3/1 дней до списания) и при просрочке.
+
+«День» и час отправки считаются в зоне отображения (display_timezone), а не
+по часам контейнера: иначе сутки сменяются в 00:00 UTC, напоминания уходят
+первой же проверкой после этого — среди ночи по местному времени, — а
+«сегодня» и «завтра» в тексте до утра расходятся с календарём админа.
+Час задаёт finance_reminder_hour. Кнопки в Telegram:
 «Оплачено» (платёж + сдвиг цикла) и «Пропустить цикл» (сдвиг без платежа) —
 обрабатываются ботом (fin:paid / fin:skip).
 """
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime
 from html import escape
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL_SECONDS = 3600  # проверяем каждый час, шлём максимум раз в день
+# Проверяем раз в четверть часа, шлём максимум раз в день: от шага зависит,
+# насколько точно напоминание попадёт в назначенный час.
+CHECK_INTERVAL_SECONDS = 900
+DEFAULT_REMINDER_HOUR = 10
+
+
+def _reminder_hour() -> int:
+    """Час отправки (0–23) в зоне отображения; мусор в настройке — час по умолчанию."""
+    from shared.config_service import config_service
+    try:
+        hour = int(config_service.get("finance_reminder_hour", DEFAULT_REMINDER_HOUR))
+    except (TypeError, ValueError):
+        return DEFAULT_REMINDER_HOUR
+    return hour if 0 <= hour <= 23 else DEFAULT_REMINDER_HOUR
+
+
+def is_send_time(now_local: datetime, hour: int) -> bool:
+    """Пора ли слать: местное время дошло до назначенного часа.
+
+    После этого часа и до конца суток — «пора»: если панель в назначенный
+    час была выключена, напоминание уйдёт при первой проверке после старта,
+    а не потеряется. От повторов защищает last_reminded_at.
+    """
+    return now_local.hour >= hour
 
 
 def _reminder_days() -> List[int]:
@@ -66,8 +95,13 @@ def _telegram_body(item: Dict, when: str) -> str:
     return "<blockquote>" + "\n".join(lines) + "</blockquote>"
 
 
-async def check_and_send_reminders() -> int:
-    """Один проход: найти записи на порогах/просроченные, отправить, отметить."""
+async def check_and_send_reminders(today: Optional[date] = None) -> int:
+    """Один проход: найти записи на порогах/просроченные, отправить, отметить.
+
+    ``today`` — сегодняшняя дата в зоне отображения; по умолчанию берётся из
+    ``shared.timefmt``.
+    """
+    from shared import timefmt
     from shared.database import db_service
     from shared.config_service import config_service
     from web.backend.core.notification_service import create_notification
@@ -78,11 +112,12 @@ async def check_and_send_reminders() -> int:
         return 0
 
     thresholds = set(_reminder_days())
-    today = date.today()
+    if today is None:
+        today = timefmt.now().date()
     sent = 0
 
     horizon = max(thresholds) if thresholds else 7
-    for item in await db_service.upcoming_finance_payments(days=horizon):
+    for item in await db_service.upcoming_finance_payments(days=horizon, today=today):
         days_left = item["days_left"]
         overdue = item["is_overdue"]
         if not overdue and days_left not in thresholds:
@@ -146,11 +181,15 @@ async def check_and_send_reminders() -> int:
 
 
 async def reminders_loop() -> None:
-    """Часовой цикл напоминаний (запускается в lifespan)."""
+    """Цикл напоминаний (запускается в lifespan)."""
+    from shared import timefmt
+
     await asyncio.sleep(300)
     while True:
         try:
-            await check_and_send_reminders()
+            now_local = timefmt.now()
+            if is_send_time(now_local, _reminder_hour()):
+                await check_and_send_reminders(today=now_local.date())
         except Exception as e:
             logger.warning("Finance reminders loop failed: %s", e)
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)
