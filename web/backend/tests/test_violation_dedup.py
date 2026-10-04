@@ -167,6 +167,27 @@ def _handle_violation_mocks(save_result, config: dict | None = None):
 
 class TestHandleViolationCreatedGate:
     @pytest.mark.asyncio
+    async def test_violation_keeps_telegram_recipient_from_api_user(self):
+        """Panel API user data is camelCase; keep the recipient on the violation."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(41, True))
+        user_info = {
+            "username": "trial-user",
+            "telegramId": 366945364,
+            "email": "trial@example.com",
+            "hwidDeviceLimit": 1,
+        }
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6],
+        ):
+            await collector._handle_violation(USER_UUID, _score(), user_info, [], False)
+
+        saved = db.save_violation.await_args.kwargs
+        assert saved["telegram_id"] == 366945364
+        assert saved["email"] == "trial@example.com"
+
+    @pytest.mark.asyncio
     async def test_dedup_suppresses_events_and_autoblock(self):
         db, monitor, patches = _handle_violation_mocks(save_result=(42, False))
         with patches[0], patches[1], patches[2] as fire, patches[3], patches[4], patches[5] as disable, patches[6]:
