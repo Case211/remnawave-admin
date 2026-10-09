@@ -56,7 +56,7 @@ Where and what to write in Telegram. Topics spread events across forum threads, 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | **💬 Notifications chat ID** | `notifications_chat_id` | empty | Telegram chat/group ID for notifications (`NOTIFICATIONS_CHAT_ID`) |
-| **✨ Rich notification styling** | `notifications_rich_enabled` | `true` | Send Telegram notifications as Bot API 10.1 rich messages: real headings, field lists, collapsible sections. Falls back to plain HTML automatically if Telegram rejects it |
+| **✨ Rich notification styling** | `notifications_rich_enabled` | `true` | Send Telegram notifications as rich cards (Bot API 10.1+): tables, collapsible sections, quotes, buttons right in the card, fields copied with a tap. Falls back to plain HTML automatically if Telegram rejects it |
 
 
 ### 🔔 Telegram notification types

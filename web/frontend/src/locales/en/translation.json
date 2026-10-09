@@ -5190,7 +5190,7 @@
       },
       "notifications_rich_enabled": {
         "label": "✨ Rich notification styling",
-        "description": "Send Telegram notifications as Bot API 10.1 rich messages: real headings, field lists, collapsible sections. Falls back to plain HTML automatically if Telegram rejects it"
+        "description": "Send Telegram notifications as rich cards (Bot API 10.1+): tables, collapsible sections, quotes, buttons right in the card, fields copied with a tap. Falls back to plain HTML automatically if Telegram rejects it"
       },
       "notifications_users_enabled": {
         "label": "👤 Users",

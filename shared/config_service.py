@@ -241,7 +241,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "category": "notifications",
         "subcategory": "delivery",
         "display_name": "Rich-оформление уведомлений",
-        "description": "Отправлять Telegram-уведомления «документами» Bot API 10.1: настоящие заголовки, списки, сворачиваемые секции. При отказе Telegram автоматически откатывается на обычный HTML",
+        "description": "Отправлять Telegram-уведомления rich-карточками (Bot API 10.1+): таблицы, сворачиваемые секции, цитаты, кнопки прямо в карточке, поля копируются касанием. При отказе Telegram автоматически откатывается на обычный HTML",
         "default_value": "true",
         "sort_order": 2,
     },
