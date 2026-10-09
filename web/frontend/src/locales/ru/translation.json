@@ -2012,7 +2012,8 @@
       "model": "Модель",
       "os": "ОС",
       "addedAt": "Добавлено",
-      "hwidMatch": "Совпадение HWID"
+      "hwidMatch": "Совпадение HWID",
+      "updatedAt": "Обновлено"
     },
     "connectionTypes": {
       "residential": "Домашний",
@@ -2276,6 +2277,23 @@
         "nested_link": "ссылка внутри ссылки не работает",
         "nested_quote": "цитата внутри цитаты не работает"
       }
+    },
+    "evidence": {
+      "title": "Подключения, давшие нарушение",
+      "groups": {
+        "geoSimultaneous": "Одновременно из разных стран",
+        "geoTravel": "Нереалистичное перемещение",
+        "temporal": "Были в сети одновременно",
+        "asn": "Подозрительные сети"
+      },
+      "pool": "пул оператора",
+      "since": "с {{time}}"
+    },
+    "addresses": {
+      "title": "Адреса вокруг нарушения (±{{minutes}} мин)",
+      "online": "в сети {{from}} — {{to}}",
+      "connections": "подключений: {{count}}",
+      "nodes": "узлы: {{nodes}}"
     }
   },
   "admins": {

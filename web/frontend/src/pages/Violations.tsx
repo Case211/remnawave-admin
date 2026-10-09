@@ -46,6 +46,7 @@ import {
 } from '@/components/brand/icons'
 import client from '../api/client'
 import { UserTimelineDialog } from '@/components/violations/UserTimelineDialog'
+import { ViolationAddressesCard, ViolationEvidenceCard } from '@/components/violations/ViolationEvidence'
 import { DetectorTuningTab } from '@/components/violations/DetectorTuningTab'
 import { AsnDirectory } from '@/components/violations/AsnDirectory'
 import { Button } from '@/components/ui/button'
@@ -891,6 +892,9 @@ function ViolationDetailPanel({
         </Card>
       )}
 
+      {/* Какие подключения дали нарушение — улики анализаторов */}
+      <ViolationEvidenceCard rawData={detail.raw_data} />
+
       {/* Geo & Network info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Countries */}
@@ -976,6 +980,9 @@ function ViolationDetailPanel({
         </Card>
       )}
 
+      {/* Адреса вокруг нарушения: строка на адрес вместо ленты */}
+      <ViolationAddressesCard violationId={violationId} />
+
       {/* HWID Devices */}
       {Array.isArray(hwidDevices) && hwidDevices.length > 0 && (
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.32s' }}>
@@ -1037,6 +1044,13 @@ function ViolationDetailPanel({
                         <div className="flex justify-between">
                           <span className="text-dark-300">{t('violations.detail.addedAt')}</span>
                           <span className="text-dark-100">{formatDate(device.created_at)}</span>
+                        </div>
+                      )}
+                      {/* Дата добавления многомесячной давности о событии не говорит — нужен последний синк */}
+                      {device.updated_at && device.updated_at !== device.created_at && (
+                        <div className="flex justify-between">
+                          <span className="text-dark-300">{t('violations.detail.updatedAt')}</span>
+                          <span className="text-dark-100">{formatDate(device.updated_at)}</span>
                         </div>
                       )}
                     </div>

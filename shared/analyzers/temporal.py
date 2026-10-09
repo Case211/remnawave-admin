@@ -14,7 +14,7 @@ from enum import Enum
 from shared.analyzers.models import (
     ViolationAction, TemporalScore, GeoScore, ASNScore, ProfileScore,
     DeviceScore, HwidScore, UserAgentClassification, SuspiciousAgent,
-    UserAgentScore, ViolationScore,
+    UserAgentScore, ViolationScore, MAX_EVIDENCE, connection_evidence,
 )
 from shared.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
 from shared.logger import logger
@@ -115,6 +115,7 @@ class TemporalAnalyzer:
         rapid_switches = 0
         overlap_minutes = 0.0
         strong_sharing = False
+        evidence: List[Dict[str, Any]] = []
         source_of = source_of or {}
 
         def sources(ips) -> int:
@@ -268,6 +269,15 @@ class TemporalAnalyzer:
                     # Длительное перекрытие (> 15 мин) — подозрительно
                     if simultaneous_groups and score > 0:
                         best_group = max(simultaneous_groups, key=lambda g: sources({ip for _, ip in g}))
+                        # Какие адреса были в сети вместе; пул оператора — в source
+                        conn_by_ip = {str(c.ip_address): c for c in connections}
+                        evidence = [
+                            connection_evidence(
+                                conn_by_ip[ip],
+                                source=source_of[ip] if source_of.get(ip, ip) != ip else None,
+                            )
+                            for ip in sorted({ip for _, ip in best_group}) if ip in conn_by_ip
+                        ][:MAX_EVIDENCE]
                         # Длительность перекрытия = разница между самым ранним и самым поздним подключением в группе
                         earliest_start = min(t for t, _ in best_group)
                         latest_start = max(t for t, _ in best_group)
@@ -450,6 +460,7 @@ class TemporalAnalyzer:
             effective_threshold=effective_threshold,
             simultaneous_excess=None if limit == 0 else max(0, simultaneous_count - limit),
             effective_excess=max(0, simultaneous_count - effective_threshold),
+            evidence=evidence,
         )
 
 

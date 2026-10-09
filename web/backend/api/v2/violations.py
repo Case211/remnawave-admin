@@ -719,6 +719,8 @@ async def get_user_timeline(
                 'ts': c.get('connected_at'),
                 'ip': c.get('ip_address'),
                 'node_name': c.get('node_name'),
+                'country_code': c.get('country_code'),
+                'connection_type': c.get('connection_type'),
                 'disconnected_at': c.get('disconnected_at'),
                 'platform': (dev.get('platform') if isinstance(dev, dict) else None),
                 'user_agent': (dev.get('userAgent') or dev.get('user_agent') if isinstance(dev, dict) else None),
@@ -1256,6 +1258,61 @@ def _raw_breakdown(violation: dict) -> Optional[dict]:
     return raw if isinstance(raw, dict) else None
 
 
+async def _name_evidence_nodes(raw: Optional[dict], db) -> Optional[dict]:
+    """Имена нод в уликах разбора: анализаторы пишут uuid, человеку нужно имя."""
+    breakdown = (raw or {}).get("breakdown")
+    if not isinstance(breakdown, dict):
+        return raw
+    entries = [
+        entry for part in breakdown.values() if isinstance(part, dict)
+        for entry in (part.get("evidence") or []) if isinstance(entry, dict)
+    ]
+    uuids = sorted({entry["node_uuid"] for entry in entries if entry.get("node_uuid")})
+    if not uuids:
+        return raw
+    try:
+        from shared.db_schema import NODES_TABLE
+        async with db.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT uuid::text AS uuid, name FROM {NODES_TABLE} WHERE uuid = ANY($1::uuid[])", uuids,
+            )
+    except Exception as e:
+        logger.debug("Evidence node names failed: %s", e)
+        return raw
+    names = {r["uuid"]: r["name"] for r in rows}
+    for entry in entries:
+        if entry.get("node_uuid") in names:
+            entry["node_name"] = names[entry["node_uuid"]]
+    return raw
+
+
+@router.get("/{violation_id}/addresses")
+async def get_violation_addresses(
+    violation_id: int,
+    window_minutes: int = Query(60, ge=5, le=1440),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Адреса юзера вокруг нарушения (± window_minutes от detected_at).
+
+    Пять строк вместо сотен в ленте: где адрес, какой сети, когда был в сети,
+    сколько раз и через какие узлы.
+    """
+    violation = await db.get_violation_by_id(violation_id)
+    if not violation:
+        raise api_error(404, E.VIOLATION_NOT_FOUND)
+    from web.backend.core.rbac import get_visible_user_uuids
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None and str(violation.get("user_uuid", "")).lower() not in visible:
+        raise api_error(404, E.VIOLATION_NOT_FOUND)
+
+    detected = violation.get("detected_at") or datetime.utcnow()
+    window = timedelta(minutes=window_minutes)
+    start, end = detected - window, detected + window
+    items = await db.get_user_address_summary(str(violation["user_uuid"]), start, end)
+    return {"window_minutes": window_minutes, "from": start.isoformat(), "to": end.isoformat(), "items": items}
+
+
 @router.get("/{violation_id}", response_model=ViolationDetail)
 async def get_violation(
     violation_id: int,
@@ -1326,7 +1383,7 @@ async def get_violation(
         action_taken_by=violation.get('action_taken_by'),
         notified_at=violation.get('notified_at'),
         client_notified_at=(await _client_notices([violation_id])).get(violation_id),
-        raw_data=_raw_breakdown(violation),
+        raw_data=await _name_evidence_nodes(_raw_breakdown(violation), db),
         hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
         admin_comment=violation.get('admin_comment'),
         score_source=score_source,

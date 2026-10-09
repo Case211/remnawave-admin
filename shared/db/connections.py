@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional
 
 from shared import timefmt
 from shared.logger import logger
-from shared.db_schema import USER_CONNECTIONS_TABLE, VIOLATIONS_TABLE, USERS_TABLE, NODES_TABLE
+from shared.db_schema import (
+    IP_METADATA_TABLE, NODES_TABLE, USER_CONNECTIONS_TABLE, USERS_TABLE, VIOLATIONS_TABLE,
+)
 from shared.db_query import select_sql, insert_sql, update_sql
 
 # Запас на странице под HOT-апдейты активных соединений (миграция 0105)
@@ -32,16 +34,21 @@ class ConnectionsMixin:
     async def get_user_connection_history(
         self, user_uuid: str, days: int = 30, limit: int = 200,
     ) -> List[Dict[str, Any]]:
-        """История подключений юзера (сессии) — для таймлайна."""
+        """История подключений юзера (сессии) — для таймлайна.
+
+        Страна и тип сети берутся из ip_metadata: детектор кладёт туда каждый
+        адрес, и без них в ленте не понять, какой из пяти адресов казахстанский.
+        """
         if not self.is_connected:
             return []
         async with self.acquire() as conn:
             rows = await conn.fetch(
                 f"""SELECT uc.id, uc.ip_address, uc.node_uuid::text AS node_uuid,
                            uc.connected_at, uc.disconnected_at, uc.device_info,
-                           n.name AS node_name
+                           n.name AS node_name, im.country_code, im.connection_type
                     FROM {USER_CONNECTIONS_TABLE} uc
                     LEFT JOIN {NODES_TABLE} n ON n.uuid = uc.node_uuid
+                    LEFT JOIN {IP_METADATA_TABLE} im ON im.ip_address = uc.ip_address
                     WHERE uc.user_uuid = $1::uuid
                       AND uc.connected_at >= NOW() - INTERVAL '1 day' * $2
                     ORDER BY uc.connected_at DESC
@@ -59,6 +66,49 @@ class ConnectionsMixin:
                     d["device_info"] = json.loads(d["device_info"])
                 except (ValueError, TypeError):
                     d["device_info"] = None
+            out.append(d)
+        return out
+
+    async def get_user_address_summary(
+        self, user_uuid: str, start: datetime, end: datetime, limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Адреса юзера за окно: страна, тип сети, первое и последнее появление,
+        число подключений и узлы — сводка для карточки нарушения вместо ленты.
+
+        Сессия попадает в окно, если пересекается с ним. Нижняя граница по
+        connected_at сдвинута на сутки: длинные сессии не теряются, а прошлые
+        партиции не читаются.
+        """
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                f"""SELECT uc.ip_address AS ip,
+                           MIN(uc.connected_at) AS first_seen,
+                           MAX(COALESCE(uc.disconnected_at, NOW())) AS last_seen,
+                           COUNT(*) AS connections,
+                           ARRAY_REMOVE(ARRAY_AGG(DISTINCT n.name), NULL) AS nodes,
+                           MAX(im.country_code) AS country_code, MAX(im.city) AS city,
+                           MAX(im.connection_type) AS connection_type, MAX(im.asn_org) AS asn_org
+                    FROM {USER_CONNECTIONS_TABLE} uc
+                    LEFT JOIN {NODES_TABLE} n ON n.uuid = uc.node_uuid
+                    LEFT JOIN {IP_METADATA_TABLE} im ON im.ip_address = uc.ip_address
+                    WHERE uc.user_uuid = $1::uuid
+                      AND uc.connected_at >= $2::timestamptz - INTERVAL '1 day'
+                      AND uc.connected_at <= $3
+                      AND COALESCE(uc.disconnected_at, NOW()) >= $2
+                    GROUP BY uc.ip_address
+                    ORDER BY COUNT(*) DESC, MIN(uc.connected_at)
+                    LIMIT $4""",
+                user_uuid, start, end, limit,
+            )
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            d = dict(r)
+            for k in ("first_seen", "last_seen"):
+                if d.get(k) is not None:
+                    d[k] = d[k].isoformat()
+            d["nodes"] = list(d.get("nodes") or [])
             out.append(d)
         return out
 

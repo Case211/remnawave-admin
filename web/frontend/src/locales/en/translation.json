@@ -2014,7 +2014,8 @@
       "model": "Model",
       "os": "OS",
       "addedAt": "Added",
-      "hwidMatch": "HWID match"
+      "hwidMatch": "HWID match",
+      "updatedAt": "Updated"
     },
     "connectionTypes": {
       "residential": "Residential",
@@ -2280,6 +2281,23 @@
         "nested_link": "a link inside a link does not work",
         "nested_quote": "a quote inside a quote does not work"
       }
+    },
+    "evidence": {
+      "title": "Connections behind the violation",
+      "groups": {
+        "geoSimultaneous": "From different countries at the same time",
+        "geoTravel": "Impossible travel",
+        "temporal": "Online at the same time",
+        "asn": "Suspicious networks"
+      },
+      "pool": "carrier pool",
+      "since": "since {{time}}"
+    },
+    "addresses": {
+      "title": "Addresses around the violation (±{{minutes}} min)",
+      "online": "online {{from}} — {{to}}",
+      "connections": "connections: {{count}}",
+      "nodes": "nodes: {{nodes}}"
     }
   },
   "admins": {

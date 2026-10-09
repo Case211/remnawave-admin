@@ -14,7 +14,7 @@ from enum import Enum
 from shared.analyzers.models import (
     ViolationAction, TemporalScore, GeoScore, ASNScore, ProfileScore,
     DeviceScore, HwidScore, UserAgentClassification, SuspiciousAgent,
-    UserAgentScore, ViolationScore,
+    UserAgentScore, ViolationScore, MAX_EVIDENCE, connection_evidence,
 )
 from shared.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
 from shared.logger import logger
@@ -221,13 +221,23 @@ class ASNAnalyzer:
                 score += 10.0
                 reasons.append(f"Много подключений через подозрительные типы провайдеров ({suspicious_ratio*100:.0f}%)")
         
+        # Улики: какие именно активные адреса дали подозрительный тип сети
+        suspicious_types = self.DATACENTER_TYPES | self.VPN_TYPES | {"business", "infrastructure"}
+        evidence = [
+            connection_evidence(conn, ip_metadata[str(conn.ip_address)])
+            for conn in connections
+            if str(conn.ip_address) in ip_metadata
+            and ip_metadata[str(conn.ip_address)].connection_type in suspicious_types
+        ][:MAX_EVIDENCE]
+
         return ASNScore(
             score=min(score, 100.0),
             reasons=reasons,
             asn_types=asn_types,
             is_mobile_carrier=is_mobile_carrier,
             is_datacenter=is_datacenter,
-            is_vpn=is_vpn
+            is_vpn=is_vpn,
+            evidence=evidence,
         )
 
 

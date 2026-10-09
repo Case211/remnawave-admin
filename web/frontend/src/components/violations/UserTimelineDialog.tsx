@@ -28,6 +28,8 @@ interface TimelineEvent {
   // connection
   ip?: string
   node_name?: string | null
+  country_code?: string | null
+  connection_type?: string | null
   disconnected_at?: string | null
   platform?: string | null
   user_agent?: string | null
@@ -79,7 +81,22 @@ function EventRow({ e, t }: { e: TimelineEvent; t: (k: string, o?: Record<string
         <div className="text-xs text-white/80 mt-0.5 truncate">
           {e.type === 'violation' && (e.reasons?.length ? e.reasons.slice(0, 3).join(' · ') : (e.action || '—'))}
           {e.type === 'connection' && (
-            <span>{e.ip}{e.node_name ? ` → ${e.node_name}` : ''}{e.platform ? ` · ${e.platform}` : ''}</span>
+            <span>
+              {e.ip}
+              {(e.country_code || (e.connection_type && e.connection_type !== 'unknown')) && (
+                <span className="text-muted-foreground">
+                  {' ('}
+                  {[
+                    e.country_code,
+                    e.connection_type && e.connection_type !== 'unknown'
+                      ? t(`violations.connectionTypes.${e.connection_type}`, { defaultValue: e.connection_type })
+                      : null,
+                  ].filter(Boolean).join(', ')}
+                  {')'}
+                </span>
+              )}
+              {e.node_name ? ` → ${e.node_name}` : ''}{e.platform ? ` · ${e.platform}` : ''}
+            </span>
           )}
           {e.type === 'hwid' && (
             <span className="font-mono">{e.platform || '?'}{e.device_model ? ` · ${e.device_model}` : ''}{e.app_version ? ` · v${e.app_version}` : ''}</span>

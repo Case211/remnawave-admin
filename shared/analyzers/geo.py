@@ -14,7 +14,7 @@ from enum import Enum
 from shared.analyzers.models import (
     ViolationAction, TemporalScore, GeoScore, ASNScore, ProfileScore,
     DeviceScore, HwidScore, UserAgentClassification, SuspiciousAgent,
-    UserAgentScore, ViolationScore,
+    UserAgentScore, ViolationScore, MAX_EVIDENCE, connection_evidence,
 )
 from shared.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
 from shared.logger import logger
@@ -332,6 +332,7 @@ class GeoAnalyzer:
         countries: Set[str] = set()
         cities: Set[str] = set()
         impossible_travel = False
+        evidence: List[Dict[str, Any]] = []
         # Configurable city distance threshold
         min_city_distance = config_service.get("violations_geo_max_city_distance_km", self.MIN_DISTANCE_FOR_DIFFERENT_CITIES_DEFAULT)
 
@@ -390,6 +391,11 @@ class GeoAnalyzer:
             score = 90.0
             reasons.append(f"Одновременные подключения из разных стран: {', '.join(active_countries)}")
             impossible_travel = True
+            evidence += [
+                connection_evidence(conn, ip_metadata[str(conn.ip_address)], kind="simultaneous")
+                for conn in connections
+                if str(conn.ip_address) in ip_metadata and ip_metadata[str(conn.ip_address)].country_code
+            ]
         
         # Анализ последовательных подключений
         if len(connection_history) > 1 and not impossible_travel:
@@ -461,6 +467,8 @@ class GeoAnalyzer:
                                         f"({distance_km:.0f} км за {time_diff_hours:.1f} ч, макс: {max_distance_km:.0f} км)"
                                     )
                                     impossible_travel = True
+                                    evidence += [connection_evidence(prev_conn, prev_meta, kind="travel"),
+                                                 connection_evidence(curr_conn, curr_meta, kind="travel")]
                                 else:
                                     score = max(score, 15.0)
                                     reasons.append(f"Перемещение между странами: {prev_country} → {curr_country}")
@@ -472,6 +480,8 @@ class GeoAnalyzer:
                                         f"Нереалистичное перемещение: {prev_country} → {curr_country} за {time_diff_hours:.1f} ч"
                                     )
                                     impossible_travel = True
+                                    evidence += [connection_evidence(prev_conn, prev_meta, kind="travel"),
+                                                 connection_evidence(curr_conn, curr_meta, kind="travel")]
                                 else:
                                     score = max(score, 15.0)
                                     reasons.append(f"Перемещение между странами: {prev_country} → {curr_country}")
@@ -519,12 +529,18 @@ class GeoAnalyzer:
                             score = max(score, 3.0)
                             reasons.append(f"Разные города одной страны: {prev_city} → {curr_city}")
         
+        # Соседние пары перемещения делят подключение — улика одна
+        unique: Dict[Any, Dict[str, Any]] = {}
+        for entry in evidence:
+            unique.setdefault((entry["kind"], entry["ip"], str(entry["connected_at"])), entry)
+
         return GeoScore(
             score=min(score, 100.0),
             reasons=reasons,
             countries=countries,
             cities=cities,
-            impossible_travel_detected=impossible_travel
+            impossible_travel_detected=impossible_travel,
+            evidence=list(unique.values())[:MAX_EVIDENCE],
         )
 
 
