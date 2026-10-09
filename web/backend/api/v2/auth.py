@@ -806,6 +806,13 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
         for r, a in sorted(admin.permissions)
     ]
 
+    from web.backend.api.deps import user_scope_restricted
+    try:
+        scope_restricted = await user_scope_restricted(admin)
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
+        scope_restricted = False
+
     return AdminInfo(
         telegram_id=admin.telegram_id,
         username=admin.username,
@@ -823,6 +830,7 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
         hosts_created=hosts_created,
         unlimited_traffic_policy=unlimited_traffic_policy,
         unrestricted_user_access=unrestricted_user_access,
+        user_scope_restricted=scope_restricted,
         auth_method=admin.auth_method,
         password_is_generated=password_is_generated,
         totp_enabled=totp_enabled,

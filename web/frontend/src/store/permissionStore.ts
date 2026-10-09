@@ -23,6 +23,7 @@ interface PermissionState {
   hostsCreated: number
   unlimitedTrafficPolicy: string
   unrestrictedUserAccess: boolean
+  userScopeRestricted: boolean
   isLoaded: boolean
   mustChangePassword: boolean
   loadError: string | null
@@ -50,6 +51,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
   hostsCreated: 0,
   unlimitedTrafficPolicy: 'allowed',
   unrestrictedUserAccess: false,
+  userScopeRestricted: false,
   isLoaded: false,
   mustChangePassword: false,
   loadError: null,
@@ -73,6 +75,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
         hostsCreated: info.hosts_created ?? 0,
         unlimitedTrafficPolicy: info.unlimited_traffic_policy || 'allowed',
         unrestrictedUserAccess: info.unrestricted_user_access === true,
+        userScopeRestricted: info.user_scope_restricted === true,
         isLoaded: true,
         mustChangePassword: info.password_is_generated === true,
         loadError: null,
@@ -101,6 +104,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
         hostsCreated: info.hosts_created ?? 0,
         unlimitedTrafficPolicy: info.unlimited_traffic_policy || 'allowed',
         unrestrictedUserAccess: info.unrestricted_user_access === true,
+        userScopeRestricted: info.user_scope_restricted === true,
       })
     } catch {
       // Silent failure: keep current values
@@ -108,7 +112,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
   },
 
   hasPermission: (resource: string, action: string) => {
-    const { isLoaded, role, permissions } = get()
+    const { isLoaded, role, permissions, userScopeRestricted } = get()
     // Before permissions are loaded, deny everything
     if (!isLoaded) return false
     // Superadmin bypass
@@ -116,6 +120,9 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
     // Legacy admins have no role assigned — treat as full access
     // (mirrors the backend fallback for old accounts predating RBAC).
     if (!role) return true
+    // Клиентов Bedolaga под скоуп юзеров не отфильтровать — админу, который
+    // видит не всех, разделы Bedolaga закрыты (так же решает бэкенд)
+    if (userScopeRestricted && resource.startsWith('bedolaga')) return false
     return permissions.some((p) => p.resource === resource && p.action === action)
   },
 
@@ -135,6 +142,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
       hostsCreated: 0,
       unlimitedTrafficPolicy: 'allowed',
       unrestrictedUserAccess: false,
+      userScopeRestricted: false,
       isLoaded: false,
       mustChangePassword: false,
       loadError: null,

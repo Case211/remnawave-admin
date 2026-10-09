@@ -476,9 +476,27 @@ def require_permission(resource: str, action: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: {resource}:{action}",
             )
+        if resource.startswith("bedolaga") and await user_scope_restricted(admin):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bedolaga is unavailable to admins with restricted user visibility",
+            )
         return admin
 
     return _check
+
+
+async def user_scope_restricted(admin: AdminUser) -> bool:
+    """Видит ли админ не всех юзеров (политика доступа, скоуп своих юзеров).
+
+    Клиенты, платежи и тикеты Bedolaga с юзерами панели связаны разве что по
+    Telegram ID — под скоуп их не отфильтровать. Поэтому права на Bedolaga
+    такому админу не действуют: иначе он видел бы всех клиентов сервиса.
+    """
+    if admin.account_id is None or admin.role == "superadmin":
+        return False
+    from web.backend.core.rbac import get_visible_user_uuids
+    return await get_visible_user_uuids(admin) is not None
 
 
 def require_superadmin():
