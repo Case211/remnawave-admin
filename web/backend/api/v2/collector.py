@@ -1454,7 +1454,7 @@ async def _handle_violation(
         ip_addresses = list(set(str(c.ip_address) for c in active_conns)) if active_conns else None
         username = user_info.get("username") if user_info else None
         email = user_info.get("email") if user_info else None
-        # get_user_by_uuid() returns Panel API field names (camelCase).
+        # batch_get_users_info() returns Panel API field names (camelCase).
         # Using the database column name here silently dropped the recipient
         # from every non-torrent violation, so neither manual warnings nor
         # warning-gated automation chains could deliver anything.
