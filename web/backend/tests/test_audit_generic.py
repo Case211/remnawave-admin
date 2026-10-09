@@ -213,38 +213,60 @@ def _route_map_actions() -> set:
     return actions
 
 
+def _api_routes(routes, prefix: str = ""):
+    """(полный путь, APIRoute). FastAPI 0.141+ подключает роутеры лениво: в
+    app.router.routes вместо маршрутов лежат обёртки с original_router, и без
+    обхода внутрь тест не видел ни одной ручки — перевод не проверялся вовсе."""
+    from fastapi.routing import APIRoute
+
+    for route in routes:
+        if isinstance(route, APIRoute):
+            yield prefix + route.path, route
+        elif hasattr(route, "original_router"):
+            yield from _api_routes(route.original_router.routes,
+                                   prefix + route.include_context.prefix)
+
+
 def _generic_actions() -> set:
     """Имена, которые мидлварь пишет за обработчик: сам он аудит не пишет,
     _ROUTE_MAP маршрут не ловит, в исключениях его нет."""
     from fastapi import APIRouter
-    from fastapi.routing import APIRoute
     from web.backend.main import app
 
-    routers = [app.router]
+    routes = list(_api_routes(app.router.routes))
     for module in list(sys.modules.values()):
         if getattr(module, "__name__", "").startswith("web.backend."):
-            routers += [value for value in vars(module).values() if isinstance(value, APIRouter)]
+            for value in vars(module).values():
+                if isinstance(value, APIRouter):
+                    routes += _api_routes(value.routes)
     mw = audit_middleware
     actions = set()
-    for router in routers:
-        for route in router.routes:
-            methods = (getattr(route, "methods", None) or set()) & {"POST", "PUT", "PATCH", "DELETE"}
-            if not isinstance(route, APIRoute) or not methods or not route.path.startswith("/api/"):
-                continue
-            fn = route.endpoint
-            module = fn.__module__.rsplit(".", 1)[-1]
-            if module in mw._GENERIC_SKIP_MODULES or (module, fn.__name__) in mw._GENERIC_SKIP:
-                continue
-            if module == "auth" and fn.__name__ not in mw._GENERIC_AUTH_ONLY:
-                continue
-            if _audit_calls(ast.parse(textwrap.dedent(inspect.getsource(fn)))):
-                continue
-            sample = re.sub(r"\{[^}]+\}", "1", route.path)
-            if all(mw._match_route(method, sample) for method in methods):
-                continue
-            resource = f"bedolaga_{module}" if ".bedolaga." in fn.__module__ else module
-            actions.add(f"{resource}.{fn.__name__}")
+    for path, route in routes:
+        methods = (route.methods or set()) & {"POST", "PUT", "PATCH", "DELETE"}
+        if not methods or not path.startswith("/api/"):
+            continue
+        fn = route.endpoint
+        module = fn.__module__.rsplit(".", 1)[-1]
+        if module in mw._GENERIC_SKIP_MODULES or (module, fn.__name__) in mw._GENERIC_SKIP:
+            continue
+        if module == "auth" and fn.__name__ not in mw._GENERIC_AUTH_ONLY:
+            continue
+        if _audit_calls(ast.parse(textwrap.dedent(inspect.getsource(fn)))):
+            continue
+        sample = re.sub(r"\{[^}]+\}", "1", path)
+        if all(mw._match_route(method, sample) for method in methods):
+            continue
+        resource = f"bedolaga_{module}" if ".bedolaga." in fn.__module__ else module
+        actions.add(f"{resource}.{fn.__name__}")
     return actions
+
+
+def test_generic_actions_see_included_routers():
+    """Страховка самой проверки: если сбор ручек снова ослепнет, тест на
+    переводы станет зелёным при любых пропусках."""
+    actions = _generic_actions()
+    assert "users.delete_user_hwid_device" in actions
+    assert "users.purge_removed_hwid_devices" in actions
 
 
 def _lookup(tree, dotted: str):
