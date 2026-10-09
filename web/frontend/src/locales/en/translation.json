@@ -907,7 +907,7 @@
       "removedAt": "Unlinked",
       "tabActive": "Current",
       "tabRemoved": "Removed",
-      "removedHint": "Previously present on this account but were removed. The records are kept so that re-linking the same device to another account stays visible.",
+      "removedHint": "Previously present on this account but were removed. The records are kept so that re-linking the same device to another account stays visible. Once the case is settled, clear them — otherwise they keep raising violations.",
       "uaBadge": {
         "linkInUa": "Double tunnel",
         "botLibrary": "Bot/script",
@@ -917,6 +917,17 @@
         "tooltip": "User-Agent does not match a known VPN client. Inspect this device"
       },
       "deleteAll": "Delete all devices",
+      "purgeRemoved": "Clear removed",
+      "purgeConfirm": {
+        "title": "Delete device from history?",
+        "description": "The record will be gone for good, and the detector will stop linking this account to others through this device. Do it once the case is settled, otherwise the old record keeps raising violations.",
+        "confirm": "Delete"
+      },
+      "purgeAllConfirm": {
+        "title": "Clear removed devices?",
+        "description": "All records of devices removed from this user will be gone for good, and the detector will stop linking accounts through them. Re-linking the same devices to other accounts will no longer be visible either. Active devices are not affected.",
+        "confirm": "Clear"
+      },
       "deleteAllConfirm": {
         "title": "Delete all devices?",
         "description": "All HWID-bound devices for this user will be removed. They will need to re-link on next connect.",
@@ -1045,6 +1056,7 @@
       "reassigned": "User reassigned",
       "adminUnassigned": "Admin unassigned",
       "allDevicesDeleted": "All devices deleted",
+      "removedDevicesPurged": "Deleted from history: {{count}}",
       "deviceDeleted": "Device deleted"
     },
     "toast": {
@@ -2758,6 +2770,7 @@
       "sync_hwid": "HWID sync",
       "delete_user_hwid_device": "Delete device",
       "delete_all_user_hwid_devices": "Delete all devices",
+      "purge_removed_hwid_devices": "Clear removed devices",
       "create_preset": "Create preset",
       "update_preset": "Update preset",
       "delete_preset": "Delete preset",
@@ -3559,6 +3572,9 @@
       },
       "delete_all_user_hwid_devices": {
         "user": "All user HWID devices deleted"
+      },
+      "purge_removed_hwid_devices": {
+        "user": "Removed HWID devices of the user deleted from history"
       },
       "create_preset": {
         "user_preset": "User preset created"

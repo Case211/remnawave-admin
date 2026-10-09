@@ -719,6 +719,35 @@ class NetworkMixin:
             logger.error("Error removing all HWID devices for user %s: %s", user_uuid, e, exc_info=True)
             return 0
 
+    async def purge_removed_hwid_devices(self, user_uuid: str, hwid: Optional[str] = None) -> int:
+        """Стереть отвязанные устройства юзера совсем, а не пометкой.
+
+        Отвязанные строки живут ради детекта абуза триалов, и по ним же детектор
+        связывает аккаунты дальше, когда с клиентом уже разобрались и он удалил
+        лишние устройства: нарушения приходят снова. Стереть их — решение админа
+        из карточки юзера. ``hwid`` — одно устройство, без него — все отвязанные;
+        активные не трогаются. Ошибку БД не глотаем: админ должен узнать, что
+        ничего не стёрлось.
+
+        Returns:
+            Количество стёртых записей
+        """
+        if not self.is_connected:
+            return 0
+
+        query = (f"DELETE FROM {USER_HWID_DEVICES_TABLE} "
+                 "WHERE user_uuid = $1 AND removed_at IS NOT NULL")
+        args: List[Any] = [user_uuid]
+        if hwid:
+            query += " AND hwid = $2"
+            args.append(hwid)
+        async with self.acquire() as conn:
+            result = await conn.execute(query, *args)
+        try:
+            return int(result.split()[-1])
+        except (AttributeError, IndexError, ValueError):
+            return 0
+
     async def get_user_hwid_devices(self, user_uuid: str,
                                     removed: bool = False) -> List[Dict[str, Any]]:
         """Устройства пользователя. ``removed=True`` — те, что отвязали:
