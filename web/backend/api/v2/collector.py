@@ -1454,7 +1454,11 @@ async def _handle_violation(
         ip_addresses = list(set(str(c.ip_address) for c in active_conns)) if active_conns else None
         username = user_info.get("username") if user_info else None
         email = user_info.get("email") if user_info else None
-        telegram_id = user_info.get("telegram_id") if user_info else None
+        # get_user_by_uuid() returns Panel API field names (camelCase).
+        # Using the database column name here silently dropped the recipient
+        # from every non-torrent violation, so neither manual warnings nor
+        # warning-gated automation chains could deliver anything.
+        telegram_id = user_info.get("telegramId") if user_info else None
         device_limit = user_info.get("hwidDeviceLimit", 1) if user_info else 1
 
         violation_id, violation_created = await db_service.save_violation(
