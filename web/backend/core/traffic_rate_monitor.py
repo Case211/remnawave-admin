@@ -19,6 +19,8 @@ from shared.db_schema import (
     USERS_TABLE, USER_CONNECTIONS_TABLE, NODES_TABLE, USER_NODE_TRAFFIC_HISTORY_TABLE,
 )
 from shared.db_query import select_sql
+from shared.i18n import tr
+from shared.tg_card import Card, b, code, join, mark, when
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +74,10 @@ async def _nodes_by_connections(conn, user_uuid: str, window_minutes: int) -> li
     return [{"name": r["name"], "bytes": None} for r in rows]
 
 
-def _format_nodes(rows: list) -> str:
-    """«Germany W 8.9 GB, Finland 0.3 GB» — или только имена, если объёма нет."""
-    parts = []
-    for row in rows:
-        name = f"<code>{_esc(row['name'])}</code>"
-        size = row.get("bytes")
-        parts.append(f"{name} {max(size / 1024 ** 3, 0.01):.2f} GB" if size else name)
-    return ", ".join(parts)
+def _node_rows(rows: list) -> list:
+    """Строки таблицы нод: имя и объём; объёма нет — прочерк, крошка — не ноль."""
+    return [[code(row["name"]), f"{max(row['bytes'] / 1024 ** 3, 0.01):.2f} GB" if row.get("bytes") else None]
+            for row in rows]
 
 
 async def _resolve_user_key(user_uuid: str) -> str | int:
@@ -94,8 +92,8 @@ _UserSnapshot = Tuple[float, int]
 _MAX_SNAPSHOTS = 24
 
 
-def _traffic_rate_keyboard(user_uuid: str) -> Dict:
-    """Кнопки под карточкой «Высокое потребление трафика».
+def _traffic_rate_buttons(user_uuid: str) -> list:
+    """Кнопки карточки «Высокое потребление трафика».
 
     Тот же набор, что у карточек нарушений и торрентов, включая
     «🐌 Урезать скорость»: раньше клавиатура собиралась здесь отдельно и
@@ -103,8 +101,8 @@ def _traffic_rate_keyboard(user_uuid: str) -> Dict:
     трафика. Белый список не предлагаем — превышение порога не анализатор
     нарушений, и список на него не влияет.
     """
-    from web.backend.core.violation_notifier import _violation_keyboard
-    return _violation_keyboard(user_uuid, with_whitelist=False)
+    from web.backend.core.violation_notifier import violation_buttons
+    return violation_buttons(user_uuid, with_whitelist=False)
 
 
 class TrafficRateMonitor:
@@ -399,7 +397,7 @@ class TrafficRateMonitor:
             threshold = cfg["threshold_gb"]
 
             # Fetch user details + node names
-            extra_lines = []
+            user_row = None
             node_rows = []
             try:
                 async with db_service.acquire() as conn:
@@ -418,47 +416,39 @@ class TrafficRateMonitor:
                     node_rows = await _nodes_by_traffic(conn, user_uuid, window_minutes)
                     if not node_rows:
                         node_rows = await _nodes_by_connections(conn, user_uuid, window_minutes)
-                if user_row:
-                    status = (user_row["status"] or "unknown").upper()
-                    used = user_row["used_traffic_bytes"] or 0
-                    limit = user_row["traffic_limit_bytes"] or 0
-                    used_gb = round(used / (1024 ** 3), 2)
-                    limit_str = f"{round(limit / (1024 ** 3), 1)} GB" if limit > 0 else "∞"
-                    extra_lines.append(f"📊 Статус: <b>{_esc(status)}</b> | Трафик: <b>{used_gb}</b> / {limit_str}")
-                    if user_row["expire_at"]:
-                        from shared import timefmt
-
-                        exp_str = timefmt.fmt_date(user_row["expire_at"])
-                        extra_lines.append(f"📅 Истекает: {exp_str}")
-                    if user_row["description"]:
-                        extra_lines.append(f"📝 {_esc(user_row['description'])}")
-                    if user_row["short_uuid"]:
-                        extra_lines.append(f"🔑 <code>{_esc(user_row['short_uuid'])}</code>")
-                if node_rows:
-                    extra_lines.append(f"🖥 Ноды: {_format_nodes(node_rows)}")
             except Exception:
                 pass
 
-            extra_block = "\n" + "\n".join(extra_lines) if extra_lines else ""
-
-            title = f"⚡ Высокое потребление трафика"
-            body = (
-                f"👤 <code>{_esc(username)}</code>\n\n"
-                f"🔥 Потребил <b>{delta_gb} GB</b> за {elapsed} мин "
-                f"(~{rate} GB/ч)\n"
-                f"⚠️ Порог: {threshold} GB / {cfg['window_minutes']} мин"
-                f"{extra_block}"
-            )
-
-            # Plain text body for in-app/web notifications (strip HTML tags)
-            import re
-            plain_body = re.sub(r'<[^>]+>', '', body)
-
-            keyboard = _traffic_rate_keyboard(user_uuid)
+            card = Card(tr("notify.traffic_rate.title"), emoji="⚡")
+            card.lead(b(username), mark(tr("notify.traffic_rate.lead_used", gb=delta_gb, minutes=elapsed)),
+                      tr("notify.traffic_rate.lead_rate", rate=rate))
+            fields = [(tr("notify.traffic_rate.field.threshold"),
+                       tr("notify.traffic_rate.threshold_value", gb=threshold, minutes=cfg["window_minutes"]))]
+            if user_row:
+                used = user_row["used_traffic_bytes"] or 0
+                limit = user_row["traffic_limit_bytes"] or 0
+                fields += [
+                    (tr("notify.traffic_rate.field.status"), code((user_row["status"] or "unknown").upper())),
+                    (tr("notify.traffic_rate.field.traffic"),
+                     join(b(f"{round(used / 1024 ** 3, 2)} GB"),
+                          f"{round(limit / 1024 ** 3, 1)} GB" if limit > 0 else "∞", sep=" / ")),
+                    (tr("notify.traffic_rate.field.expires"),
+                     when(user_row["expire_at"], "d") if user_row["expire_at"] else None),
+                    (tr("notify.traffic_rate.field.description"), user_row["description"]),
+                    (tr("notify.traffic_rate.field.short_uuid"),
+                     code(user_row["short_uuid"]) if user_row["short_uuid"] else None),
+                ]
+            card.fields(fields)
+            if node_rows:
+                card.section(tr("notify.traffic_rate.nodes"))
+                card.table(_node_rows(node_rows), align=["left", "right"],
+                           head=[tr("notify.traffic_rate.col.node"), tr("notify.traffic_rate.col.volume")])
+            card.buttons(*_traffic_rate_buttons(user_uuid))
+            card.stamp()
 
             await create_notification(
-                title=title,
-                body=plain_body,
+                title=card.title_text(),
+                body=card.body_text(),
                 type="traffic_rate",
                 severity="warning",
                 source="traffic_rate_monitor",
@@ -467,8 +457,7 @@ class TrafficRateMonitor:
                 group_key=f"traffic_rate:{user_uuid}",
                 channels=["telegram", "in_app", "push"],
                 topic_type="violations",
-                telegram_body=body,
-                reply_markup=keyboard,
+                telegram_card=card,
                 event="violation.traffic_rate",
             )
 
@@ -520,12 +509,6 @@ class TrafficRateMonitor:
             logger.error("Failed to send traffic rate notification for %s: %s",
                          violator["username"], e)
 
-
-def _esc(text: str) -> str:
-    """Escape HTML for Telegram."""
-    if not text:
-        return ""
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 traffic_rate_monitor = TrafficRateMonitor()

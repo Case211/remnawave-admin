@@ -2,12 +2,11 @@
 
 Блокировка ставит DROP на весь трафик с адреса, а по подсети — со всего
 диапазона, поэтому в уведомлении важно не «адрес закрыт», а кого это задело.
-Разметка проверяется через тот же конвертер, что использует бот: без неё
-карточка доедет плоской простынёй.
+Карточка — shared.tg_card: люди идут таблицей, HTML-фолбэк проверяется тут
+же, на него она уходит, если rich не принят.
 """
 from datetime import datetime, timedelta, timezone
 
-from shared.tg_rich import html_to_blocks
 from web.backend.core.blocked_ip_cards import blocked_ip_card
 
 FUTURE = datetime.now(timezone.utc) + timedelta(days=7)
@@ -30,47 +29,53 @@ def _user(name, trial=True, active=True, conns=5):
     }
 
 
+def _html(*args, **kwargs) -> str:
+    return blocked_ip_card(*args, **kwargs).to_html()
+
+
 class TestLayout:
-    def test_becomes_heading_and_lists(self):
+    def test_heading_and_people_table(self):
         card = blocked_ip_card(_row(), [_user("a")], pushed_nodes=3, admin_username="admin")
-        types = [b.get("type") for b in html_to_blocks(card)]
-        assert types[0] == "heading"
-        assert "list" in types
+        types = [blk["type"] for blk in card.to_blocks()]
+        assert types[0] == "heading" and types[-1] == "footer"
+        people = [blk for blk in card.to_blocks() if blk["type"] == "table"][-1]
+        assert people["cells"][0][0]["text"] == "Аккаунт"
 
     def test_long_list_is_collapsed(self):
         users = [_user(f"u{i}") for i in range(9)]
-        card = blocked_ip_card(_row(), users)
-        assert "<blockquote expandable>" in card
-        assert "И ещё 4" in card
+        tail = next(blk for blk in blocked_ip_card(_row(), users).to_blocks() if blk["type"] == "details")
+        assert tail["summary"] == "… и ещё 4"
+
+    def test_reason_is_quoted_with_who_added_it(self):
+        quote = next(blk for blk in blocked_ip_card(_row(), [], admin_username="admin").to_blocks()
+                     if blk["type"] == "blockquote")
+        assert quote["credit"] == "admin"
 
 
 class TestContent:
     def test_shows_who_is_affected(self):
-        card = blocked_ip_card(_row(), [_user("a"), _user("b", trial=False)])
-        assert "Кого задевает (2)" in card
-        assert "пробных: 1" in card
+        html = _html(_row(), [_user("a"), _user("b", trial=False)])
+        assert "Кого задевает · 2" in html
+        assert "пробных: 1" in html
 
     def test_subnet_is_called_out(self):
         """Подсеть — цена ошибки другая, это должно быть видно сразу."""
-        card = blocked_ip_card(_row(ip_cidr="91.201.236.0/24"), [])
-        assert "подсеть" in card
+        assert "подсеть" in _html(_row(ip_cidr="91.201.236.0/24"), [])
 
     def test_single_address_has_no_subnet_warning(self):
-        assert "подсеть" not in blocked_ip_card(_row(), [])
+        assert "подсеть" not in _html(_row(), [])
 
     def test_empty_list_says_so_plainly(self):
-        card = blocked_ip_card(_row(), [])
-        assert "подключений с этого адреса не было" in card.lower()
+        assert "подключений с этого адреса не было" in _html(_row(), []).lower()
 
     def test_expiry_shown(self):
-        assert "Бессрочно" in blocked_ip_card(_row(), [])
-        assert "До " in blocked_ip_card(_row(expires_at=FUTURE), [])
+        assert "Срок: бессрочно" in _html(_row(), [])
+        assert "<tg-time" in _html(_row(expires_at=FUTURE), [])
 
     def test_warns_when_no_agents_connected(self):
         """Запись есть, а применить её не на чем — это надо сказать вслух."""
-        assert "агентов нет" in blocked_ip_card(_row(), [], pushed_nodes=0)
-        assert "Применено на нодах: 2" in blocked_ip_card(_row(), [], pushed_nodes=2)
+        assert "агентов нет" in _html(_row(), [], pushed_nodes=0)
+        assert "Применено на нодах: <b>2</b>" in _html(_row(), [], pushed_nodes=2)
 
     def test_html_in_username_is_escaped(self):
-        card = blocked_ip_card(_row(), [_user("<b>evil</b>")])
-        assert "&lt;b&gt;evil&lt;/b&gt;" in card
+        assert "&lt;b&gt;evil&lt;/b&gt;" in _html(_row(), [_user("<b>evil</b>")])

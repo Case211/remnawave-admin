@@ -19,6 +19,8 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 
+from shared.tg_card import Button, Card
+
 API_VERSION = 1
 
 # Продуктовая телеметрия: счётчики фич копятся в памяти, heartbeat
@@ -346,9 +348,18 @@ def plugin_actions_markup(
     кому нажатие отдать. Двоеточие — разделитель, поэтому в служебных
     частях его быть не должно.
     """
+    row = plugin_action_buttons(plugin_id, actions)
+    return {"inline_keyboard": [[button.to_dict() for button in row]]} if row else None
+
+
+def plugin_action_buttons(
+    plugin_id: Optional[str], actions: Optional[list[dict[str, Any]]],
+) -> list[Button]:
+    """Те же действия кнопками карточки; ``style`` действия — цвет кнопки
+    (danger, success, primary), необязательный: старые плагины его не знают."""
     if not actions or not plugin_id or ":" in plugin_id:
-        return None
-    row: list[dict[str, str]] = []
+        return []
+    row: list[Button] = []
     for a in actions:
         text = str(a.get("text") or "").strip()
         action = str(a.get("action") or "").strip()
@@ -361,8 +372,11 @@ def plugin_actions_markup(
                 "plugin_api.action_too_long: %s/%s", plugin_id, action
             )
             continue
-        row.append({"text": text, "callback_data": data})
-    return {"inline_keyboard": [row]} if row else None
+        row.append(Button(text, data, style=a.get("style")))
+    return row
+
+
+SEVERITY_EMOJI = {"info": "ℹ️", "warning": "⚠️", "critical": "🚨", "success": "✅"}
 
 
 async def panel_notify(
@@ -383,16 +397,22 @@ async def panel_notify(
     не класть. body — телеграм-HTML карточки (строки с отступом «   »
     конвертер раскладывает в список).
 
-    ``actions`` — кнопки быстрого ответа под телеграм-сообщением, по
-    ``{text, action, ref}`` на каждую; нажатие приходит боту. Требуют
-    ``plugin_id``: без него нажатие некому адресовать.
+    ``actions`` — кнопки быстрого ответа прямо в телеграм-сообщении, по
+    ``{text, action, ref[, style]}`` на каждую; нажатие приходит боту.
+    Требуют ``plugin_id``: без него нажатие некому адресовать.
     """
     from web.backend.core import notification_service
 
+    # значок важности плагин в title не кладёт — его ставит панель
+    card = Card(title, emoji=SEVERITY_EMOJI.get(severity, ""))
+    card.html_block(body)
+    card.buttons(plugin_action_buttons(plugin_id, actions))
+    card.stamp()
     try:
         await notification_service.create_notification(
             title=title,
             body=body,
+            telegram_card=card,
             type="plugin",
             severity=severity,
             link=link,
@@ -400,7 +420,6 @@ async def panel_notify(
             group_key=group_key,
             channels=["in_app", "telegram", "push"],
             topic_type=topic_type,
-            reply_markup=plugin_actions_markup(plugin_id, actions),
         )
         return True
     except Exception:

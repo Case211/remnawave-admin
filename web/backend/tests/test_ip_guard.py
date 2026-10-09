@@ -113,32 +113,37 @@ class TestCard:
             _group([_user("first", conns=41), _user("second", conns=1)]),
             [_user("first", conns=41), _user("second", conns=1)],
         )
-        assert card.splitlines()[0].startswith("\U0001f310 <b>")
-        assert IP in card
-        assert "Rostelecom" in card
-        assert "Подключений: <b>41</b>" in card
+        html = card.to_html()
+        assert card.to_blocks()[0] == {"type": "heading", "text": "🌐 " + card.title_text(), "size": 3}
+        assert IP in html
+        assert "Rostelecom" in html
+        people = [blk for blk in card.to_blocks() if blk["type"] == "table"][-1]
+        conns = [cell["text"] for cell in people["cells"][0]].index("Подключений")
+        assert people["cells"][1][conns]["text"] == "41"  # у первого; последнего входа нет
 
     def test_mobile_card_says_so(self):
         users = [_user("a"), _user("b")]
         card = ip_guard.build_card(_group(users, mobile=True), users)
-        assert "CGNAT" in card
+        assert "CGNAT" in card.to_html()
 
     def test_long_list_is_collapsed(self):
         users = [_user(f"u{i}") for i in range(9)]
         card = ip_guard.build_card(_group(users), users)
-        assert "<blockquote expandable>" in card
-        assert "И ещё 4" in card
+        tail = next(blk for blk in card.to_blocks() if blk["type"] == "details")
+        assert tail["summary"] == "… и ещё 4"
 
-    def test_keyboard_carries_ip_actions(self):
-        keyboard = ip_guard.build_keyboard(IP)
-        data = [b["callback_data"] for row in keyboard["inline_keyboard"] for b in row]
-        assert f"ipact:block:{IP}" in data
-        assert f"ipact:users:{IP}" in data
-        assert f"ipact:mute:{IP}" in data
+    def test_buttons_carry_ip_actions_inside_the_message(self):
+        users = [_user("a"), _user("b")]
+        card = ip_guard.build_card(_group(users), users)
+        embedded = [btn for blk in card.to_blocks() if blk["type"] == "buttons" for btn in blk["buttons"]]
+        data = [btn["callback_data"] for btn in embedded]
+        assert data == [f"ipact:block:{IP}", f"ipact:users:{IP}", f"ipact:mute:{IP}"]
+        assert embedded[0]["style"] == "danger"
+        # в HTML-фолбэке те же кнопки — клавиатурой
+        assert [b["callback_data"] for row in card.keyboard()["inline_keyboard"] for b in row] == data
 
     def test_callback_data_fits_telegram_limit(self):
         """Telegram режет callback_data на 64 байтах — с IPv6 это близко к краю."""
-        keyboard = ip_guard.build_keyboard("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
-        for row in keyboard["inline_keyboard"]:
+        for row in ip_guard.ip_buttons("2001:0db8:85a3:0000:0000:8a2e:0370:7334"):
             for button in row:
-                assert len(button["callback_data"].encode()) <= 64
+                assert len(button.callback_data.encode()) <= 64

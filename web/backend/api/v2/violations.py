@@ -960,11 +960,11 @@ async def _handle_blacklisted_hwid_users(
     except Exception as e:  # noqa: BLE001
         logger.debug("HWID blacklist card details failed: %s", e)
 
-    entry = {"reason": reason}
+    card = blacklist_card(hwid, {"reason": reason}, detailed, blocked)
     await create_notification(
-        title="Чёрный список HWID: аккаунты отключены" if blocked
-              else "Чёрный список HWID: найдено совпадение",
-        body=blacklist_card(hwid, entry, detailed, blocked),
+        title=card.title_text(),
+        body=card.body_text(),
+        telegram_card=card,
         type="alert",
         severity="critical" if blocked else "warning",
         link="/violations",

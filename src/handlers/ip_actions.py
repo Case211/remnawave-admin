@@ -10,9 +10,11 @@ import logging
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
+from aiogram.utils.i18n import gettext as _
 
 from shared.database import db_service
 from src.utils.auth import BotAdmin
+from src.utils.cards import append_card_note
 from src.utils.formatters import _esc
 
 logger = logging.getLogger(__name__)
@@ -69,10 +71,7 @@ async def _block_ip(callback: CallbackQuery, ip: str, admin: BotAdmin, admin_nam
         return
 
     await callback.answer(f"Адрес {ip} в стоп-листе")
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:  # noqa: BLE001
-        pass
+    await append_card_note(callback, "\n\n" + _("ipact.blocked_note").format(admin=_esc(admin_name)))
 
 
 async def _show_users(callback: CallbackQuery, ip: str) -> None:
@@ -123,7 +122,4 @@ async def _mute_ip(callback: CallbackQuery, ip: str, admin_name: str) -> None:
         return
 
     await callback.answer(f"Про {ip} не напомню {MUTE_DAYS} дней")
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:  # noqa: BLE001
-        pass
+    await append_card_note(callback, "\n\n" + _("ipact.muted_note").format(days=MUTE_DAYS, admin=_esc(admin_name)))

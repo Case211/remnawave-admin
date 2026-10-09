@@ -159,15 +159,23 @@ async def send_report(
     from shared import tg_rich
     from shared.config_service import config_service
     from shared.database import db_service as db
+    from shared.violation_reports import report_from_row, violation_report_service
     from web.backend.core.notification_service import _get_global_telegram_config
 
     bot_token, chat_id, violations_topic = _get_global_telegram_config("violations")
     if not bot_token or not chat_id:
         raise api_error(400, E.TELEGRAM_NOT_CONFIGURED)
     topic_id = config_service.get("reports_topic_id", None) or violations_topic
+    # та же карточка, что уходит по расписанию: собираем её из сохранённых цифр
+    try:
+        card = violation_report_service.build_card(report_from_row(report))
+        text, blocks = card.to_html(), card.to_blocks()
+    except Exception as e:  # noqa: BLE001 — старый отчёт без цифр уходит своим текстом
+        logger.debug("Report %s card rebuild failed: %s", report_id, e)
+        text, blocks = report["message_text"], None
     try:
         await tg_rich.send_rich_or_html(
-            bot_token, chat_id, report["message_text"],
+            bot_token, chat_id, text, blocks=blocks,
             message_thread_id=int(topic_id) if topic_id else None,
         )
     except Exception as e:

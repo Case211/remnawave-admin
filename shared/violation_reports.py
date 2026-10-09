@@ -18,7 +18,9 @@ from typing import Any, Dict, List, Optional
 from shared import timefmt
 from shared.analyzers.models import ACTION_LABELS
 from shared.database import db_service
+from shared.i18n import tr
 from shared.logger import logger
+from shared.tg_card import Card, b, code, i, join, section
 
 
 class ReportType(Enum):
@@ -84,23 +86,6 @@ class ViolationReportService:
         "warning": "🟠",
         "monitor": "🟡",
         "safe": "🟢"
-    }
-
-    # Названия действий общие с уведомлениями (shared/analyzers/models.py):
-    # одно и то же нарушение не должно называться по-разному в двух местах.
-    ACTION_NAMES = ACTION_LABELS
-
-    ASN_TYPE_NAMES = {
-        "mobile": "Мобильные",
-        "mobile_isp": "Мобильные ISP",
-        "fixed": "Проводные",
-        "isp": "ISP",
-        "regional_isp": "Региональные ISP",
-        "hosting": "Хостинг",
-        "datacenter": "Датацентры",
-        "vpn": "VPN",
-        "business": "Корпоративные",
-        "infrastructure": "Инфраструктура"
     }
 
     def __init__(self):
@@ -299,8 +284,8 @@ class ViolationReportService:
             period_start, period_end, self._min_score_for_report
         )
 
-        # Генерируем текст отчёта
-        report.message_text = self._format_report_message(report)
+        # Текст отчёта — HTML-вид его карточки: хранится в базе и виден в панели
+        report.message_text = self.build_card(report).to_html()
 
         # Сохраняем в БД
         if save_to_db:
@@ -325,123 +310,88 @@ class ViolationReportService:
 
         return report
 
-    def _format_report_message(self, report: ViolationReportData) -> str:
+    def build_card(self, report: ViolationReportData) -> Card:
+        """Отчёт карточкой: сводка полями, уровни/топ/страны таблицами, остальное свёрнуто.
+
+        Её HTML-вид — это и ``message_text``: тот же текст хранится в базе и
+        показывается в панели, а в Telegram уходят rich-блоки.
         """
-        Форматирует текст отчёта для отправки в Telegram.
+        total = report.total_violations
+        card = Card(tr(f"notify.report.title.{report.report_type.value}"), emoji="📊")
+        start = timefmt.fmt_date(report.period_start)
+        end = timefmt.fmt_date(report.period_end - timedelta(seconds=1))
+        card.lead(b(start if start == end else f"{start} — {end}"))
 
-        Args:
-            report: Данные отчёта
-
-        Returns:
-            Отформатированный текст
-        """
-        lines = []
-
-        # Заголовок
-        report_titles = {
-            ReportType.DAILY: "📊 Ежедневный отчёт по нарушениям",
-            ReportType.WEEKLY: "📊 Еженедельный отчёт по нарушениям",
-            ReportType.MONTHLY: "📊 Ежемесячный отчёт по нарушениям"
-        }
-        lines.append(f"<b>{report_titles[report.report_type]}</b>")
-        lines.append("")
-
-        # Период
-        period_start_str = timefmt.fmt_date(report.period_start)
-        period_end_str = timefmt.fmt_date(report.period_end - timedelta(seconds=1))
-        if period_start_str == period_end_str:
-            lines.append(f"📅 <b>Период:</b> {period_start_str}")
-        else:
-            lines.append(f"📅 <b>Период:</b> {period_start_str} — {period_end_str}")
-        lines.append("")
-
-        # Основная статистика
-        lines.append("<b>📈 Общая статистика:</b>")
-        lines.append(f"  • Всего нарушений: <b>{report.total_violations}</b>")
-        lines.append(f"  • Уникальных пользователей: <b>{report.unique_users}</b>")
-
-        if report.total_violations > 0:
-            lines.append(f"  • Средний скор: <b>{report.avg_score:.1f}</b>")
-            lines.append(f"  • Максимальный скор: <b>{report.max_score:.1f}</b>")
-        lines.append("")
-
-        # Распределение по severity
-        if report.total_violations > 0:
-            lines.append("<b>🎯 По уровню критичности:</b>")
-            if report.critical_count > 0:
-                pct = (report.critical_count / report.total_violations) * 100
-                lines.append(f"  {self.SEVERITY_EMOJI['critical']} Критичные (≥80): <b>{report.critical_count}</b> ({pct:.0f}%)")
-            if report.warning_count > 0:
-                pct = (report.warning_count / report.total_violations) * 100
-                lines.append(f"  {self.SEVERITY_EMOJI['warning']} Предупреждения (50-79): <b>{report.warning_count}</b> ({pct:.0f}%)")
-            if report.monitor_count > 0:
-                pct = (report.monitor_count / report.total_violations) * 100
-                lines.append(f"  {self.SEVERITY_EMOJI['monitor']} Мониторинг (30-49): <b>{report.monitor_count}</b> ({pct:.0f}%)")
-            lines.append("")
-
-        # Тренд
+        trend = None
         if report.prev_total_violations is not None:
-            trend_emoji = self.TREND_EMOJI[report.trend_direction]
-            if report.trend_percent is not None:
-                trend_str = f"{'+' if report.trend_percent > 0 else ''}{report.trend_percent:.1f}%"
-            else:
-                trend_str = "—"
+            pct = report.trend_percent
+            arrow = self.TREND_EMOJI.get(report.trend_direction, "")
+            change = f"{'+' if pct > 0 else ''}{pct:.1f}%" if pct is not None else "—"
+            trend = join(f"{arrow} {change}", tr("notify.report.trend_was", count=report.prev_total_violations))
+        card.fields([
+            (tr("notify.report.field.total"), b(str(total))),
+            (tr("notify.report.field.trend"), trend),
+            (tr("notify.report.field.users"), str(report.unique_users)),
+            (tr("notify.report.field.avg"), f"{report.avg_score:.1f}" if total and report.avg_score else None),
+            (tr("notify.report.field.max"), f"{report.max_score:.1f}" if total and report.max_score else None),
+        ])
+        if not total:
+            card.text(i(tr("notify.report.empty")))
+            return card.stamp()
 
-            lines.append(f"<b>{trend_emoji} Тренд:</b> {trend_str} (было: {report.prev_total_violations})")
-            lines.append("")
+        levels = [(level, count) for level, count in (("critical", report.critical_count),
+                  ("warning", report.warning_count), ("monitor", report.monitor_count)) if count]
+        if levels:
+            card.section(tr("notify.report.severity"))
+            card.table(
+                [[f"{self.SEVERITY_EMOJI[level]} {tr(f'notify.report.level.{level}')}", b(str(count)),
+                  f"{count / total * 100:.0f}%"] for level, count in levels],
+                head=[tr("notify.report.col.level"), tr("notify.report.col.count"), tr("notify.report.col.share")],
+                align=["left", "right", "right"],
+            )
 
-        # Топ нарушителей
         if report.top_violators:
-            lines.append("<b>👥 Топ нарушителей:</b>")
-            for i, violator in enumerate(report.top_violators[:5], 1):
-                username = violator.get('username') or violator.get('email') or str(violator.get('user_uuid'))[:8]
-                count = violator.get('violations_count', 0)
-                max_score = violator.get('max_score', 0)
-                lines.append(f"  {i}. {self._escape_html(username)}: <b>{count}</b> (макс: {max_score:.0f})")
-            lines.append("")
+            card.section(tr("notify.report.top"))
+            card.table(
+                [[str(n), code(v.get("username") or v.get("email") or str(v.get("user_uuid"))[:8]),
+                  b(str(v.get("violations_count", 0))), f"{(v.get('max_score') or 0):.0f}"]
+                 for n, v in enumerate(report.top_violators[:10], 1)],
+                head=["#", tr("notify.report.col.user"), tr("notify.report.col.violations"),
+                      tr("notify.report.col.max")],
+                align=["right", "left", "right", "right"],
+            )
 
-        # Распределение по странам (топ-5)
         if report.by_country:
-            lines.append("<b>🌍 По странам:</b>")
-            sorted_countries = sorted(report.by_country.items(), key=lambda x: x[1], reverse=True)[:5]
-            for country, count in sorted_countries:
-                flag = self._get_country_flag(country)
-                lines.append(f"  {flag} {country}: <b>{count}</b>")
-            lines.append("")
+            card.section(tr("notify.report.countries"))
+            card.table(
+                [[f"{self._get_country_flag(country)} {country}", b(str(count))]
+                 for country, count in sorted(report.by_country.items(), key=lambda x: x[1], reverse=True)[:5]],
+                head=[tr("notify.report.col.country"), tr("notify.report.col.violations")],
+                align=["left", "right"],
+            )
 
-        # Распределение по типам провайдеров (топ-5)
+        details = section()
         if report.by_asn_type:
-            lines.append("<b>🔌 По типам провайдеров:</b>")
-            sorted_types = sorted(report.by_asn_type.items(), key=lambda x: x[1], reverse=True)[:5]
-            for asn_type, count in sorted_types:
-                type_name = self.ASN_TYPE_NAMES.get(asn_type, asn_type)
-                lines.append(f"  • {type_name}: <b>{count}</b>")
-            lines.append("")
-
-        # Распределение по действиям
+            details.section(tr("notify.report.providers"))
+            details.table(
+                [[self._asn_type_name(kind), b(str(count))]
+                 for kind, count in sorted(report.by_asn_type.items(), key=lambda x: x[1], reverse=True)[:5]],
+                head=[tr("notify.report.col.type"), tr("notify.report.col.count")], align=["left", "right"],
+            )
         if report.by_action:
-            lines.append("<b>⚡ По рекомендуемым действиям:</b>")
-            sorted_actions = sorted(report.by_action.items(), key=lambda x: x[1], reverse=True)
-            for action, count in sorted_actions:
-                action_name = self.ACTION_NAMES.get(action, action)
-                lines.append(f"  • {action_name.capitalize()}: <b>{count}</b>")
+            details.section(tr("notify.report.actions"))
+            details.table(
+                [[_action_name(action), b(str(count))]
+                 for action, count in sorted(report.by_action.items(), key=lambda x: x[1], reverse=True)],
+                head=[tr("notify.report.col.action"), tr("notify.report.col.count")], align=["left", "right"],
+            )
+        card.details(tr("notify.report.details"), details)
+        return card.stamp()
 
-        # Футер
-        lines.append("")
-        generated_at = timefmt.fmt(datetime.now(timezone.utc))
-        lines.append(f"<i>Сгенерировано: {generated_at}</i>")
-
-        return "\n".join(lines)
-
-    def _escape_html(self, text: str) -> str:
-        """Экранирует HTML-символы."""
-        if not text:
-            return ""
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
+    @staticmethod
+    def _asn_type_name(kind: str) -> str:
+        name = tr(f"notify.report.asn.{kind}")
+        return kind if name == f"notify.report.asn.{kind}" else name
 
     def _get_country_flag(self, country_code: str) -> str:
         """Получить эмодзи флага страны."""
@@ -612,3 +562,42 @@ class ViolationReportService:
 
 # Глобальный экземпляр сервиса
 violation_report_service = ViolationReportService()
+
+
+def _action_name(action: str) -> str:
+    """Название действия — общее с уведомлениями: одно нарушение не называется по-разному."""
+    name = tr(f"notify.violation.action.{action}")
+    return name if name != f"notify.violation.action.{action}" else ACTION_LABELS.get(action, action)
+
+
+def _json_value(value: Any, default: Any) -> Any:
+    """JSON-колонка: драйвер отдаёт её строкой или уже разобранной."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return default
+    return value if value is not None else default
+
+
+def report_from_row(row: Dict[str, Any]) -> ViolationReportData:
+    """Сохранённый отчёт обратно в данные — чтобы переслать его той же карточкой."""
+    return ViolationReportData(
+        report_type=ReportType(row["report_type"]),
+        period_start=row["period_start"],
+        period_end=row["period_end"],
+        total_violations=row.get("total_violations") or 0,
+        critical_count=row.get("critical_count") or 0,
+        warning_count=row.get("warning_count") or 0,
+        monitor_count=row.get("monitor_count") or 0,
+        unique_users=row.get("unique_users") or 0,
+        prev_total_violations=row.get("prev_total_violations"),
+        trend_percent=row.get("trend_percent"),
+        top_violators=_json_value(row.get("top_violators"), []),
+        by_country=_json_value(row.get("by_country"), {}),
+        by_action=_json_value(row.get("by_action"), {}),
+        by_asn_type=_json_value(row.get("by_asn_type"), {}),
+        message_text=row.get("message_text") or "",
+        id=row.get("id"),
+    )
+

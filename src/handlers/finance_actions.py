@@ -4,6 +4,7 @@ Callback data format: fin:<action>:<item_id>
 Actions: paid (платёж + сдвиг цикла), skip (сдвиг цикла без платежа)
 """
 import logging
+from html import escape
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
@@ -11,6 +12,7 @@ from aiogram.utils.i18n import gettext as _
 
 from shared.database import db_service
 from src.utils.auth import BotAdmin
+from src.utils.cards import append_card_note
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -50,11 +52,11 @@ async def handle_finance_action(callback: CallbackQuery, admin: BotAdmin) -> Non
         logger.info("Finance action %s on item %s by %s", action, item_id, admin_name)
         next_due = item.get("next_due_at") or "—"
         key = "fin.paid_ok" if action == "paid" else "fin.skip_ok"
-        await callback.answer(_(key).format(name=item["name"], next_due=next_due), show_alert=False)
-        try:
-            await callback.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass  # сообщение могло быть уже отредактировано/удалено
+        note = _(key).format(name=item["name"], next_due=next_due)
+        await callback.answer(note, show_alert=False)
+        # Кнопки встроены в карточку: снимаем их правкой самой карточки,
+        # заодно оставляя на ней отметку, что ответ уже дан
+        await append_card_note(callback, "\n\n" + escape(note))
     except Exception as e:
         logger.error("Finance action error (%s/%s): %s", action, item_id, e)
         await callback.answer(_("fin.error").format(e=e), show_alert=True)

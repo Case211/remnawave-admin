@@ -2,13 +2,18 @@
 
 Uses notification_service.create_notification() for multi-channel dispatch
 (Telegram, in-app, webhook, email) instead of aiogram Bot instance.
+
+Карточки собираются моделью shared.tg_card: в Telegram уходят rich-блоки —
+таблицы подключений и устройств, сворачиваемые детали и история, цветные
+кнопки действий прямо в сообщении.
 """
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from shared import timefmt
 from shared.analyzers.models import ACTION_LABELS, dominant_analyzer
+from shared.i18n import tr
+from shared.tg_card import Button, Card, b, code, i, join, section, tg_user, when
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +33,6 @@ def _cleanup_cache() -> None:
         del _violation_notification_cache[k]
 
 
-def _esc(text: str) -> str:
-    """Escape HTML for Telegram."""
-    if not text:
-        return ""
-    return (
-        str(text)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
-
-
 def _short_provider(asn_org: Optional[str]) -> str:
     """Shorten ASN org name for display."""
     if not asn_org:
@@ -49,50 +42,35 @@ def _short_provider(asn_org: Optional[str]) -> str:
     return asn_org
 
 
+def _tr_or(key: str, default: str, **kwargs) -> str:
+    """Перевод или запасной текст, если ключа нет в локали."""
+    text = tr(key, **kwargs)
+    return default if text == key else text
+
+
+# Причины детектора — русские строки; первая подошедшая метка задаёт заголовок
+_REASON_RULES = (
+    ("double_tunnel", ("двойной туннель", "ссылка в user-agent", "link_in_ua")),
+    ("bot_library", ("http-библиотека", "bot_library", "go-http-client")),
+    ("hwid", ("hwid", "device overlap")),
+    ("torrent", ("torrent", "p2p")),
+    ("geo", ("impossible travel", "geo")),
+    ("simultaneous", ("simultaneous", "temporal")),
+    ("asn", ("datacenter", "vpn", "proxy")),
+    ("traffic", ("traffic", "bandwidth")),
+)
+
+
 def _detect_primary_reason(reasons: List[str], breakdown: dict) -> dict:
     """Determine primary violation reason for notification title and subtitle."""
     reasons_lower = " ".join(r.lower() for r in reasons)
+    for key, markers in _REASON_RULES:
+        if any(marker in reasons_lower for marker in markers):
+            return {
+                "title": tr(f"notify.violation.reason.{key}.title"),
+                "subtitle": tr(f"notify.violation.reason.{key}.subtitle"),
+            }
 
-    if "двойной туннель" in reasons_lower or "ссылка в user-agent" in reasons_lower or "link_in_ua" in reasons_lower:
-        return {
-            "title": "Двойной туннель: подписка вставлена в чужой клиент",
-            "subtitle": "В User-Agent обнаружена подписочная ссылка (vless://, https://)",
-        }
-    if "http-библиотека" in reasons_lower or "bot_library" in reasons_lower or "go-http-client" in reasons_lower:
-        return {
-            "title": "Бот/скрипт в User-Agent",
-            "subtitle": "Подписка запрашивается curl/Go-http-client/python-requests — возможно автоматизация",
-        }
-    if "hwid" in reasons_lower or "device overlap" in reasons_lower:
-        return {
-            "title": "Коллизия аккаунтов: общие устройства (device overlap)",
-            "subtitle": "Несколько аккаунтов используют одни и те же HWID",
-        }
-    if "torrent" in reasons_lower or "p2p" in reasons_lower:
-        return {
-            "title": "Обнаружен торрент-трафик (P2P)",
-            "subtitle": "Пользователь использует торрент через VPN",
-        }
-    if "impossible travel" in reasons_lower or "geo" in reasons_lower:
-        return {
-            "title": "Невозможное перемещение (geo anomaly)",
-            "subtitle": "Подключения из географически несовместимых локаций",
-        }
-    if "simultaneous" in reasons_lower or "temporal" in reasons_lower:
-        return {
-            "title": "Превышение лимита подключений (simultaneous)",
-            "subtitle": "Слишком много одновременных подключений с разных IP",
-        }
-    if "datacenter" in reasons_lower or "vpn" in reasons_lower or "proxy" in reasons_lower:
-        return {
-            "title": "Подозрительный провайдер (ASN anomaly)",
-            "subtitle": "Подключение через VPN/прокси/датацентр",
-        }
-    if "traffic" in reasons_lower or "bandwidth" in reasons_lower:
-        return {
-            "title": "Чрезмерное потребление трафика",
-            "subtitle": "Пользователь превысил порог скорости потребления",
-        }
     if breakdown:
         # Fallback: use highest-scoring analyzer
         max_score = 0
@@ -102,41 +80,32 @@ def _detect_primary_reason(reasons: List[str], breakdown: dict) -> dict:
             if s > max_score:
                 max_score = s
                 max_key = key
-        labels = {
-            "temporal": "Временная аномалия подключений",
-            "geo": "Географическая аномалия",
-            "asn": "Аномалия провайдера",
-            "profile": "Отклонение профиля поведения",
-            "device": "Аномалия устройств",
-            "user_agent": "Подозрительный User-Agent клиента",
-        }
         if max_key:
+            title = _tr_or(f"notify.violation.reason.analyzer.{max_key}",
+                           tr("notify.violation.reason.analyzer_other", analyzer=max_key))
             return {
-                "title": labels.get(max_key, f"Нарушение ({max_key})"),
-                "subtitle": f"Анализатор {max_key} обнаружил аномалию (скор: {max_score:.0f})",
+                "title": title,
+                "subtitle": tr("notify.violation.reason.analyzer_subtitle",
+                               analyzer=max_key, score=f"{max_score:.0f}"),
             }
 
     return {
-        "title": "Обнаружено нарушение",
-        "subtitle": "Система обнаружила подозрительную активность",
+        "title": tr("notify.violation.reason.generic.title"),
+        "subtitle": tr("notify.violation.reason.generic.subtitle"),
     }
 
 
-ANALYZER_BUTTON_LABELS = {
-    "temporal": "времени",
-    "geo": "гео",
-    "asn": "ASN",
-    "profile": "профилю",
-    "device": "устройствам",
-    "hwid": "HWID",
-    "user_agent": "UA",
-}
+def _action_label(action_key: str) -> str:
+    return _tr_or(f"notify.violation.action.{action_key}", ACTION_LABELS.get(action_key, action_key))
 
 
-def _violation_keyboard(
+def violation_buttons(
     user_uuid: str, analyzer: Optional[str] = None, with_whitelist: bool = True,
-) -> Dict:
-    """Build inline keyboard with quick actions for violation notifications.
+) -> List[List[Button]]:
+    """Кнопки быстрых действий; цвет — по последствиям.
+
+    Красные карают (блокировка, отключение), зелёные снимают подозрение
+    (аннулировать, белые списки), синие помогают разобраться.
 
     Белых списка два: полный снимает с человека все проверки, частичный —
     только тот разрез, из-за которого пришло это уведомление. Второй кнопки
@@ -147,39 +116,35 @@ def _violation_keyboard(
     анализаторов нарушений, и белый список на них не влияет, так что
     кнопка там обещала бы не то, что делает.
     """
-    whitelist_row = []
+    def button(key: str, action: str, style: Optional[str] = None, **kwargs) -> Button:
+        return Button(tr(f"notify.violation.btn.{key}", **kwargs),
+                      callback_data=f"vact:{action}:{user_uuid}", style=style)
+
+    rows = [
+        [button("info", "info", "primary"), button("block", "block", "danger")],
+        [button("kill", "kill", "danger"), button("reset", "reset")],
+        [button("annul", "dismiss", "success"), button("throttle", "thr", "primary")],
+    ]
     if with_whitelist:
-        whitelist_row.append(
-            {"text": "🤍 В белый список", "callback_data": f"vact:wl:{user_uuid}"}
-        )
+        row = [button("whitelist", "wl", "success")]
         if analyzer:
-            label = ANALYZER_BUTTON_LABELS.get(analyzer, analyzer)
-            whitelist_row.append({
-                "text": f"🤍 Не проверять: {label}",
-                "callback_data": f"vact:wlp_{analyzer}:{user_uuid}",
-            })
-
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "👤 Подробнее", "callback_data": f"vact:info:{user_uuid}"},
-                {"text": "🔒 Заблокировать", "callback_data": f"vact:block:{user_uuid}"},
-            ],
-            [
-                {"text": "⛔ Откл + разорвать", "callback_data": f"vact:kill:{user_uuid}"},
-                {"text": "🔄 Сбросить трафик", "callback_data": f"vact:reset:{user_uuid}"},
-            ],
-            [
-                {"text": "🚫 Аннулировать", "callback_data": f"vact:dismiss:{user_uuid}"},
-                {"text": "🐌 Урезать скорость", "callback_data": f"vact:thr:{user_uuid}"},
-            ],
-            *([whitelist_row] if whitelist_row else []),
-        ]
-    }
+            label = _tr_or(f"notify.violation.analyzer.{analyzer}", analyzer)
+            row.append(button("whitelist_partial", f"wlp_{analyzer}", "success", analyzer=label))
+        rows.append(row)
+    return rows
 
 
-async def _recap_lines(user_uuid: str) -> list:
-    """Строки о рецидиве для карточки: сколько раз попадался и когда.
+def _violation_keyboard(
+    user_uuid: str, analyzer: Optional[str] = None, with_whitelist: bool = True,
+) -> Dict:
+    """Те же кнопки inline-клавиатурой — для уведомлений обычным HTML
+    (автоматизации, монитор скорости трафика)."""
+    rows = violation_buttons(user_uuid, analyzer, with_whitelist)
+    return {"inline_keyboard": [[btn.to_dict() for btn in row] for row in rows]}
+
+
+async def _recap(user_uuid: str) -> Optional[dict]:
+    """Рецидив для карточки: сколько раз попадался и когда.
 
     Разговор «за что заблокировали» проще вести по датам, чем по памяти,
     поэтому в уведомление уходит и счёт, и последние отметки времени.
@@ -198,24 +163,64 @@ async def _recap_lines(user_uuid: str) -> list:
         history = await db_service.user_violation_history(user_uuid, days=days, limit=5)
     except Exception as e:
         logger.warning("Recap for notification failed: %s", e)
-        return []
+        return None
 
     if not recap or recap.get("total", 0) <= 1:
-        return []
+        return None
+    return {
+        "days": days,
+        "total": recap["total"],
+        "annulled": recap.get("annulled") or 0,
+        "items": [(item["detected_at"], item.get("action_taken") == "annulled") for item in history],
+    }
 
-    annulled = recap.get("annulled") or 0
-    tail = f", аннулировано {annulled}" if annulled else ""
-    lines = ["", f"\U0001f501 Нарушений за {days} дн.: <b>{recap['total']}</b>{tail}"]
 
-    marks = []
-    for item in history:
-        when = timefmt.fmt(item["detected_at"], "%d.%m %H:%M", with_label=False)
-        if item.get("action_taken") == "annulled":
-            when += " (аннул.)"
-        marks.append(when)
-    if marks:
-        lines.append("   " + " · ".join(marks) + f" ({timefmt.label()})")
-    return lines
+def _add_history(card: Card, recap: Optional[dict]) -> None:
+    """История нарушений — свёрнутой секцией, даты в поясе читателя."""
+    if not recap:
+        return
+    summary = tr("notify.violation.card.history", days=recap["days"], total=recap["total"])
+    if recap["annulled"]:
+        summary = join(summary, tr("notify.violation.card.history_annulled", count=recap["annulled"]), sep=", ")
+    items = [join(when(at), tr("notify.violation.card.annulled") if annulled else None)
+             for at, annulled in recap["items"]]
+    card.details(summary, section().bullets(items))
+
+
+def _user_fields(card: Card, user_uuid: str, info: dict, with_description: bool = True) -> None:
+    telegram_id = info.get("telegramId")
+    description = info.get("description") or ""
+    card.fields([
+        (tr("notify.violation.card.field.username"), code(info.get("username", "n/a"))),
+        (tr("notify.violation.card.field.email"), code(info["email"]) if info.get("email") else None),
+        (tr("notify.violation.card.field.uuid"), code(user_uuid)),
+        (tr("notify.violation.card.field.telegram"),
+         tg_user(str(telegram_id), telegram_id) if telegram_id is not None else None),
+        (tr("notify.violation.card.field.description"),
+         description[:100] if with_description and description else None),
+    ])
+
+
+def _device_row(device: dict) -> list:
+    platform = device.get("platform") or "unknown"
+    app_version = device.get("app_version")
+    return [
+        _tr_or(f"notify.violation.platform.{platform.lower()}", platform),
+        device.get("os_version") or None,
+        f"v{app_version}" if app_version else None,
+    ]
+
+
+def _ua_devices(os_list: list, client_list: list) -> list:
+    """Устройства по User-Agent, когда HWID нет."""
+    if os_list and client_list and len(os_list) == len(client_list):
+        return [f"{os_name} ({client})" if client else os_name for os_name, client in zip(os_list, client_list)]
+    parts = []
+    if os_list:
+        parts.append(tr("notify.violation.os_list", list=", ".join(os_list)))
+    if client_list:
+        parts.append(tr("notify.violation.client_list", list=", ".join(client_list)))
+    return parts
 
 
 async def send_violation_notification(
@@ -275,12 +280,9 @@ async def send_violation_notification(
 
         info = user_info if user_info else {}
         username = info.get("username", "n/a")
-        email = info.get("email", "")
-        telegram_id = info.get("telegramId")
-        description = info.get("description", "")
         device_limit = info.get("hwidDeviceLimit", 1)
         if device_limit == 0:
-            device_limit = "\u221e"
+            device_limit = "∞"
 
         # Score data
         total_score = violation_score.get("total", violation_score.get("score", 0))
@@ -297,8 +299,6 @@ async def send_violation_notification(
 
         if ip_count == 0 and active_connections:
             ip_count = len(set(str(c.ip_address) for c in active_connections))
-
-        event_time = timefmt.fmt(now, "%d.%m.%Y %H:%M:%S")
 
         # Collect unique IPs and nodes
         unique_ips = set()
@@ -323,6 +323,7 @@ async def send_violation_notification(
                         nodes_used.add(str(n_uuid)[:8])
             except Exception:
                 nodes_used = {str(u)[:8] for u in node_uuids}
+        nodes_line = tr("notify.violation.card.nodes", nodes=", ".join(sorted(nodes_used))) if nodes_used else None
 
         # Device info from breakdown
         os_list = []
@@ -336,63 +337,34 @@ async def send_violation_notification(
                 os_list = device_data.os_list or []
                 client_list = getattr(device_data, "client_list", None) or []
 
-        # Build message — determine primary violation reason for title
         reasons = violation_score.get("reasons", [])
         primary_reason = _detect_primary_reason(reasons, breakdown)
         title_text = primary_reason["title"]
-        subtitle_text = primary_reason["subtitle"]
 
-        lines = [
-            f"\u26a0\ufe0f <b>{_esc(title_text)}</b>",
-            "",
-            f"\U0001f4a1 {_esc(subtitle_text)}",
-            "",
-        ]
-
-        lines.append("\U0001f464 <b>Пользователь</b>")
-        if email:
-            lines.append(f"   \U0001f4e7 Email: <code>{_esc(email)}</code>")
-        else:
-            lines.append(f"   \U0001f4e7 Username: <code>{_esc(username)}</code>")
-
-        # Полный UUID отдельной строкой: там, где имени нет, в шапку уходил
-        # обрезанный до восьми символов идентификатор — по нему ни найти
-        # пользователя, ни скопировать. В <code> Telegram копирует по тапу.
-        lines.append(f"   \U0001f194 UUID: <code>{_esc(user_uuid)}</code>")
-
-        if telegram_id is not None:
-            lines.append(f"   \U0001f4f1 TG ID: <code>{telegram_id}</code>")
-
-        if description:
-            lines.append(f"   \U0001f4dd Описание: <code>{_esc(description[:100])}</code>")
-
-        lines.append("")
-        lines.append(f"\U0001f310 IP адресов: <b>{ip_count} из {device_limit}</b>")
+        card = Card(title_text, emoji="🚨" if total_score >= 80 else "⚠️")
+        card.text(i(primary_reason["subtitle"]))
+        card.lead(
+            b(info.get("email") or username),
+            tr("notify.violation.card.lead_score", score=f"{total_score:.1f}"),
+            tr("notify.violation.card.lead_ips", count=ip_count, limit=device_limit),
+        )
+        _user_fields(card, user_uuid, info)
 
         if unique_ips:
-            lines.append("\U0001f4cd IP (провайдеры):")
+            rows = []
             for ip in sorted(unique_ips):
-                provider_info = ""
-                country_code = ""
-                if ip_metadata and ip in ip_metadata:
-                    meta = ip_metadata[ip]
-                    if hasattr(meta, "asn_org") and meta.asn_org:
-                        provider_info = _short_provider(meta.asn_org)
-                    if hasattr(meta, "country_code") and meta.country_code:
-                        country_code = meta.country_code
-
-                suffix = ""
-                if provider_info:
-                    suffix = f" — {_esc(provider_info)}"
-                if country_code:
-                    suffix += f" ({country_code})"
-                lines.append(f"   <code>{ip}</code>{suffix}")
-
-        if nodes_used:
-            nodes_str = ", ".join(sorted(nodes_used))
-            lines.append(f"   \U0001f5a5 Ноды: <code>{_esc(nodes_str)}</code>")
-
-        lines.append("")
+                meta = (ip_metadata or {}).get(ip)
+                rows.append([code(ip), _short_provider(getattr(meta, "asn_org", None)),
+                             getattr(meta, "country_code", None)])
+            card.section(tr("notify.violation.card.connections"))
+            card.table(
+                rows,
+                head=[tr("notify.violation.card.col.ip"), tr("notify.violation.card.col.provider"),
+                      tr("notify.violation.card.col.country")],
+                caption=nodes_line,
+            )
+        else:
+            card.text(nodes_line)
 
         # HWID devices
         hwid_devices = []
@@ -403,72 +375,33 @@ async def send_violation_notification(
             pass
 
         if hwid_devices:
-            hwid_count = len(hwid_devices)
-            device_parts = []
-            platform_names = {
-                "android": "Android", "ios": "iOS", "windows": "Windows",
-                "macos": "macOS", "linux": "Linux",
-            }
-            for device in hwid_devices[:5]:
-                platform = device.get("platform", "unknown")
-                os_version = device.get("os_version", "")
-                app_version = device.get("app_version", "")
-                platform_display = platform_names.get(platform.lower(), platform) if platform else "Unknown"
-                device_str = platform_display
-                if os_version:
-                    device_str += f" {os_version}"
-                if app_version:
-                    device_str += f" (v{app_version})"
-                device_parts.append(device_str)
-            if hwid_count > 5:
-                device_parts.append(f"... и ещё {hwid_count - 5}")
-            lines.append(f"\U0001f4f2 Всего устройств в аккаунте: <b>{hwid_count} из {device_limit}</b>")
-            for p in device_parts:
-                lines.append(f"   {_esc(p)}")
+            card.section(tr("notify.violation.card.devices", count=len(hwid_devices), limit=device_limit))
+            card.table(
+                [_device_row(device) for device in hwid_devices[:5]],
+                head=[tr("notify.violation.card.col.platform"), tr("notify.violation.card.col.os"),
+                      tr("notify.violation.card.col.app")],
+            )
+            if len(hwid_devices) > 5:
+                card.text(i(tr("notify.card.more", count=len(hwid_devices) - 5)))
         elif os_list or client_list:
-            device_parts = []
-            if os_list and client_list and len(os_list) == len(client_list):
-                for i, os_name in enumerate(os_list):
-                    client_name = client_list[i] if i < len(client_list) else ""
-                    if client_name:
-                        device_parts.append(f"{os_name} ({client_name})")
-                    else:
-                        device_parts.append(os_name)
-            else:
-                if os_list:
-                    device_parts.append(f"ОС: {', '.join(os_list)}")
-                if client_list:
-                    device_parts.append(f"Клиенты: {', '.join(client_list)}")
-            if device_parts:
-                lines.append(f"\U0001f4f2 Устройства (по UA): {'; '.join(device_parts)}")
-            else:
-                lines.append("\U0001f4f2 Устройства: \u2014")
-        else:
-            lines.append("\U0001f4f2 Устройства: \u2014")
+            card.section(tr("notify.violation.card.devices_ua"))
+            card.bullets(_ua_devices(os_list, client_list))
 
         # Reasons (deduplicated) — as "Детали пересечения"
-        if reasons:
-            seen = set()
-            unique_reasons = []
-            for r in reasons:
-                if r not in seen:
-                    seen.add(r)
-                    unique_reasons.append(r)
-            lines.append("")
-            lines.append("\U0001f50e <b>Детали пересечения</b>")
-            for r in unique_reasons[:8]:
-                lines.append(f"   {_esc(r)}")
+        unique_reasons = list(dict.fromkeys(reasons))
+        if unique_reasons:
+            details = section().bullets(unique_reasons[:8])
             if len(unique_reasons) > 8:
-                lines.append(f"   … и ещё {len(unique_reasons) - 8}")
+                details.text(i(tr("notify.card.more", count=len(unique_reasons) - 8)))
+            card.details(tr("notify.violation.card.reasons", count=len(unique_reasons)), details)
 
         # Что делать дальше. Формулировки — глаголами и от лица админа:
         # «ДЕЙСТВИЕ: ВРЕМЕННАЯ БЛОКИРОВКА» читалось как уже случившийся бан,
         # хотя система сама блокирует только на пороге hard_block, да и то
         # если включена автоблокировка. Единственный случай, когда это факт,
-        # а не совет, вынесен в отдельную строку ниже.
+        # а не совет, — цитатой с пометкой «автоматически».
         action = violation_score.get("recommended_action", "")
         action_key = action.value if hasattr(action, "value") else str(action)
-        action_label = ACTION_LABELS.get(action_key, action_key)
 
         auto_blocked = False
         if action_key == "hard_block":
@@ -478,30 +411,23 @@ async def send_violation_notification(
             except Exception:
                 auto_blocked = True
 
-        lines.append("")
         if auto_blocked:
-            lines.append("⛔ Выполнено: <b>ПОЛЬЗОВАТЕЛЬ ЗАБЛОКИРОВАН</b>")
-            lines.append("   автоматически, по порогу жёсткой блокировки")
+            card.quote(b(tr("notify.violation.card.auto_blocked")),
+                       credit=tr("notify.violation.card.auto_blocked_credit"))
         else:
-            lines.append(f"\U0001f3af Рекомендация: <b>{action_label.upper()}</b>")
+            card.text([tr("notify.violation.card.recommendation"), ": ", b(_action_label(action_key).upper())])
             if action_key == "hard_block":
-                lines.append("ℹ️ Автоблокировка выключена — решение за администратором")
-        lines.append(f"\U0001f4ca Скор: <b>{total_score:.1f}</b> / 100")
-        lines.append(f"\U0001f550 Время: {event_time}")
-        lines.extend(await _recap_lines(user_uuid))
-
-        body = "\n".join(lines)
-
-        # Plain text body for in-app notifications (strip HTML tags)
-        import re
-        plain_body = re.sub(r'<[^>]+>', '', body)
+                card.text(i(tr("notify.violation.card.auto_off")))
+        _add_history(card, await _recap(user_uuid))
+        card.buttons(*violation_buttons(user_uuid, dominant_analyzer(breakdown)))
+        card.stamp(now)
 
         # Send via notification_service
         from web.backend.core.notification_service import create_notification
 
         await create_notification(
             title=title_text,
-            body=plain_body,
+            body=card.body_text(),
             type="violation",
             severity="warning" if total_score < 80 else "critical",
             source="collector",
@@ -510,8 +436,7 @@ async def send_violation_notification(
             group_key=f"violation:{user_uuid}",
             channels=["telegram", "in_app", "push"],
             topic_type="violations",
-            telegram_body=body,
-            reply_markup=_violation_keyboard(user_uuid, dominant_analyzer(breakdown)),
+            telegram_card=card,
             event="violation.detected",
         )
 
@@ -571,73 +496,50 @@ async def send_torrent_notification(
 
     try:
         info = user_info if user_info else {}
-        username = info.get("username", "n/a")
-        email = info.get("email", "")
-        telegram_id = info.get("telegramId")
-
-        event_time = timefmt.fmt(now, "%d.%m.%Y %H:%M:%S")
-
         event_count = len(torrent_events) if torrent_events else 0
+        destinations = destinations or []
+        window = window or {}
+        events = window.get("events", event_count)
+        peers_total = max(len(destinations), int(window.get("peers") or 0))
 
-        lines = [
-            "\U0001f6a8 <b>\u0422\u041e\u0420\u0420\u0415\u041d\u0422 \u0422\u0420\u0410\u0424\u0418\u041a \u041e\u0411\u041d\u0410\u0420\u0423\u0416\u0415\u041d</b>",
-            "",
-        ]
+        def counted(value, threshold_key: str):
+            threshold = window.get(threshold_key)
+            return join(b(str(value)), tr("notify.torrent.threshold", value=threshold) if threshold else None)
 
-        if email:
-            lines.append(f"\U0001f4e7 Email: <code>{_esc(email)}</code>")
-        else:
-            lines.append(f"\U0001f4e7 Username: <code>{_esc(username)}</code>")
-
-        lines.append(f"\U0001f194 UUID: <code>{_esc(user_uuid)}</code>")
-
-        if telegram_id is not None:
-            lines.append(f"\U0001f4f1 TG ID: <code>{telegram_id}</code>")
-
-        lines.append("")
-        peers_total = len(destinations or [])
-        if window:
-            peers_total = max(peers_total, int(window.get("peers") or 0))
-            lines.append(
-                f"📊 За {window.get('minutes', 30)} мин: <b>{window.get('events', event_count)}</b> событий, "
-                f"<b>{window.get('peers', peers_total)}</b> разных адресов "
-                f"(пороги {window.get('min_events', 1)} / {window.get('min_peers', 1)})"
-            )
-        else:
-            lines.append(f"📊 Событий: <b>{event_count}</b>")
+        card = Card(tr("notify.torrent.title"), emoji="🚨")
+        card.lead(b(info.get("email") or info.get("username", "n/a")), code(node_name) if node_name else None)
+        _user_fields(card, user_uuid, info, with_description=False)
+        card.fields([
+            (tr("notify.torrent.field.ips"), join(*(code(ip) for ip in (ips or [])[:5]), sep=", ")),
+            (tr("notify.torrent.field.window"),
+             tr("notify.torrent.window_minutes", minutes=window["minutes"]) if window.get("minutes") else None),
+            (tr("notify.torrent.field.events"), counted(events, "min_events")),
+            (tr("notify.torrent.field.peers"), counted(peers_total, "min_peers") if peers_total else None),
+        ])
 
         if destinations:
-            lines.append("🌐 Адреса:")
-            for dest in destinations[:10]:
-                lines.append(f"   <code>{_esc(dest)}</code>")
-            if peers_total > min(len(destinations), 10):
-                lines.append(f"   ... и ещё {peers_total - min(len(destinations), 10)}")
+            shown = destinations[:10]
+            body = section().bullets([code(dest) for dest in shown])
+            if peers_total > len(shown):
+                body.text(i(tr("notify.card.more", count=peers_total - len(shown))))
+            card.details(tr("notify.torrent.destinations", count=peers_total), body)
 
-        if ips:
-            lines.append(f"\U0001f4cd IP: {', '.join(f'<code>{ip}</code>' for ip in ips[:5])}")
-
-        if node_name:
-            lines.append(f"🖥 Нода: <code>{_esc(node_name)}</code>")
-
-        lines.append("")
         # Действие — то, что реально сделано по настройке «Авто-действие при
         # торренте», а не рекомендация: раньше тут всегда стояла жёсткая блокировка
-        lines.append({
-            "blocked": "🛑 Действие: <b>пользователь отключён автоматически</b>",
-            "block_failed": "⚠️ Действие: <b>автоблокировка не удалась</b> — отключите вручную",
-        }.get(action, "👁 Действие: <b>только уведомление</b> — решение за администратором"))
-        lines.append(f"\U0001f550 \u0412\u0440\u0435\u043c\u044f: <code>{event_time}</code>")
-        lines.extend(await _recap_lines(user_uuid))
-
-        body = "\n".join(lines)
-
-        import re
-        plain_body = re.sub(r'<[^>]+>', '', body)
+        if action in ("blocked", "block_failed"):
+            card.quote(b(tr(f"notify.torrent.action.{action}")))
+        else:
+            card.text(tr("notify.torrent.action.notify"))
+        _add_history(card, await _recap(user_uuid))
+        # Торрент-событие ловится мимо анализаторов нарушений — белый
+        # список нарушений на него не влияет, кнопки там не место.
+        card.buttons(*violation_buttons(user_uuid, with_whitelist=False))
+        card.stamp(now)
 
         from web.backend.core.notification_service import create_notification
         await create_notification(
-            title="Торрент трафик обнаружен",
-            body=plain_body,
+            title=card.title_text(),
+            body=card.body_text(),
             type="torrent",
             severity="critical",
             source="collector",
@@ -646,10 +548,7 @@ async def send_torrent_notification(
             group_key=f"torrent:{user_uuid}",
             channels=["telegram", "in_app", "push"],
             topic_type="violations",
-            telegram_body=body,
-            # Торрент-событие ловится мимо анализаторов нарушений — белый
-            # список нарушений на него не влияет, кнопки там не место.
-            reply_markup=_violation_keyboard(user_uuid, with_whitelist=False),
+            telegram_card=card,
             event="violation.torrent",
         )
 

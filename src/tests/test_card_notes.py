@@ -80,6 +80,62 @@ class TestRichCard:
         cb.message.reply.assert_awaited_once()
 
 
+class TestRichCardWithBlocks:
+    """Блоки пришли в самом нажатии — карточка переписывается на месте."""
+
+    BLOCKS = [
+        {"type": "heading", "text": "Нарушение", "size": 3},
+        {"type": "paragraph", "text": "alex · 87"},
+        {"type": "buttons", "buttons": [{"text": "Заблокировать", "callback_data": "vact:block:u"}]},
+        {"type": "footer", "text": "Remnawave Admin"},
+    ]
+
+    def _rich_callback(self):
+        cb = _callback(html_text="")
+        cb.message.model_extra = {"rich_message": {"blocks": [dict(b) for b in self.BLOCKS]}}
+        cb.message.bot.token = "T"
+        cb.message.chat.id = -100
+        cb.message.message_id = 7
+        return cb
+
+    @pytest.mark.asyncio
+    async def test_note_and_new_buttons_replace_old_ones_before_footer(self, monkeypatch):
+        from shared import tg_rich
+        edit = AsyncMock(return_value=True)
+        monkeypatch.setattr(tg_rich, "edit_rich", edit)
+        button = MagicMock()
+        button.model_dump.return_value = {"text": "Снять", "callback_data": "vact:unthr:u", "style": "success"}
+        keyboard = MagicMock()
+        keyboard.inline_keyboard = [[button]]
+
+        cb = self._rich_callback()
+        await append_card_note(cb, chr(10) * 2 + "✅ <b>Заблокирован</b>", keyboard=keyboard)
+
+        token, chat_id, message_id, blocks = edit.await_args.args
+        assert (token, chat_id, message_id) == ("T", -100, 7)
+        assert [b["type"] for b in blocks] == ["heading", "paragraph", "paragraph", "buttons", "footer"]
+        assert blocks[2]["text"] == ["✅ ", {"type": "bold", "text": "Заблокирован"}]
+        assert blocks[3]["buttons"] == [{"text": "Снять", "callback_data": "vact:unthr:u", "style": "success"}]
+        cb.message.reply.assert_not_awaited()
+        cb.message.edit_reply_markup.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_keyboard_removes_buttons(self, monkeypatch):
+        from shared import tg_rich
+        edit = AsyncMock(return_value=True)
+        monkeypatch.setattr(tg_rich, "edit_rich", edit)
+        await append_card_note(self._rich_callback(), "отметка")
+        assert "buttons" not in [b["type"] for b in edit.await_args.args[3]]
+
+    @pytest.mark.asyncio
+    async def test_rejected_rewrite_falls_back_to_reply(self, monkeypatch):
+        from shared import tg_rich
+        monkeypatch.setattr(tg_rich, "edit_rich", AsyncMock(return_value=False))
+        cb = self._rich_callback()
+        await append_card_note(cb, "отметка")
+        cb.message.reply.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_missing_message_is_ignored():
     cb = MagicMock()

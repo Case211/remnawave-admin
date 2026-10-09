@@ -423,7 +423,7 @@ class TestReminders:
 
     @pytest.mark.asyncio
     async def test_telegram_card_and_url_button(self):
-        """HTML-карточка в telegram_body (blockquote, экранирование) + кнопка кабинета."""
+        """Карточка: сумма и срок сводкой, экранирование, кнопки — в самом сообщении."""
         from web.backend.core.finance import reminders as rem
 
         db = AsyncMock()
@@ -438,15 +438,16 @@ class TestReminders:
              patch("web.backend.core.notification_service.create_notification", notify):
             sent = await rem.check_and_send_reminders()
         assert sent == 1
-        kw = notify.await_args.kwargs
-        tg = kw["telegram_body"]
-        assert tg.startswith("<blockquote>") and tg.endswith("</blockquote>")
-        assert "<b>5.00 EUR</b>" in tg
-        assert "завтра" in tg and "(20.07.2026)" in tg
-        assert "A&amp;B &lt;Host&gt;" in tg  # HTML экранируется
-        rows = kw["reply_markup"]["inline_keyboard"]
-        assert rows[0][0]["callback_data"] == "fin:paid:1"
-        assert rows[1][0]["url"] == "https://my.hoster.com"
+        card = notify.await_args.kwargs["telegram_card"]
+        html = card.to_html()
+        assert "<b>5.00 EUR</b> · завтра" in html
+        assert "Дата: 20.07.2026" in html
+        assert "A&amp;B &lt;Host&gt;" in html  # HTML экранируется
+        embedded = [blk["buttons"] for blk in card.to_blocks() if blk["type"] == "buttons"]
+        assert embedded[0][0]["callback_data"] == "fin:paid:1" and embedded[0][0]["style"] == "success"
+        assert embedded[1][0]["url"] == "https://my.hoster.com"
+        # в HTML-фолбэке те же кнопки — клавиатурой
+        assert card.keyboard()["inline_keyboard"] == embedded
 
     @pytest.mark.asyncio
     async def test_overdue_always_reminds_daily(self):
@@ -482,9 +483,9 @@ class TestReminders:
              patch("web.backend.core.notification_service.create_notification", notify):
             assert await rem.check_and_send_reminders() == 1
         kw = notify.await_args.kwargs
-        assert kw["title"] == "💰 Скоро поступление — Клиент Иванов"
+        assert kw["title"] == "Скоро поступление — Клиент Иванов"
         assert "списание" not in kw["title"].lower()
-        assert kw["reply_markup"]["inline_keyboard"][0][0]["text"] == "✅ Получено"
+        assert kw["telegram_card"].keyboard()["inline_keyboard"][0][0]["text"] == "✅ Получено"
 
     @pytest.mark.asyncio
     async def test_overdue_income_is_late_not_overdue_payment(self):
@@ -501,8 +502,8 @@ class TestReminders:
              patch("web.backend.core.notification_service.create_notification", notify):
             assert await rem.check_and_send_reminders() == 1
         kw = notify.await_args.kwargs
-        assert kw["title"].startswith("⚠️ Поступление задерживается")
-        assert "ожидалось 3 дн. назад" in kw["telegram_body"]
+        assert kw["title"].startswith("Поступление задерживается")
+        assert "ожидалось 3 дн. назад" in kw["telegram_card"].to_html()
         assert kw["severity"] == "critical"
 
 

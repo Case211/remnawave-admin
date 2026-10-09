@@ -703,7 +703,7 @@ class TestHwidReuseNotification:
         group["other_users"][0]["telegram_id"] = 999
         group["other_users"][0]["removed_at"] = datetime.utcnow()
         notify = await self._run(group)
-        assert "Устройство отвязано" in notify.await_args.kwargs["body"]
+        assert "отвязано" in notify.await_args.kwargs["telegram_card"].to_html()
 
     @pytest.mark.asyncio
     async def test_blacklisted_hwid_is_left_to_blacklist_path(self):
@@ -713,10 +713,11 @@ class TestHwidReuseNotification:
     @pytest.mark.asyncio
     async def test_card_carries_device_and_target(self):
         """Карточка без деталей устройства и принимающего аккаунта бесполезна."""
-        body = (await self._run(self._group())).await_args.kwargs["body"]
-        assert "Android 15" in body
-        assert "new-one" in body
-        assert "<b>" in body, "разметка нужна боту для rich-сообщения"
+        card = (await self._run(self._group())).await_args.kwargs["telegram_card"]
+        html = card.to_html()
+        assert "Android 15" in html
+        assert "new-one" in html
+        assert any(blk["type"] == "table" for blk in card.to_blocks()), "люди — таблицей"
 
 
 class TestPublicIpForAgent:

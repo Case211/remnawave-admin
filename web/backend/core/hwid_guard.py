@@ -118,12 +118,12 @@ async def _notify(hwid: str, entry: Dict[str, Any], touched: List[Dict[str, Any]
                   blocked: bool) -> None:
     from web.backend.core.hwid_cards import revived_card
     from web.backend.core.notification_service import create_notification
-    title = ("Подписка ожила и снова отключена" if blocked
-             else "Живая подписка на устройстве из чёрного списка")
     try:
+        card = revived_card(hwid, entry, touched, blocked)
         await create_notification(
-            title=title,
-            body=revived_card(hwid, entry, touched, blocked),
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="alert",
             severity="critical" if blocked else "warning",
             link="/violations",

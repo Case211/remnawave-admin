@@ -149,4 +149,4 @@ async def test_empty_value_in_notification_is_a_dash():
             {"channel": "telegram", "message": "Сверх лимита: {simultaneous_excess}"}, "user", "u",
             {"simultaneous_excess": None},
         )
-    assert notify.await_args.kwargs["telegram_body"] == "Сверх лимита: —"
+    assert "Сверх лимита: —" in notify.await_args.kwargs["telegram_card"].to_html()

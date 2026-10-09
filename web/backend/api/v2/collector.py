@@ -1905,10 +1905,11 @@ async def _notify_hwid_reuse(sync_result: dict) -> None:
     from web.backend.core.hwid_cards import reuse_card
     from web.backend.core.notification_service import create_notification
     try:
+        card = reuse_card(str(hwid), target, repeat_trials, strangers, device)
         await create_notification(
-            title="Повторная пробная с того же устройства" if repeat_trials
-                  else "HWID переехал на другой аккаунт",
-            body=reuse_card(str(hwid), target, repeat_trials, strangers, device),
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="alert",
             severity="critical" if repeat_trials else "warning",
             link="/violations",

@@ -12,6 +12,8 @@ from typing import Optional, List
 
 from shared.db_schema import BOT_CONFIG_TABLE
 from shared.db_query import select_sql, update_sql
+from shared.i18n import tr
+from shared.tg_card import CAPTION_LIMIT, Card, b, code, when, i as italic
 
 logger = logging.getLogger(__name__)
 
@@ -450,19 +452,20 @@ async def send_backup_to_telegram(
     send_document = tg_http.method_url(bot_token, "sendDocument")
 
     if file_size <= TELEGRAM_MAX_PART:
-        async with httpx.AsyncClient(**tg_http.client_kwargs(120)) as client:
-            data = {"chat_id": chat_id}
-            if topic_id:
-                data["message_thread_id"] = str(topic_id)
-            with open(filepath, "rb") as f:
-                resp = await client.post(
-                    send_document,
-                    data=data,
-                    files={"document": (filename, f)},
-                )
-            if resp.status_code != 200:
-                raise RuntimeError(f"Telegram send failed: {resp.text[:200]}")
-            parts_sent = 1
+        # Одним сообщением: карточка «бэкап готов» и сам файл внутри неё;
+        # не принял rich — тот же файл документом с подписью
+        from shared import tg_rich
+
+        card = backup_card(filename, file_size)
+        sent = await tg_rich.send_rich_or_html(
+            bot_token, chat_id, card.to_html(limit=CAPTION_LIMIT), blocks=card.to_blocks(),
+            message_thread_id=int(topic_id) if topic_id else None,
+            media=("document", filename, await asyncio.to_thread(filepath.read_bytes)),
+            timeout=120,
+        )
+        if not sent:
+            raise RuntimeError("Telegram send failed")
+        parts_sent = 1
     else:
         total_parts = math.ceil(file_size / TELEGRAM_MAX_PART)
         for i in range(total_parts):
@@ -486,6 +489,17 @@ async def send_backup_to_telegram(
             logger.info("Sent backup part %d/%d to Telegram", i + 1, total_parts)
 
     return {"filename": filename, "parts_sent": parts_sent, "size_bytes": file_size}
+
+
+def backup_card(filename: str, size_bytes: int) -> Card:
+    """Что за бэкап и сколько весит; файл — документом в самой карточке."""
+    kind = "config" if filename.endswith(".json") else "database"
+    size = f"{size_bytes / 1024 ** 2:.1f} MB" if size_bytes >= 1024 ** 2 else f"{max(size_bytes // 1024, 1)} KB"
+    card = Card(tr("notify.backup.ready"), emoji="💾")
+    card.lead(b(tr(f"notify.backup.type.{kind}")), size)
+    card.fields([(tr("notify.backup.field.file"), code(filename))])
+    card.media("document")
+    return card.stamp()
 
 
 def _read_part(path: Path, offset: int, size: int) -> bytes:
@@ -540,13 +554,22 @@ _last_auto_backup_ts: Optional[datetime] = None
 _last_deadman_alert_date: Optional[str] = None
 
 
-async def _notify_backup_failed(title: str, body: str, group_key: str = "backup_failed") -> None:
+def _failure_card(title_key: str, exc: BaseException) -> Card:
+    """Бэкап упал: что именно и текст ошибки — моноширинным, его копируют в поиск."""
+    card = Card(tr(title_key), emoji="🛑")
+    card.section(tr("notify.backup.error"))
+    card.code(str(exc)[:1500])
+    return card.stamp()
+
+
+async def _notify_backup_failed(card: Card, group_key: str = "backup_failed") -> None:
     """Send a critical alert to admins (in-app + Telegram 'errors' topic)."""
     try:
         from web.backend.core.notification_service import create_notification
         await create_notification(
-            title=title,
-            body=body,
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="alert",
             severity="critical",
             channels=["in_app", "telegram"],
@@ -597,16 +620,13 @@ async def _check_deadman() -> None:
         return  # backup fresh enough
 
     _last_deadman_alert_date = today
-    if last is None:
-        age = "успешных бэкапов не найдено"
-    else:
-        hrs = int((now - last).total_seconds() // 3600)
-        age = f"последний успешный бэкап был ~{hrs} ч назад"
-    await _notify_backup_failed(
-        title="Давно не было бэкапа",
-        body=f"Порог — {hours} ч, но {age}. Проверьте авто-бэкап.",
-        group_key="backup_deadman",
-    )
+    card = Card(tr("notify.backup.deadman.title"), emoji="⏰")
+    card.fields([
+        (tr("notify.backup.deadman.threshold"), tr("notify.backup.deadman.threshold_value", hours=hours)),
+        (tr("notify.backup.deadman.last"), when(last, "r") if last else b(tr("notify.backup.deadman.never"))),
+    ])
+    card.text(italic(tr("notify.backup.deadman.hint")))
+    await _notify_backup_failed(card.stamp(), group_key="backup_deadman")
 
 
 async def _log_and_maybe_send(filename: str, backup_type: str, size_bytes: int, send_tg: bool) -> None:
@@ -742,7 +762,7 @@ async def _run_auto_backup_if_due() -> None:
         result = await create_database_backup(database_url)
     except Exception as exc:
         logger.error("Scheduled DB backup failed: %s", exc, exc_info=True)
-        await _notify_backup_failed("Бэкап БД не выполнен", f"Автоматический бэкап БД упал: {exc}")
+        await _notify_backup_failed(_failure_card("notify.backup.db_failed", exc))
         return
     logger.info("Scheduled DB backup created: %s (%s bytes)", result["filename"], result["size_bytes"])
     await _log_and_maybe_send(result["filename"], "database", result["size_bytes"], send_tg)
@@ -755,7 +775,7 @@ async def _run_auto_backup_if_due() -> None:
             await _log_and_maybe_send(cfg["filename"], "config", cfg["size_bytes"], send_tg)
         except Exception as exc:
             logger.warning("Scheduled config backup failed: %s", exc)
-            await _notify_backup_failed("Бэкап конфига не выполнен", f"Автоматический бэкап конфига упал: {exc}")
+            await _notify_backup_failed(_failure_card("notify.backup.config_failed", exc))
 
     # Rotate old backups
     try:

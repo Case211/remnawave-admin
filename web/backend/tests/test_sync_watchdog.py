@@ -18,8 +18,8 @@ def world(monkeypatch):
         assert key == "users"
         return state["meta"]
 
-    async def notify(title, body, *, severity):
-        state["sent"].append((title, severity))
+    async def notify(card, *, severity):
+        state["sent"].append((card.title_text(), severity))
 
     monkeypatch.setattr(db_service, "get_sync_metadata", get_sync_metadata)
     monkeypatch.setattr(sync_watchdog, "_notify", notify)
@@ -47,11 +47,11 @@ async def test_stalled_sync_alerts_once_and_recovery_is_reported(world):
 
     await dog.check(now=T0 + timedelta(minutes=20))
     await dog.check(now=T0 + timedelta(minutes=40))
-    assert world["sent"] == [("⏸ Синк с панелью стоит", "warning")]
+    assert world["sent"] == [("Синк с панелью стоит", "warning")]
 
     world["meta"] = _meta(T0 + timedelta(minutes=41))
     await dog.check(now=T0 + timedelta(minutes=42))
-    assert world["sent"][-1] == ("▶️ Синк с панелью возобновился", "info")
+    assert world["sent"][-1] == ("Синк с панелью возобновился", "info")
 
 
 @pytest.mark.asyncio
@@ -62,7 +62,7 @@ async def test_failing_passes_count_as_stalled(world):
     await dog.check(now=T0 + timedelta(minutes=1))
     world["meta"] = _meta(T0 + timedelta(minutes=19), status="error")
     await dog.check(now=T0 + timedelta(minutes=20))
-    assert world["sent"] == [("⏸ Синк с панелью стоит", "warning")]
+    assert world["sent"] == [("Синк с панелью стоит", "warning")]
 
 
 @pytest.mark.asyncio
@@ -73,4 +73,4 @@ async def test_old_mark_right_after_restart_gives_the_collector_time(world):
     await dog.check(now=T0 + timedelta(minutes=5))
     assert world["sent"] == []
     await dog.check(now=T0 + timedelta(minutes=16))
-    assert world["sent"] == [("⏸ Синк с панелью стоит", "warning")]
+    assert world["sent"] == [("Синк с панелью стоит", "warning")]

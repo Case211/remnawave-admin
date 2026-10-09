@@ -19,6 +19,7 @@ import httpx
 
 from shared import timefmt
 from shared.timefmt import quiet_window_end
+from shared.tg_card import Card
 
 logger = logging.getLogger(__name__)
 
@@ -1605,12 +1606,16 @@ class AutomationEngine:
             channels = (["telegram"] if config.get("telegram", True) else []) + extra
             if not channels:
                 channels = ["in_app"]
-            reply_markup = None
+            # Текст правила — его готовый HTML внутри карточки; кнопки действий
+            # по юзеру — прямо в сообщении
+            card = Card(context.get("rule_name") or "Automation", emoji="🤖")
+            card.html_block(message)
             if config.get("buttons") and target_type == "user" and target_id:
-                from web.backend.core.violation_notifier import _violation_keyboard
-                reply_markup = _violation_keyboard(target_id, with_whitelist=False)
+                from web.backend.core.violation_notifier import violation_buttons
+                card.buttons(*violation_buttons(target_id, with_whitelist=False))
+            card.stamp()
             await create_notification(
-                title=context.get("rule_name") or "Automation",
+                title=card.title_text(),
                 body=message,
                 type="automation",
                 severity=severity,
@@ -1620,9 +1625,8 @@ class AutomationEngine:
                 user_uuid=target_id if target_type == "user" else None,
                 channels=channels,
                 topic_type=topic_type,
-                telegram_body=message,
+                telegram_card=card,
                 link="/automations",
-                reply_markup=reply_markup,
             )
             return {"action": "notify", "channel": "telegram", "sent": True}
 

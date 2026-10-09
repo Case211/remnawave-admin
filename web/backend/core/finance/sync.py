@@ -12,6 +12,9 @@ import logging
 from datetime import date
 from typing import Any, Dict, Optional
 
+from shared.i18n import tr
+from shared.tg_card import Button, Card, b
+
 from web.backend.core.finance.adapters import AdapterError, get_adapter
 
 logger = logging.getLogger(__name__)
@@ -59,14 +62,19 @@ async def _maybe_alert_low_balance(account: Dict[str, Any], balance: float, curr
     if account.get("last_alerted_at") == date.today().isoformat():
         return False
 
+    card = Card(tr("notify.finance.low_balance", provider=account["provider_name"]), emoji="🪫")
+    card.fields([
+        (tr("notify.finance.field.balance"), b(_fmt_money(balance, currency))),
+        (tr("notify.finance.field.threshold"), _fmt_money(float(threshold), currency)),
+    ])
+    if account.get("provider_url"):
+        card.buttons([Button(tr("notify.finance.btn.open"), url=account["provider_url"], style="primary")])
+    card.stamp()
     try:
         await create_notification(
-            title=f"🪫 Низкий баланс: {account['provider_name']}",
-            body="\n".join([
-                f"Баланс: {_fmt_money(balance, currency)}",
-                f"Порог: {_fmt_money(float(threshold), currency)}",
-                *([f"Кабинет: {account['provider_url']}"] if account.get("provider_url") else []),
-            ]),
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="finance",
             severity="warning",
             source="finance",

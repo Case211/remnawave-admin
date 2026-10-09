@@ -16,8 +16,10 @@ HWID подделывается — его называет сам клиент 
 """
 from typing import Any, Dict, List, Sequence
 
+from shared.i18n import tr
 from shared.logger import logger
-from web.backend.core.hwid_cards import esc, fmt_dt
+from shared.tg_card import Button, Card, code, i, join, when
+from web.backend.core.hwid_cards import connections_cell, people_table
 
 NOTIFY_SOURCE = "ip_trial_reuse"
 # Отметка «разобрано» из кнопки под уведомлением — см. src/handlers/ip_actions.py
@@ -34,78 +36,38 @@ def _tone(group: Dict[str, Any]) -> str:
 
 def _network_note(group: Dict[str, Any]) -> str:
     """Чем известен адрес — оператор, хостинг, прокси."""
-    bits = []
-    if group.get("is_mobile"):
-        bits.append("мобильный оператор (CGNAT)")
-    if group.get("is_hosting"):
-        bits.append("хостинг")
-    if group.get("is_proxy"):
-        bits.append("прокси")
-    return ", ".join(bits)
+    kinds = [kind for kind in ("mobile", "hosting", "proxy") if group.get(f"is_{kind}")]
+    return ", ".join(tr(f"notify.ip_trial.network.{kind}") for kind in kinds)
 
 
-def build_card(group: Dict[str, Any], users: Sequence[Dict[str, Any]]) -> str:
-    """Карточка уведомления в том же каноне, что и HWID-карточки."""
-    lines = [
-        "\U0001f310 <b>Несколько пробных подписок с одного адреса</b>",
-        "",
-        "\U0001f4a1 %s" % esc(
-            "Адрес сменить труднее, чем HWID, — но за мобильным оператором может стоять весь район"
-            if group.get("is_mobile")
-            else "С этого адреса пробную подписку брали несколько раз"
-        ),
-        "",
-        "\U0001f4cd <b>Адрес</b>",
-        f"   \U0001f5a7 <code>{esc(group['ip'])}</code>",
+def ip_buttons(ip: str) -> List[List[Button]]:
+    """Кнопки по адресу, а не по одному аккаунту: блок — красная, аккаунты — синяя."""
+    return [
+        [Button(tr("notify.ip_trial.btn.block"), f"ipact:block:{ip}", style="danger"),
+         Button(tr("notify.ip_trial.btn.users"), f"ipact:users:{ip}", style="primary")],
+        [Button(tr("notify.ip_trial.btn.mute"), f"ipact:mute:{ip}")],
     ]
+
+
+def build_card(group: Dict[str, Any], users: Sequence[Dict[str, Any]]) -> Card:
+    """Карточка: адрес, чем он известен, и пробные аккаунты таблицей."""
     provider = group.get("asn_org")
-    if provider:
-        country = group.get("country_code")
-        lines.append("   \U0001f3e2 %s%s" % (esc(provider), f" ({esc(country)})" if country else ""))
-    note = _network_note(group)
-    if note:
-        lines.append(f"   ⚠️ {esc(note)}")
-    lines.append("")
-
-    lines.append(f"\U0001f465 <b>Пробные подписки ({len(users)})</b>")
-    for index, user in enumerate(users[:5]):
-        if index:
-            lines.append("")
-        name = user.get("username") or str(user.get("uuid") or "")[:8]
-        lines.append(f"   \U0001f464 <code>{esc(name)}</code>")
-        if user.get("telegram_id"):
-            lines.append(f"   \U0001f4f1 TG ID: <code>{esc(user['telegram_id'])}</code>")
-        if user.get("email"):
-            lines.append(f"   \U0001f4e7 <code>{esc(user['email'])}</code>")
-        lines.append(
-            "   \U0001f50c Подключений: <b>%d</b>, последнее %s"
-            % (int(user.get("conns") or 0), esc(fmt_dt(user.get("last_seen"))))
-        )
-        created = fmt_dt(user.get("created_at"))
-        if created:
-            lines.append(f"   \U0001f195 Аккаунт создан: {esc(created)}")
-        if user.get("is_active"):
-            lines.append("   \U0001f7e2 Подписка сейчас активна")
-    tail = users[5:]
-    if tail:
-        names = ", ".join(esc(u.get("username") or str(u.get("uuid") or "")[:8]) for u in tail)
-        lines.append(f"<blockquote expandable>И ещё {len(tail)}: {names}</blockquote>")
-    return "\n".join(lines).rstrip()
-
-
-def build_keyboard(ip: str) -> Dict[str, Any]:
-    """Кнопки под уведомлением: действие по адресу, а не по одному аккаунту."""
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "\U0001f6ab Заблокировать IP", "callback_data": f"ipact:block:{ip}"},
-                {"text": "\U0001f465 Аккаунты", "callback_data": f"ipact:users:{ip}"},
-            ],
-            [
-                {"text": "\U0001f507 Не напоминать", "callback_data": f"ipact:mute:{ip}"},
-            ],
-        ]
-    }
+    card = Card(tr("notify.ip_trial.title"), emoji="🌐")
+    card.text(i(tr("notify.ip_trial.subtitle.mobile" if group.get("is_mobile")
+                   else "notify.ip_trial.subtitle.plain")))
+    card.section(tr("notify.ip_trial.address"))
+    card.fields([
+        (tr("notify.ip_trial.field.ip"), code(group["ip"])),
+        (tr("notify.ip_trial.field.provider"), join(provider, group.get("country_code")) if provider else None),
+        (tr("notify.ip_trial.field.network"), _network_note(group) or None),
+    ])
+    card.section(tr("notify.ip_trial.trials", count=len(users)))
+    people_table(card, users, extra=[
+        (tr("notify.people.col.conns"), connections_cell),
+        (tr("notify.people.col.created"), lambda u: when(u.get("created_at"), "d")),
+    ])
+    card.buttons(*ip_buttons(group["ip"]))
+    return card.stamp()
 
 
 async def _recently_notified(ip: str, hours: int) -> bool:
@@ -187,9 +149,11 @@ async def _notify(group: Dict[str, Any], users: List[Dict[str, Any]]) -> None:
     from web.backend.core.notification_service import create_notification
     ip = group["ip"]
     try:
+        card = build_card(group, users)
         await create_notification(
-            title="Несколько пробных подписок с одного адреса",
-            body=build_card(group, users),
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="alert",
             severity=_tone({**group, "accounts": len(users)}),
             link=f"/violations?ip={ip}",
@@ -198,7 +162,6 @@ async def _notify(group: Dict[str, Any], users: List[Dict[str, Any]]) -> None:
             channels=["in_app", "telegram", "push"],
             topic_type="violations",
             event="violation.ip_trial_reuse",
-            reply_markup=build_keyboard(ip),
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("ip_guard: уведомление не ушло: %s", e)

@@ -26,13 +26,13 @@ def _light_import():
 
 
 async def _render(event_data: dict) -> str:
-    """Отдаёт текст уведомления, которое ушло бы владельцу."""
+    """Отдаёт HTML-текст карточки, которая ушла бы владельцу."""
     from src.services.webhook import _handle_torrent_blocker_event
 
     with patch("src.services.webhook.send_generic_notification", new=AsyncMock()) as notif:
         await _handle_torrent_blocker_event(AsyncMock(), "torrent_blocker.report", event_data)
     assert notif.await_count == 1
-    return notif.call_args.kwargs["message"]
+    return notif.call_args.kwargs["card"].to_html()
 
 
 FULL_REPORT = {

@@ -1,24 +1,19 @@
 """Карточка уведомления о блокировке адреса.
 
-Тот же канон, что у HWID-карточек (``shared/tg_rich`` строит из него настоящее
-rich-сообщение): первая строка — заголовок, строки с отступом в три пробела —
-элементы списка, пустая строка — граница абзаца.
-
 Блокировка адреса — мера широкая: на ноде ставится DROP на весь трафик с него,
 а не только на VPN-порты, и по подсети под неё попадают все, кто за ней сидит.
-Поэтому в карточке главное не сам факт, а кого это задело.
+Поэтому в карточке главное не сам факт, а кого это задело — это таблица.
 """
 from typing import Any, Dict, Sequence
 
-from web.backend.core.hwid_cards import esc, fmt_dt
+from shared.i18n import tr
+from shared.tg_card import Card, b, code, i, join, when
+from web.backend.core.hwid_cards import connections_cell, people_table
 
 
-def _target_note(row: Dict[str, Any]) -> str:
+def _is_subnet(ip_cidr: str) -> bool:
     """Одиночный адрес или подсеть — от этого зависит цена ошибки."""
-    ip_cidr = str(row.get("ip_cidr") or "")
-    if ip_cidr.endswith("/32") or "/" not in ip_cidr:
-        return ""
-    return "подсеть — под блокировку попадут все адреса диапазона"
+    return "/" in ip_cidr and not ip_cidr.endswith("/32")
 
 
 def blocked_ip_card(
@@ -27,72 +22,38 @@ def blocked_ip_card(
     *,
     pushed_nodes: int = 0,
     admin_username: str = "",
-) -> str:
+) -> Card:
     ip_cidr = str(row.get("ip_cidr") or "")
-    trials = [u for u in users if u.get("is_trial")]
-    active = [u for u in users if u.get("is_active")]
-
-    lines = [
-        "\U0001f6ab <b>Адрес заблокирован</b>",
-        "",
-        "\U0001f4a1 %s" % esc(
-            "Трафик с адреса отбрасывается на нодах — целиком, не только VPN"
-        ),
-        "",
-        "\U0001f4cd <b>Адрес</b>",
-        f"   \U0001f5a7 <code>{esc(ip_cidr)}</code>",
-    ]
     provider = row.get("asn_org")
-    if provider:
-        country = row.get("country_code")
-        lines.append("   \U0001f3e2 %s%s" % (esc(provider), f" ({esc(country)})" if country else ""))
-    note = _target_note(row)
-    if note:
-        lines.append(f"   ⚠️ {esc(note)}")
-    expires = fmt_dt(row.get("expires_at"))
-    lines.append(f"   \U0001f552 {esc('До ' + expires) if expires else 'Бессрочно'}")
-    lines.append("")
+    expires = row.get("expires_at")
+
+    card = Card(tr("notify.blocked_ip.title"), emoji="🚫")
+    card.text(i(tr("notify.blocked_ip.subtitle")))
+    card.fields([
+        (tr("notify.ip_trial.field.ip"), code(ip_cidr)),
+        (tr("notify.ip_trial.field.provider"), join(provider, row.get("country_code")) if provider else None),
+        (tr("notify.blocked_ip.field.expires"),
+         when(expires) if expires else tr("notify.blocked_ip.forever")),
+        (tr("notify.blocked_ip.field.nodes"),
+         b(str(pushed_nodes)) if pushed_nodes else tr("notify.blocked_ip.no_agents")),
+    ])
+    if _is_subnet(ip_cidr):
+        card.text(["⚠️ ", b(tr("notify.blocked_ip.subnet"))])
 
     if users:
-        lines.append(
-            "\U0001f465 <b>Кого задевает ({0})</b>".format(len(users))
-        )
-        summary = []
-        if trials:
-            summary.append(f"пробных: {len(trials)}")
-        if active:
-            summary.append(f"с живой подпиской: {len(active)}")
-        if summary:
-            lines.append(f"   \U0001f4ca {esc(', '.join(summary))}")
-        for index, user in enumerate(users[:5]):
-            if index:
-                lines.append("")
-            name = user.get("username") or str(user.get("user_uuid") or "")[:8]
-            lines.append(f"   \U0001f464 <code>{esc(name)}</code>")
-            if user.get("telegram_id"):
-                lines.append(f"   \U0001f4f1 TG ID: <code>{esc(user['telegram_id'])}</code>")
-            lines.append(
-                "   \U0001f50c Подключений: <b>%d</b>, последнее %s"
-                % (int(user.get("conns") or 0), esc(fmt_dt(user.get("last_seen"))))
-            )
-        tail = users[5:]
-        if tail:
-            names = ", ".join(
-                esc(u.get("username") or str(u.get("user_uuid") or "")[:8]) for u in tail
-            )
-            lines.append(f"<blockquote expandable>И ещё {len(tail)}: {names}</blockquote>")
+        trials = sum(1 for u in users if u.get("is_trial"))
+        active = sum(1 for u in users if u.get("is_active"))
+        card.section(tr("notify.blocked_ip.affected", count=len(users)))
+        card.lead(tr("notify.blocked_ip.summary.trials", count=trials) if trials else None,
+                  tr("notify.blocked_ip.summary.active", count=active) if active else None)
+        people_table(card, users, extra=[(tr("notify.people.col.conns"), connections_cell)])
     else:
-        lines.append("\U0001f465 <b>Кого задевает</b>")
-        lines.append("   За последний месяц подключений с этого адреса не было")
-    lines.append("")
+        card.text(i(tr("notify.blocked_ip.nobody")))
 
+    # причина — слова админа, поэтому цитатой с его именем
     reason = row.get("reason")
     if reason:
-        lines.append(f"\U0001f4dd Причина: {esc(reason)}")
-    if admin_username:
-        lines.append(f"   \U0001f464 Внёс: {esc(admin_username)}")
-    lines.append(
-        "   \U0001f4e1 %s"
-        % esc(f"Применено на нодах: {pushed_nodes}" if pushed_nodes else "Подключённых агентов нет — правило не применено")
-    )
-    return "\n".join(lines).rstrip()
+        card.quote(reason, credit=admin_username or None)
+    elif admin_username:
+        card.fields([(tr("notify.blocked_ip.field.admin"), admin_username)])
+    return card.stamp()

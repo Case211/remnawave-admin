@@ -1,19 +1,21 @@
 """Утилиты для отправки уведомлений в Telegram топики."""
 import asyncio
 import io
+import json
 import re
-from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 import qrcode
 from aiogram import Bot
-from aiogram.types import BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 
 from src.config import get_settings
-from src.utils.formatters import format_bytes, format_datetime, format_provider_name
+from src.utils.formatters import format_bytes, format_datetime
 from src.utils.i18n import tr
+# реэкспорт для обработчиков кнопок нарушений и их тестов
 from shared.analyzers.models import VIOLATION_ANALYZERS, dominant_analyzer  # noqa: F401
-from shared import timefmt
+from shared.tg_card import (
+    CAPTION_LIMIT, HTML_LIMIT, Card, b, code, i, link, mark, s, section, spoiler, tg_user, when,
+)
 from shared.logger import logger
 from shared.notification_config import (
     is_notification_type_enabled,
@@ -27,14 +29,20 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
 
-async def _send_card(bot: Bot, message_kwargs: Dict[str, Any]) -> None:
-    """Отправить карточку уведомления rich-сообщением (Bot API 10.1).
+async def _send_card(
+    bot: Bot, message_kwargs: Dict[str, Any], card: Optional[Card] = None,
+    media: Optional[tuple] = None,
+) -> None:
+    """Отправить карточку уведомления rich-сообщением (Bot API 10.1+).
 
-    Первая строка становится настоящим заголовком, поля с отступом — списком.
-    При отказе rich-пути (или выключенном тумблере notifications_rich_enabled)
-    внутри send_rich_or_html срабатывает фолбэк на обычный HTML — уведомление
-    доходит в любом случае. aiogram у бота старый (3.12, без Rich-типов),
-    поэтому шлём raw-запросом с токеном бота.
+    С ``card`` (shared.tg_card) уходят её блоки — таблицы, секции, подвал, —
+    а HTML-фолбэк берётся из неё же. Без карточки первая строка ``text``
+    становится заголовком, поля с отступом — списком. При отказе rich-пути
+    (или выключенном тумблере notifications_rich_enabled) внутри
+    send_rich_or_html срабатывает фолбэк на обычный HTML — уведомление доходит
+    в любом случае. aiogram у бота старый (3.12, без Rich-типов), поэтому шлём
+    raw-запросом с токеном бота. ``media`` — (вид, имя, байты) вложения для
+    медиа-блока карточки; в фолбэке оно уходит файлом с подписью.
     """
     from shared import tg_rich
 
@@ -45,9 +53,12 @@ async def _send_card(bot: Bot, message_kwargs: Dict[str, Any]) -> None:
     await tg_rich.send_rich_or_html(
         bot.token,
         message_kwargs["chat_id"],
-        message_kwargs["text"],
+        card.to_html(limit=CAPTION_LIMIT if media else HTML_LIMIT) if card is not None else message_kwargs["text"],
+        blocks=card.to_blocks() if card is not None else None,
         message_thread_id=message_kwargs.get("message_thread_id"),
         reply_markup=reply_markup,
+        fallback_markup=card.keyboard() if card is not None else None,
+        media=media,
     )
 
 
@@ -100,32 +111,6 @@ def _push_dispatch(
         logger.debug("push dispatch from bot skipped: %s", e)
 
 
-# Кэш для throttling уведомлений о нарушениях
-# Ключ: user_uuid, Значение: datetime последнего уведомления
-_violation_notification_cache: Dict[str, datetime] = {}
-
-# Минимальный интервал между уведомлениями для одного пользователя (минуты)
-VIOLATION_NOTIFICATION_COOLDOWN_MINUTES = 15
-
-
-def _cleanup_notification_cache() -> None:
-    """Очищает устаревшие записи из кэша уведомлений (старше 1 часа)."""
-    global _violation_notification_cache
-    now = datetime.utcnow()
-    max_age = timedelta(hours=1)
-
-    expired_keys = [
-        key for key, timestamp in _violation_notification_cache.items()
-        if now - timestamp > max_age
-    ]
-
-    for key in expired_keys:
-        del _violation_notification_cache[key]
-
-    if expired_keys:
-        logger.debug("Cleaned up %d expired notification cache entries", len(expired_keys))
-
-
 async def _get_squad_name_by_uuid(squad_uuid: str) -> str:
     """Получает имя сквада по UUID из API."""
     try:
@@ -165,6 +150,37 @@ async def _local_user_uuid(info: dict) -> Optional[str]:
     return await resolve_local_user_uuid(info)
 
 
+def _title(key: str, fallback_key: str, **kwargs: Any) -> str:
+    """Заголовок события; незнакомое событие — запасной заголовок с его именем."""
+    value = tr(key)
+    return tr(fallback_key, **kwargs) if value == key else value
+
+
+def _qr_png(url: str) -> bytes:
+    buf = io.BytesIO()
+    qrcode.make(url, box_size=8, border=2).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _user_diff_rows(info: dict, old_info: dict) -> list:
+    """Изменившиеся поля: старое значение зачёркнуто, новое — маркером."""
+    unlimited = tr("notify.user.label.unlimited")
+    fields = (
+        ("trafficLimitBytes", "notify.user.field.traffic_limit", lambda v: format_bytes(v) if v else unlimited),
+        ("expireAt", "notify.user.field.expire", lambda v: format_datetime(v) if v else "—"),
+        ("trafficLimitStrategy", "notify.user.field.strategy", lambda v: v or "NO_RESET"),
+        ("hwidDeviceLimit", "notify.user.field.hwid_limit",
+         lambda v: unlimited if v == 0 else str(v) if v is not None else "—"),
+        ("status", "notify.user.field.status", lambda v: str(v) if v else "—"),
+        ("description", "notify.user.field.description", lambda v: str(v)[:60] if v else "—"),
+        ("telegramId", "notify.user.field.telegram_id", lambda v: str(v) if v is not None else "—"),
+        ("email", "notify.user.field.email", lambda v: str(v) if v else "—"),
+        ("tag", "notify.user.field.tag", lambda v: str(v) if v else "—"),
+    )
+    return [[tr(label), s(fmt(old_info.get(key))), mark(fmt(info.get(key)))]
+            for key, label, fmt in fields if old_info.get(key) != info.get(key)]
+
+
 async def send_user_notification(
     bot: Bot,
     action: str,  # "created", "updated", "deleted", "expired", "expires_in_*", etc.
@@ -173,6 +189,7 @@ async def send_user_notification(
     changes: list | None = None,  # Список изменений из sync_service
     event_type: str | None = None,  # Оригинальный тип события из webhook
     subscription_url: str | None = None,  # Для QR-кода при создании
+    created_by: str | None = None,  # Админ, создавший юзера через бота
 ) -> None:
     """Отправляет уведомление о действии с пользователем в Telegram топик."""
     settings = get_settings()
@@ -197,177 +214,89 @@ async def send_user_notification(
         chat_id,
         topic_id,
     )
-    
+
     try:
         info = user_info.get("response", user_info)
         local_uuid = await _local_user_uuid(info)
+        unlimited = tr("notify.user.label.unlimited")
+        expire_at = info.get("expireAt")
+        telegram_id = info.get("telegramId")
 
-        lines = []
+        card = Card(_title(f"notify.user.title.{action}", "notify.user.fallback"))
+        # Срок — относительным временем: «через 3 дня» читается быстрее даты
+        card.lead(b(info.get("username", "n/a")), code(info["status"]) if info.get("status") else None,
+                  when(expire_at, "r") if expire_at else None)
+        # Полный UUID, а не обрезок: по нему юзера и находят, и копируют
+        card.fields([
+            (tr("notify.user.field.uuid"), code(str(local_uuid or info.get("uuid") or info.get("id") or ""))),
+            (tr("notify.user.label.telegram"),
+             tg_user(str(telegram_id), telegram_id) if telegram_id is not None else None),
+            (tr("notify.user.field.email"), code(info["email"]) if info.get("email") else None),
+            (tr("notify.user.field.description"), info["description"][:100] if info.get("description") else None),
+            (tr("notify.user.label.created_by"), created_by),
+        ])
 
-        # Заголовок уведомления в зависимости от типа события.
-        # Если ключ не найден в локали, `tr()` вернёт сам ключ — это
-        # используем как маркер отсутствия и берём fallback.
-        title_value = tr(f"notify.user.title.{action}")
-        if title_value == f"notify.user.title.{action}":
-            title_value = tr("notify.user.fallback")
-        lines.append(title_value)
-        lines.append("")
+        traffic_limit = info.get("trafficLimitBytes")
+        hwid_limit = info.get("hwidDeviceLimit")
+        limits = [
+            (tr("notify.user.label.limit"), code(format_bytes(traffic_limit) if traffic_limit else unlimited)),
+            (tr("notify.user.label.expires"), when(expire_at) if expire_at else "—"),
+            (tr("notify.user.label.reset"), code(info.get("trafficLimitStrategy") or "NO_RESET")),
+            (tr("notify.user.label.hwid"),
+             code(unlimited if hwid_limit == 0 else str(hwid_limit)) if hwid_limit is not None else None),
+        ]
 
-        # Идентификация: имя и полный UUID отдельной строкой. Раньше рядом с
-        # именем стоял обрезок в восемь символов — по нему пользователя ни
-        # найти, ни скопировать. В <code> Telegram копирует значение по тапу.
-        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>")
-        full_id = local_uuid or info.get("uuid") or info.get("id")
-        if full_id:
-            lines.append(f"🆔 <code>{_esc(str(full_id))}</code>")
-        lines.append("")
-
-        # Для updated: показываем только изменившиеся поля (diff)
         if action == "updated" and old_user_info:
             old_info = old_user_info.get("response", old_user_info)
-            diff_lines = []
-
-            unlimited = tr("notify.user.label.unlimited")
-
-            def _fmt_unlimited(v):
-                return format_bytes(v) if v else unlimited
-
-            diff_fields = [
-                ("trafficLimitBytes", tr("notify.user.field.traffic_limit"), _fmt_unlimited),
-                ("expireAt", tr("notify.user.field.expire"), lambda v: format_datetime(v) if v else "—"),
-                ("trafficLimitStrategy", tr("notify.user.field.strategy"), lambda v: v or "NO_RESET"),
-                ("hwidDeviceLimit", tr("notify.user.field.hwid_limit"), lambda v: unlimited if v == 0 else str(v) if v is not None else "—"),
-                ("status", tr("notify.user.field.status"), lambda v: str(v) if v else "—"),
-                ("description", tr("notify.user.field.description"), lambda v: _esc(str(v)[:60]) if v else "—"),
-                ("telegramId", tr("notify.user.field.telegram_id"), lambda v: str(v) if v is not None else "—"),
-                ("email", tr("notify.user.field.email"), lambda v: _esc(str(v)) if v else "—"),
-                ("tag", tr("notify.user.field.tag"), lambda v: _esc(str(v)) if v else "—"),
-            ]
-
-            for key, label, fmt in diff_fields:
-                old_val = old_info.get(key)
-                new_val = info.get(key)
-                if old_val != new_val:
-                    # новое значение — жирным: взгляд сразу цепляется за итог
-                    diff_lines.append(f"   {label}: <code>{fmt(old_val)}</code> → <b><code>{fmt(new_val)}</code></b>")
-
-            # Сквад diff
+            diff_rows = _user_diff_rows(info, old_info)
             active_squads = info.get("activeInternalSquads", [])
             old_active_squads = old_info.get("activeInternalSquads", [])
             if active_squads != old_active_squads:
                 old_sq = await _resolve_squads_display(old_active_squads)
                 new_sq = await _resolve_squads_display(active_squads)
                 if old_sq != new_sq:
-                    diff_lines.append(f"   {tr('notify.user.field.squad')}: <code>{old_sq}</code> → <code>{new_sq}</code>")
+                    diff_rows.append([tr("notify.user.field.squad"), s(old_sq), mark(new_sq)])
 
-            if diff_lines:
-                lines.append(tr("notify.user.section.changes"))
-                lines.extend(diff_lines)
+            if diff_rows:
+                card.section(tr("notify.user.section.changes"))
+                card.table(diff_rows, head=[tr("notify.user.col.field"), tr("notify.user.col.old"),
+                                            tr("notify.user.col.new")])
             elif changes:
-                lines.append(tr("notify.user.section.changes"))
-                for change in changes:
-                    lines.append(f"   {_esc(change)}")
+                card.section(tr("notify.user.section.changes"))
+                card.bullets(changes)
             else:
-                lines.append(tr("notify.user.section.no_changes"))
-
-            # Краткая карточка с основными полями — сворачиваемой секцией:
-            # diff главный, контекст не должен занимать пол-экрана простынёй.
-            # В rich это details, в HTML-фолбэке — expandable-цитата.
-            lines.append("")
-            card_parts = []
-            status = info.get("status")
-            if status:
-                card_parts.append(f"{tr('notify.user.field.status')}: <code>{status}</code>")
-            traffic_limit = info.get("trafficLimitBytes")
-            card_parts.append(f"{tr('notify.user.label.limit')}: <code>{format_bytes(traffic_limit) if traffic_limit else unlimited}</code>")
-            expire_at = info.get("expireAt")
-            if expire_at:
-                card_parts.append(f"{tr('notify.user.label.expires')}: <code>{format_datetime(expire_at)}</code>")
-            telegram_id = info.get("telegramId")
-            if telegram_id is not None:
-                card_parts.append(f"TG: <code>{telegram_id}</code>")
-            email = info.get("email")
-            if email:
-                card_parts.append(f"{tr('notify.user.field.email')}: <code>{_esc(email)}</code>")
-            description = info.get("description")
-            if description:
-                card_parts.append(f"{tr('notify.user.field.description')}: <code>{_esc(description[:50])}</code>")
-            lines.append("<blockquote expandable>" + tr("notify.user.section.card")
-                         + "\n" + "\n".join(card_parts) + "</blockquote>")
-
+                card.text(i(tr("notify.user.section.no_changes")))
+            # Изменения главные; остальное — свёрнутой карточкой, а не простынёй
+            card.details(tr("notify.user.section.card"), section().fields(limits))
         else:
-            # Для created/deleted/other: полная информация
-            lines.append(tr("notify.user.section.traffic_limits"))
-            traffic_limit = info.get("trafficLimitBytes")
-            unlimited = tr("notify.user.label.unlimited")
-            lines.append(f"   {tr('notify.user.label.limit')}: <code>{format_bytes(traffic_limit) if traffic_limit else unlimited}</code>")
-            expire_at = info.get("expireAt")
-            lines.append(f"   {tr('notify.user.label.expires')}: <code>{format_datetime(expire_at) if expire_at else '—'}</code>")
-            lines.append(f"   {tr('notify.user.label.reset')}: <code>{info.get('trafficLimitStrategy') or 'NO_RESET'}</code>")
-            hwid_limit = info.get("hwidDeviceLimit")
-            if hwid_limit is not None:
-                lines.append(f"   {tr('notify.user.label.hwid')}: <code>{unlimited if hwid_limit == 0 else hwid_limit}</code>")
-            lines.append("")
-
-            subscription_url = info.get("subscriptionUrl")
-            if subscription_url:
-                url_display = _esc(subscription_url[:80]) + ("..." if len(subscription_url) > 80 else "")
-                lines.append(tr("notify.user.subscription_link", url=url_display))
-
             active_squads = info.get("activeInternalSquads", [])
             squad_display = await _resolve_squads_display(active_squads)
             external_squad = info.get("externalSquadUuid")
             if squad_display == "—" and external_squad:
                 squad_display = tr("notify.user.external_squad", uuid=external_squad[:8])
-            if squad_display != "—":
-                lines.append(f"   {tr('notify.user.label.squad')}: <code>{squad_display}</code>")
+            card.section(tr("notify.user.section.traffic_limits"))
+            card.fields([
+                *limits,
+                (tr("notify.user.label.squad"), code(squad_display) if squad_display != "—" else None),
+                # ссылка даёт доступ к подписке — под спойлером, не на виду в общем чате
+                (tr("notify.user.label.subscription"),
+                 spoiler(code(info["subscriptionUrl"])) if info.get("subscriptionUrl") else None),
+            ])
 
-            telegram_id = info.get("telegramId")
-            email = info.get("email")
-            if telegram_id is not None:
-                lines.append(f"📞 {tr('notify.user.label.telegram')}: <code>{telegram_id}</code>")
-            if email:
-                lines.append(f"📧 {tr('notify.user.field.email')}: <code>{_esc(email)}</code>")
-
-            description = info.get("description")
-            if description:
-                lines.append(f"📝 <code>{_esc(description[:100])}</code>")
-        
-        text = "\n".join(lines)
-
-        # Для "created" отправляем фото с QR-кодом и полным текстом в caption
+        media = None
         if action == "created" and subscription_url:
             try:
-                qr_buf = io.BytesIO()
-                qrcode.make(subscription_url, box_size=8, border=2).save(qr_buf, format='PNG')
-                qr_buf.seek(0)
-                photo_kwargs = {
-                    "chat_id": chat_id,
-                    "photo": BufferedInputFile(qr_buf.read(), filename="subscription.png"),
-                    "caption": text,
-                    "parse_mode": "HTML",
-                }
-                if topic_id is not None:
-                    photo_kwargs["message_thread_id"] = topic_id
-                await bot.send_photo(**photo_kwargs)
-                logger.info("User created notification with QR sent successfully chat_id=%s", chat_id)
-                return
+                media = ("photo", "subscription.png", _qr_png(subscription_url))
+                card.details(tr("notify.user.qr"), section().media("photo"))
             except Exception as e:
-                logger.warning("Failed to send QR photo, falling back to text: %s", e)
-                # Fall through to text message
+                logger.warning("Failed to build subscription QR: %s", e)
+        card.stamp()
 
-        # Отправляем в топик
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
-
-        # Добавляем message_thread_id только если он указан
+        message_kwargs: Dict[str, Any] = {"chat_id": chat_id}
         if topic_id is not None:
             message_kwargs["message_thread_id"] = topic_id
 
-        await _send_card(bot, message_kwargs)
+        await _send_card(bot, message_kwargs, card=card, media=media)
         logger.info("User notification sent successfully action=%s chat_id=%s", action, chat_id)
 
         # Маппинг коротких action-имён → event_id из catalog
@@ -408,18 +337,32 @@ async def send_user_notification(
         )
 
 
+def unknown_event_card(event: str, event_data: Any) -> Card:
+    """Событие, которого мы не знаем: имя и сырые данные — свёрнутым JSON."""
+    try:
+        raw = json.dumps(event_data, ensure_ascii=False, indent=2, default=str)
+    except (TypeError, ValueError):
+        raw = str(event_data)
+    card = Card(tr("notify.unknown.title"))
+    card.fields([(tr("notify.unknown.event"), code(event))])
+    card.details(tr("notify.unknown.data"), section().code(raw[:3000], "json"))
+    return card.stamp()
+
+
 async def send_generic_notification(
     bot: Bot,
-    title: str,
-    message: str,
+    title: str = "",
+    message: str = "",
     emoji: str = "ℹ️",
     topic_type: str | None = None,
+    card: Optional[Card] = None,
 ) -> None:
     """Отправляет общее уведомление в Telegram топик.
 
     Args:
         topic_type: Тип топика (users, nodes, service, hwid, crm, errors).
                    Если не указан, используется общий notifications_topic_id.
+        card: готовая карточка (shared.tg_card) вместо title/message.
     """
     settings = get_settings()
 
@@ -449,19 +392,16 @@ async def send_generic_notification(
     )
 
     try:
-        text = f"{emoji} <b>{title}</b>\n\n{message}"
-
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
+        message_kwargs: Dict[str, Any] = {"chat_id": chat_id}
+        if card is None:
+            message_kwargs["text"] = f"{emoji} <b>{title}</b>\n\n{message}"
 
         if topic_id is not None:
             message_kwargs["message_thread_id"] = topic_id
 
-        await _send_card(bot, message_kwargs)
-        logger.info("Generic notification sent successfully title=%s topic_id=%s", title, topic_id)
+        await _send_card(bot, message_kwargs, card=card)
+        logger.info("Generic notification sent successfully title=%s topic_id=%s",
+                    card.title_text() if card is not None else title, topic_id)
 
     except Exception as exc:
         logger.exception("Failed to send generic notification title=%s error=%s", title, exc)
@@ -495,54 +435,33 @@ async def send_node_notification(
     try:
         node_info = node_data.get("response", node_data) if isinstance(node_data, dict) else node_data
 
-        lines = []
-
-        # Определяем заголовок по типу события
         title_key = f"notify.node.title.{event}"
-        title_value = tr(title_key)
-        if title_value == title_key:
-            title_value = tr("notify.node.fallback", event=event)
-        lines.append(title_value)
-        lines.append("")
-
-        # Информация о ноде
         node_name = node_info.get("name", "n/a")
         node_uuid = node_info.get("uuid", "n/a")
         address = node_info.get("address", "—")
         port = node_info.get("port", "—")
         country = node_info.get("countryCode", "—")
         status = node_info.get("status", "—")
-
-        lines.append(f"🖥 <b>{_esc(node_name)}</b>  <code>{node_uuid[:8]}</code>")
-        addr_str = f"{_esc(str(address))}:{port}" if port != "—" else _esc(str(address))
-        lines.append(f"   {tr('notify.node.label.address')}: <code>{addr_str}</code>  {country if country != '—' else ''}")
-        if status != "—":
-            lines.append(f"   📊 {tr('notify.node.label.status')}: <code>{status}</code>")
-
-        # Трафик (если есть)
+        addr_str = f"{address}:{port}" if port != "—" else str(address)
         traffic_limit = node_info.get("trafficLimitBytes")
-        if traffic_limit:
-            lines.append(f"   📶 {tr('notify.node.label.traffic_limit')}: <code>{format_bytes(traffic_limit)}</code>")
 
-        # Секция изменений
+        card = Card(_title(title_key, "notify.node.fallback", event=event))
+        card.lead(b(node_name), code(addr_str), country if country != "—" else None)
+        card.fields([
+            (tr("notify.node.label.uuid"), code(node_uuid)),
+            (tr("notify.node.label.status"), code(status) if status != "—" else None),
+            (tr("notify.node.label.traffic_limit"), code(format_bytes(traffic_limit)) if traffic_limit else None),
+        ])
         if changes and event == "node.modified":
-            lines.append("")
-            lines.append(tr("notify.node.label.changes"))
-            for change in changes:
-                lines.append(f"   {_esc(change)}")
+            card.section(tr("notify.node.label.changes"))
+            card.bullets(changes)
+        card.stamp()
 
-        text = "\n".join(lines)
-
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
-
+        message_kwargs: Dict[str, Any] = {"chat_id": chat_id}
         if topic_id is not None:
             message_kwargs["message_thread_id"] = topic_id
 
-        await _send_card(bot, message_kwargs)
+        await _send_card(bot, message_kwargs, card=card)
         logger.info("Node notification sent successfully event=%s node_uuid=%s topic_id=%s", event, node_uuid, topic_id)
 
         # FCM push: критичные события про ноды отправляем как category=alerts,
@@ -591,57 +510,38 @@ async def send_service_notification(
     )
 
     try:
-        lines = []
+        card = Card(_title(f"notify.service.title.{event}", "notify.service.fallback", event=event))
 
-        title_key = f"notify.service.title.{event}"
-        title_value = tr(title_key)
-        if title_value == title_key:
-            title_value = tr("notify.service.fallback", event=event)
-        lines.append(title_value)
-        lines.append("")
-
-        # Дополнительная информация
         if event == "service.login_attempt_failed" or event == "service.login_attempt_success":
             # Remnawave вкладывает поля под data.loginAttempt (не на верхнем уровне)
             la = event_data.get("loginAttempt")
             la = la if isinstance(la, dict) else event_data
-            username = la.get("username") or "—"
-            ip = la.get("ip") or "—"
-            user_agent = la.get("userAgent") or "—"
-            description = la.get("description") or "—"
-
-            lines.append(f"   {tr('notify.service.login.username', username=_esc(username))}")
-            if ip != "—":
-                lines.append(f"   {tr('notify.service.login.ip', ip=_esc(ip))}")
-            if user_agent != "—":
-                lines.append(f"   {tr('notify.service.login.user_agent', user_agent=_esc(user_agent[:200]))}")
-            if description != "—":
-                lines.append(f"   {tr('notify.service.login.description', description=_esc(description))}")
+            card.lead(b(la.get("username") or "—"), code(la["ip"]) if la.get("ip") else None)
+            card.fields([
+                (tr("notify.service.login.username"), code(la["username"]) if la.get("username") else None),
+                (tr("notify.service.login.ip"), code(la["ip"]) if la.get("ip") else None),
+                (tr("notify.service.login.user_agent"), code(la["userAgent"][:200]) if la.get("userAgent") else None),
+                (tr("notify.service.login.description"), la.get("description")),
+            ])
         elif event == "panel.unavailable":
-            error_type = event_data.get("error_type", "—")
-            error_message = event_data.get("error_message", "—")
-            consecutive_failures = event_data.get("consecutive_failures", 0)
-            last_check = event_data.get("last_check", "—")
+            error_message = event_data.get("error_message")
+            last_check = event_data.get("last_check")
+            card.fields([
+                (tr("notify.service.panel_unavailable.error_type"), code(event_data.get("error_type") or "—")),
+                (tr("notify.service.panel_unavailable.failures"), b(str(event_data.get("consecutive_failures", 0)))),
+                (tr("notify.service.panel_unavailable.last_check"),
+                 (when(last_check) or last_check) if last_check else None),
+            ])
+            if error_message:
+                card.section(tr("notify.service.panel_unavailable.error_message"))
+                card.code(str(error_message)[:500])
+        card.stamp()
 
-            lines.append(f"   {tr('notify.service.panel_unavailable.error_type', error_type=_esc(error_type))}")
-            if error_message != "—":
-                lines.append(f"   {tr('notify.service.panel_unavailable.error_message', error_message=_esc(error_message[:100]))}")
-            lines.append(f"   {tr('notify.service.panel_unavailable.failures', count=consecutive_failures)}")
-            if last_check != "—":
-                lines.append(f"   {tr('notify.service.panel_unavailable.last_check', last_check=last_check)}")
-
-        text = "\n".join(lines)
-
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
-
+        message_kwargs: Dict[str, Any] = {"chat_id": chat_id}
         if topic_id is not None:
             message_kwargs["message_thread_id"] = topic_id
 
-        await _send_card(bot, message_kwargs)
+        await _send_card(bot, message_kwargs, card=card)
         logger.info("Service notification sent successfully event=%s topic_id=%s", event, topic_id)
 
         # Сервисные события (бэкап, рестарт панели и т.п.) — alert-категория,
@@ -684,80 +584,52 @@ async def send_hwid_notification(
     )
 
     try:
-        lines = []
-
-        title_key = f"notify.hwid.title.{event}"
-        title_value = tr(title_key)
-        if title_value == title_key:
-            title_value = tr("notify.hwid.fallback", event=event)
-        lines.append(title_value)
-        lines.append("")
-
-        # Информация о пользователе
         user_data = event_data.get("user", {})
         # Webhook может прислать hwidDevice или hwidUserDevice
         hwid_data = event_data.get("hwidDevice", {}) or event_data.get("hwidUserDevice", {})
-
         user_local_uuid = await _local_user_uuid(user_data) if user_data else None
 
+        card = Card(_title(f"notify.hwid.title.{event}", "notify.hwid.fallback", event=event))
+        card.lead(b(user_data.get("username", "n/a")) if user_data else None,
+                  hwid_data.get("platform") if hwid_data else None,
+                  hwid_data.get("deviceModel") if hwid_data else None)
+
         if user_data:
-            username = user_data.get("username", "n/a")
-            user_uuid = user_data.get("uuid") or user_local_uuid or user_data.get("id", "n/a")
             telegram_id = user_data.get("telegramId")
-            status = user_data.get("status", "—")
-            description = user_data.get("description", "")
             hwid_device_limit = user_data.get("hwidDeviceLimit", 0)
-
-            lines.append(tr('notify.hwid.label.user', username=_esc(username)))
-            lines.append(f"   🆔 <code>{_esc(str(user_local_uuid or user_uuid))}</code>")
-            if telegram_id is not None:
-                lines.append(f"   {tr('notify.hwid.label.tg_id', telegram_id=telegram_id)}")
-
-            lines.append(f"   {tr('notify.hwid.label.status', status=status)}")
-
-            if description:
-                lines.append(f"   {tr('notify.hwid.label.description', description=_esc(description[:100]))}")
-
-            # Информация о лимите устройств
-            limit_display = "∞" if hwid_device_limit == 0 else str(hwid_device_limit)
-            lines.append(f"   {tr('notify.hwid.label.device_limit', limit=limit_display)}")
-
-            lines.append("")
+            card.section(tr("notify.hwid.user_header"))
+            card.fields([
+                (tr("notify.hwid.label.user"), code(user_data.get("username", "n/a"))),
+                (tr("notify.hwid.label.uuid"),
+                 code(str(user_local_uuid or user_data.get("uuid") or user_data.get("id", "n/a")))),
+                (tr("notify.hwid.label.tg_id"),
+                 tg_user(str(telegram_id), telegram_id) if telegram_id is not None else None),
+                (tr("notify.hwid.label.status"), code(user_data.get("status", "—"))),
+                (tr("notify.hwid.label.device_limit"),
+                 code("∞" if hwid_device_limit == 0 else str(hwid_device_limit))),
+                (tr("notify.hwid.label.description"),
+                 user_data["description"][:100] if user_data.get("description") else None),
+            ])
 
         if hwid_data:
-            lines.append(tr("notify.hwid.device_header"))
-            hwid = hwid_data.get("hwid", "—")
-            platform = hwid_data.get("platform", "—")
-            os_version = hwid_data.get("osVersion", "—")
-            device_model = hwid_data.get("deviceModel", "—")
-            user_agent = hwid_data.get("userAgent", "—")
             created_at = hwid_data.get("createdAt")
+            card.section(tr("notify.hwid.device_header"))
+            card.fields([
+                (tr("notify.hwid.device.hwid"), code(hwid_data["hwid"]) if hwid_data.get("hwid") else None),
+                (tr("notify.hwid.device.platform"), hwid_data.get("platform")),
+                (tr("notify.hwid.device.os_version"), hwid_data.get("osVersion")),
+                (tr("notify.hwid.device.model"), hwid_data.get("deviceModel")),
+                (tr("notify.hwid.device.user_agent"),
+                 code(hwid_data["userAgent"][:60]) if hwid_data.get("userAgent") else None),
+                (tr("notify.hwid.device.added"), when(created_at) if created_at else None),
+            ])
+        card.stamp()
 
-            if hwid != "—":
-                lines.append(f"   {tr('notify.hwid.device.hwid', hwid=_esc(hwid))}")
-            if platform != "—":
-                lines.append(f"   {tr('notify.hwid.device.platform', platform=_esc(platform))}")
-            if os_version != "—":
-                lines.append(f"   {tr('notify.hwid.device.os_version', os_version=_esc(os_version))}")
-            if device_model != "—":
-                lines.append(f"   {tr('notify.hwid.device.model', model=_esc(device_model))}")
-            if user_agent != "—":
-                lines.append(f"   {tr('notify.hwid.device.user_agent', user_agent=_esc(user_agent[:60]))}")
-            if created_at:
-                lines.append(f"   {tr('notify.hwid.device.added', created_at=format_datetime(created_at))}")
-        
-        text = "\n".join(lines)
-
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
-
+        message_kwargs: Dict[str, Any] = {"chat_id": chat_id}
         if topic_id is not None:
             message_kwargs["message_thread_id"] = topic_id
 
-        await _send_card(bot, message_kwargs)
+        await _send_card(bot, message_kwargs, card=card)
         logger.info("HWID notification sent successfully event=%s topic_id=%s", event, topic_id)
 
         # FCM push: соответствует событиям user_hwid_devices.added/.deleted в
@@ -820,29 +692,20 @@ async def send_error_notification(
     )
 
     try:
-        lines = []
-
-        lines.append(tr("notify.error.title"))
-        lines.append("")
-        lines.append(f"   {tr('notify.error.type', event=_esc(event))}")
-
-        # Дополнительная информация
+        card = Card(tr("notify.error.title"))
+        card.fields([(tr("notify.error.type"), code(event))])
         message = event_data.get("message", "")
         if message:
-            lines.append(f"   {tr('notify.error.message', message=_esc(message))}")
+            # текст ошибки — моноширинным блоком: его копируют в поиск и в тикеты
+            card.section(tr("notify.error.message"))
+            card.code(str(message)[:1500])
+        card.stamp()
 
-        text = "\n".join(lines)
-
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
-
+        message_kwargs: Dict[str, Any] = {"chat_id": chat_id}
         if topic_id is not None:
             message_kwargs["message_thread_id"] = topic_id
 
-        await _send_card(bot, message_kwargs)
+        await _send_card(bot, message_kwargs, card=card)
         logger.info("Error notification sent successfully event=%s topic_id=%s", event, topic_id)
 
         # Ошибки/системные алерты обязательно пушим — это то, ради чего пуши и нужны.
@@ -884,445 +747,66 @@ async def send_crm_notification(
     )
 
     try:
-        lines = []
-
-        title_key = f"notify.crm.title.{event}"
-        title_value = tr(title_key)
-        if title_value == title_key:
-            title_value = tr("notify.crm.fallback", event=event)
-        lines.append(title_value)
-        lines.append("")
+        card = Card(_title(f"notify.crm.title.{event}", "notify.crm.fallback", event=event))
 
         # Webhook может прислать данные в двух форматах:
         # 1. Плоский формат: {nodeName, providerName, loginUrl, nextBillingAt}
         # 2. Вложенный формат: {node: {...}, provider: {...}, billingNode: {...}}
-
-        # Проверяем плоский формат (приоритет)
-        node_name = event_data.get("nodeName")
-        provider_name = event_data.get("providerName")
-        login_url = event_data.get("loginUrl")
-        next_billing_at = event_data.get("nextBillingAt")
-
-        if node_name or provider_name:
-            # Плоский формат webhook
-            lines.append(tr("notify.crm.section.node"))
-            if node_name:
-                lines.append(f"   {tr('notify.crm.label.name')}: <code>{_esc(node_name)}</code>")
-            lines.append("")
-
-            if provider_name:
-                lines.append(tr("notify.crm.section.provider"))
-                lines.append(f"   {tr('notify.crm.label.name')}: <code>{_esc(provider_name)}</code>")
-                if login_url:
-                    lines.append(f"   {tr('notify.crm.label.login_url', url=_esc(login_url))}")
-                lines.append("")
-
-            if next_billing_at:
-                lines.append(tr("notify.crm.section.billing"))
-                lines.append(f"   {tr('notify.crm.label.next_billing', date=format_datetime(next_billing_at))}")
+        if event_data.get("nodeName") or event_data.get("providerName"):
+            login_url = event_data.get("loginUrl")
+            next_billing_at = event_data.get("nextBillingAt")
+            card.lead(b(event_data.get("nodeName") or "—"), event_data.get("providerName"),
+                      when(next_billing_at, "r") if next_billing_at else None)
+            card.fields([
+                (tr("notify.crm.section.node"), code(event_data["nodeName"]) if event_data.get("nodeName") else None),
+                (tr("notify.crm.section.provider"), event_data.get("providerName")),
+                (tr("notify.crm.label.login_url"), link(login_url, login_url) if login_url else None),
+                (tr("notify.crm.label.next_billing"), when(next_billing_at) if next_billing_at else None),
+            ])
         else:
-            # Вложенный формат (для совместимости)
             node_data = event_data.get("node", {})
             provider_data = event_data.get("provider", {})
             billing_data = event_data.get("billingNode", {})
-
+            card.lead(b(node_data.get("name", "—")) if node_data else None,
+                      provider_data.get("name") if provider_data else None)
             if node_data:
-                lines.append(tr("notify.crm.section.node"))
-                node_name = node_data.get("name", "n/a")
-                node_uuid = node_data.get("uuid", "")
-                node_address = node_data.get("address", "")
-                node_port = node_data.get("port")
-                node_country = node_data.get("countryCode", "")
-
-                lines.append(f"   {tr('notify.crm.label.name')}: <code>{_esc(node_name)}</code>")
-                if node_uuid:
-                    lines.append(f"   {tr('notify.crm.label.uuid')}: <code>{node_uuid}</code>")
-                if node_address:
-                    lines.append(f"   {tr('notify.crm.label.address')}: <code>{_esc(node_address)}</code>")
-                if node_port:
-                    lines.append(f"   {tr('notify.crm.label.port')}: <code>{node_port}</code>")
-                if node_country:
-                    lines.append(f"   {tr('notify.crm.label.country')}: <code>{node_country}</code>")
-                lines.append("")
-
+                card.section(tr("notify.crm.section.node"))
+                card.fields([
+                    (tr("notify.crm.label.name"), code(node_data.get("name", "n/a"))),
+                    (tr("notify.crm.label.uuid"), code(node_data["uuid"]) if node_data.get("uuid") else None),
+                    (tr("notify.crm.label.address"),
+                     code(node_data["address"]) if node_data.get("address") else None),
+                    (tr("notify.crm.label.port"), code(str(node_data["port"])) if node_data.get("port") else None),
+                    (tr("notify.crm.label.country"), node_data.get("countryCode")),
+                ])
             if provider_data:
-                lines.append(tr("notify.crm.section.provider"))
-                provider_name = provider_data.get("name", "n/a")
-                provider_uuid = provider_data.get("uuid", "")
-                lines.append(f"   {tr('notify.crm.label.name')}: <code>{_esc(provider_name)}</code>")
-                if provider_uuid:
-                    lines.append(f"   {tr('notify.crm.label.uuid')}: <code>{provider_uuid}</code>")
-                lines.append("")
-
+                card.section(tr("notify.crm.section.provider"))
+                card.fields([
+                    (tr("notify.crm.label.name"), code(provider_data.get("name", "n/a"))),
+                    (tr("notify.crm.label.uuid"),
+                     code(provider_data["uuid"]) if provider_data.get("uuid") else None),
+                ])
             if billing_data:
-                lines.append(tr("notify.crm.section.billing"))
                 amount = billing_data.get("amount")
                 currency = billing_data.get("currency", "")
                 next_billing_at = billing_data.get("nextBillingAt")
                 last_billing_at = billing_data.get("lastBillingAt")
-                billing_interval = billing_data.get("billingInterval", "")
+                card.section(tr("notify.crm.section.billing"))
+                card.fields([
+                    (tr("notify.crm.label.amount"),
+                     b(f"{amount} {currency}".strip()) if amount is not None else None),
+                    (tr("notify.crm.label.interval"), billing_data.get("billingInterval")),
+                    (tr("notify.crm.label.next_billing"), when(next_billing_at) if next_billing_at else None),
+                    (tr("notify.crm.label.last_billing"), when(last_billing_at) if last_billing_at else None),
+                ])
+        card.stamp()
 
-                if amount is not None:
-                    amount_str = f"{amount}"
-                    if currency:
-                        amount_str += f" {currency}"
-                    lines.append(f"   {tr('notify.crm.label.amount')}: <code>{amount_str}</code>")
-                if billing_interval:
-                    lines.append(f"   {tr('notify.crm.label.interval')}: <code>{billing_interval}</code>")
-                if next_billing_at:
-                    lines.append(f"   {tr('notify.crm.label.next_billing', date=format_datetime(next_billing_at))}")
-                if last_billing_at:
-                    lines.append(f"   {tr('notify.crm.label.last_billing', date=format_datetime(last_billing_at))}")
-
-        text = "\n".join(lines)
-
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }
-
+        message_kwargs: Dict[str, Any] = {"chat_id": chat_id}
         if topic_id is not None:
             message_kwargs["message_thread_id"] = topic_id
 
-        await _send_card(bot, message_kwargs)
+        await _send_card(bot, message_kwargs, card=card)
         logger.info("CRM notification sent successfully event=%s topic_id=%s", event, topic_id)
 
     except Exception as exc:
         logger.exception("Failed to send CRM notification event=%s error=%s", event, exc)
-
-
-async def send_violation_notification(
-    bot: Bot,
-    user_uuid: str,
-    violation_score: dict,
-    user_info: dict | None = None,
-    force: bool = False,
-    active_connections: list | None = None,
-    ip_metadata: dict | None = None,
-    violation_start_time: datetime | None = None,
-) -> None:
-    """Отправляет уведомление о нарушении в Telegram топик.
-
-    Args:
-        bot: Экземпляр бота для отправки сообщений
-        user_uuid: UUID пользователя
-        violation_score: Словарь с данными о нарушении (ViolationScore)
-        user_info: Опциональная информация о пользователе из БД
-        force: Если True, игнорирует throttling и отправляет уведомление в любом случае
-        active_connections: Список активных подключений пользователя
-        ip_metadata: Словарь метаданных IP адресов {ip: IPMetadata}
-        violation_start_time: Время начала нарушения (для расчёта длительности)
-    """
-    settings = get_settings()
-
-    if not is_notification_type_enabled("violations"):
-        logger.debug("Violation notifications disabled in dynamic settings")
-        return
-
-    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
-    if not chat_id:
-        logger.debug("Violation notifications disabled: NOTIFICATIONS_CHAT_ID not set")
-        return
-
-    # Throttling: проверяем, не было ли недавно уведомления для этого пользователя
-    now = datetime.utcnow()
-    if not force and user_uuid in _violation_notification_cache:
-        last_notification = _violation_notification_cache[user_uuid]
-        cooldown = timedelta(minutes=VIOLATION_NOTIFICATION_COOLDOWN_MINUTES)
-
-        if now - last_notification < cooldown:
-            logger.debug(
-                "Violation notification throttled for user %s (cooldown active)",
-                user_uuid
-            )
-            return
-
-    # Очищаем старые записи из кэша (старше 1 часа)
-    _cleanup_notification_cache()
-
-    # Используем топик для нарушений (подозреваемых пользователей)
-    topic_id = resolve_notification_topic(
-        "violations",
-        type_fallback=settings.notifications_topic_violations,
-        general_fallback=settings.notifications_topic_id,
-    )
-
-    try:
-        # Получаем информацию о пользователе если не передана
-        if not user_info:
-            from shared.database import db_service
-            user_info = await db_service.get_user_by_uuid(user_uuid)
-
-        # Извлекаем данные пользователя
-        info = user_info.get("response", user_info) if user_info else {}
-        username = info.get("username", "n/a")
-        email = info.get("email", "")
-        telegram_id = info.get("telegramId")
-        description = info.get("description", "")
-        device_limit = info.get("hwidDeviceLimit", 1)
-        if device_limit == 0:
-            device_limit = "∞"
-
-        # Извлекаем данные о нарушении
-        total_score = violation_score.get("total", violation_score.get("score", 0))
-        breakdown = violation_score.get("breakdown", {})
-
-        # Получаем количество одновременных IP из temporal breakdown
-        ip_count = 0
-        if breakdown and "temporal" in breakdown:
-            temporal_data = breakdown["temporal"]
-            if isinstance(temporal_data, dict):
-                ip_count = temporal_data.get("simultaneous_connections_count", 0)
-            elif hasattr(temporal_data, 'simultaneous_connections_count'):
-                ip_count = temporal_data.simultaneous_connections_count
-
-        # Если нет ip_count из breakdown, считаем из активных подключений
-        if ip_count == 0 and active_connections:
-            ip_count = len(set(str(c.ip_address) for c in active_connections))
-
-        # Время в нарушении (секунды)
-        violation_duration_sec = 0
-        if violation_start_time:
-            violation_duration_sec = int((now - violation_start_time).total_seconds())
-
-        event_time = timefmt.fmt(now, "%d.%m.%Y %H:%M:%S")
-
-        # Собираем уникальные IP и ноды
-        unique_ips = set()
-        node_uuids = set()
-        if active_connections:
-            for conn in active_connections:
-                unique_ips.add(str(conn.ip_address))
-                if hasattr(conn, 'node_uuid') and conn.node_uuid:
-                    node_uuids.add(conn.node_uuid)
-
-        # Получаем имена нод по UUID
-        nodes_used = set()
-        if node_uuids:
-            try:
-                from shared.database import db_service
-                for node_uuid in node_uuids:
-                    node_info = await db_service.get_node_by_uuid(node_uuid)
-                    if node_info and node_info.get("name"):
-                        nodes_used.add(node_info.get("name"))
-                    else:
-                        nodes_used.add(node_uuid[:8])  # Короткий UUID если имя недоступно
-            except Exception as node_error:
-                logger.debug("Failed to get node names: %s", node_error)
-                # Используем короткие UUID
-                nodes_used = {uuid[:8] for uuid in node_uuids}
-
-        # Собираем информацию об устройствах (конкретные ОС и клиенты)
-        os_list = []
-        client_list = []
-        if breakdown and "device" in breakdown:
-            device_data = breakdown["device"]
-            if isinstance(device_data, dict):
-                os_list = device_data.get("os_list") or []
-                client_list = device_data.get("client_list") or []
-            elif hasattr(device_data, 'os_list'):
-                os_list = device_data.os_list or []
-                client_list = getattr(device_data, 'client_list', None) or []
-
-        # Формируем сообщение: заголовок → сводка (кто и насколько плохо) →
-        # секции списками. Строки с «   »-отступом конвертер rich собирает
-        # в аккуратные списки, секции — жирные строки-параграфы.
-        lines = []
-        lines.append(tr("notify.violation.title"))
-        lines.append("")
-
-        # Сводка — главное с первого взгляда
-        lines.append(tr(
-            "notify.violation.summary",
-            username=_esc(username), score=f"{total_score:.0f}",
-            count=ip_count, limit=device_limit,
-        ))
-        lines.append("")
-
-        # Информация о пользователе — секция со списком полей
-        user_lines = []
-        if email:
-            user_lines.append(f"   {tr('notify.violation.email', email=_esc(email))}")
-        if telegram_id is not None:
-            user_lines.append(f"   {tr('notify.violation.tg_id', telegram_id=telegram_id)}")
-        if description:
-            user_lines.append(f"   {tr('notify.violation.description', description=_esc(description[:100]))}")
-        if user_lines:
-            lines.append(tr("notify.violation.user_section"))
-            lines.extend(user_lines)
-            lines.append("")
-
-        # IP адреса
-        lines.append(tr("notify.violation.ip_count", count=ip_count, limit=device_limit))
-
-        if unique_ips:
-            lines.append(tr("notify.violation.ips_providers"))
-            for ip in sorted(unique_ips):
-                provider_info = ""
-                country_code = ""
-                if ip_metadata and ip in ip_metadata:
-                    meta = ip_metadata[ip]
-                    if hasattr(meta, 'asn_org') and meta.asn_org:
-                        # Преобразуем техническое название в понятное
-                        provider_info = format_provider_name(meta.asn_org)
-                    if hasattr(meta, 'country_code') and meta.country_code:
-                        country_code = meta.country_code
-
-                if provider_info and country_code:
-                    lines.append(tr("notify.violation.ip_with_meta", ip=ip, provider=_esc(provider_info), country=country_code))
-                elif country_code:
-                    lines.append(tr("notify.violation.ip_with_country", ip=ip, country=country_code))
-                elif provider_info:
-                    lines.append(tr("notify.violation.ip_with_meta", ip=ip, provider=_esc(provider_info), country=""))
-                else:
-                    lines.append(tr("notify.violation.ip_bare", ip=ip))
-
-        # Ноды — в тот же список, что и IP
-        if nodes_used:
-            nodes_str = ", ".join(sorted(nodes_used))
-            lines.append(f"   {tr('notify.violation.nodes', nodes=_esc(nodes_str))}")
-
-        lines.append("")
-
-        # Получаем HWID устройства из БД
-        hwid_devices = []
-        try:
-            from shared.database import db_service
-            hwid_devices = await db_service.get_user_hwid_devices(user_uuid)
-        except Exception as hwid_error:
-            logger.debug("Failed to get HWID devices for user %s: %s", user_uuid, hwid_error)
-
-        # Устройства (HWID из БД)
-        if hwid_devices:
-            hwid_count = len(hwid_devices)
-            device_parts = []
-            for device in hwid_devices[:5]:  # Показываем максимум 5 устройств
-                platform = device.get("platform", "unknown")
-                os_version = device.get("os_version", "")
-                app_version = device.get("app_version", "")
-
-                # Форматируем название платформы
-                platform_key = f"notify.violation.platform.{platform.lower()}" if platform else "notify.violation.platform.unknown"
-                platform_display = tr(platform_key)
-                if platform_display == platform_key:
-                    platform_display = platform or tr("notify.violation.platform.unknown")
-
-                # Собираем строку устройства
-                device_str = platform_display
-                if os_version:
-                    device_str += f" {os_version}"
-                if app_version:
-                    device_str += f" (v{app_version})"
-
-                device_parts.append(device_str)
-
-            if hwid_count > 5:
-                device_parts.append(tr("notify.violation.more_devices", count=hwid_count - 5))
-
-            lines.append(tr("notify.violation.devices", count=hwid_count, limit=device_limit))
-            for part in device_parts:
-                lines.append(f"   {_esc(part)}")
-        else:
-            # Если нет HWID устройств, показываем данные из breakdown (ОС и клиенты из user-agent)
-            if os_list or client_list:
-                device_parts = []
-                if os_list and client_list and len(os_list) == len(client_list):
-                    for i, os_name in enumerate(os_list):
-                        client_name = client_list[i] if i < len(client_list) else ""
-                        if client_name:
-                            device_parts.append(f"{os_name} ({client_name})")
-                        else:
-                            device_parts.append(os_name)
-                else:
-                    if os_list:
-                        device_parts.append(tr("notify.violation.os_list", list=", ".join(os_list)))
-                    if client_list:
-                        device_parts.append(tr("notify.violation.client_list", list=", ".join(client_list)))
-
-                if device_parts:
-                    lines.append(tr("notify.violation.devices_ua", details="; ".join(device_parts)))
-                else:
-                    lines.append(tr("notify.violation.devices_empty"))
-            else:
-                lines.append(tr("notify.violation.devices_empty"))
-
-        # Хвост: длительность и время (скор уже в сводке сверху)
-        lines.append("")
-        if violation_duration_sec > 0:
-            lines.append(tr("notify.violation.duration", seconds=violation_duration_sec))
-        lines.append(tr("notify.violation.time", time=event_time))
-
-        text = "\n".join(lines)
-
-        rows = [
-            [
-                InlineKeyboardButton(text=tr("notify.violation.btn.info"), callback_data=f"vact:info:{user_uuid}"),
-                InlineKeyboardButton(text=tr("notify.violation.btn.block"), callback_data=f"vact:block:{user_uuid}"),
-            ],
-            [
-                InlineKeyboardButton(text=tr("notify.violation.btn.kill"), callback_data=f"vact:kill:{user_uuid}"),
-                InlineKeyboardButton(text=tr("notify.violation.btn.reset"), callback_data=f"vact:reset:{user_uuid}"),
-            ],
-            [
-                # Предупредить раньше, чем отключать: человек часто не знает,
-                # что нарушает, а доступ, пропавший без объяснений, приходит
-                # к нам же обращением в поддержку.
-                InlineKeyboardButton(text=tr("notify.violation.btn.warn"), callback_data=f"vact:warn:{user_uuid}"),
-                InlineKeyboardButton(text=tr("notify.violation.btn.annul"), callback_data=f"vact:dismiss:{user_uuid}"),
-            ],
-        ]
-
-        # Белый список: целиком и «только по этому поводу». Второй кнопки
-        # нет, если ни один анализатор не набрал очков — предлагать разрез
-        # наугад хуже, чем не предлагать вовсе.
-        whitelist_row = [
-            InlineKeyboardButton(
-                text=tr("notify.violation.btn.whitelist"), callback_data=f"vact:wl:{user_uuid}",
-            ),
-        ]
-        analyzer = dominant_analyzer(breakdown)
-        if analyzer:
-            whitelist_row.append(InlineKeyboardButton(
-                text=tr(
-                    "notify.violation.btn.whitelist_partial",
-                    analyzer=tr(f"notify.violation.analyzer.{analyzer}"),
-                ),
-                callback_data=f"vact:wlp_{analyzer}:{user_uuid}",
-            ))
-        rows.append(whitelist_row)
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
-
-        message_kwargs = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "reply_markup": keyboard,
-        }
-
-        if topic_id is not None:
-            message_kwargs["message_thread_id"] = topic_id
-
-        await _send_card(bot, message_kwargs)
-
-        # Обновляем кэш после успешной отправки
-        _violation_notification_cache[user_uuid] = datetime.utcnow()
-
-        logger.info(
-            "Violation notification sent successfully user_uuid=%s score=%.1f ip_count=%d topic_id=%s",
-            user_uuid,
-            total_score,
-            ip_count,
-            topic_id
-        )
-
-    except Exception as exc:
-        logger.exception(
-            "Failed to send violation notification user_uuid=%s error=%s",
-            user_uuid,
-            exc
-        )
-
-
-from src.utils.formatters import _esc  # noqa: E402 — reuse single implementation

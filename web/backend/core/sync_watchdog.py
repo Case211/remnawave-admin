@@ -14,7 +14,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from shared.i18n import tr
 from shared.logger import logger
+from shared.tg_card import Card, b, i
 
 CHECK_INTERVAL_SECONDS = 60
 # Одного-двух пропущенных проходов мало, чтобы будить админа
@@ -55,29 +57,26 @@ class SyncWatchdog:
             self._alerted = True
             minutes = int(stalled.total_seconds() // 60)
             logger.error("sync_watchdog: синк с панелью не проходит %d мин", minutes)
-            await _notify(
-                "⏸ Синк с панелью стоит",
-                f"Последний успешный синк пользователей — {minutes} мин назад. "
-                "Трафик, HWID и аналитика в админке не обновляются.\n"
-                "Проверь связь с панелью и лог коллектора (web-collector).",
-                severity="warning",
-            )
+            card = Card(tr("notify.sync.stalled.title"), emoji="⏸")
+            card.text(tr("notify.sync.stalled.text"))
+            card.fields([(tr("notify.sync.stalled.last"), b(tr("notify.sync.stalled.ago", minutes=minutes)))])
+            card.text(i(tr("notify.sync.stalled.hint")))
+            await _notify(card.stamp(), severity="warning")
         elif stalled <= limit and self._alerted:
             self._alerted = False
             logger.info("sync_watchdog: синк с панелью возобновился")
-            await _notify(
-                "▶️ Синк с панелью возобновился",
-                "Данные в админке снова обновляются.",
-                severity="info",
-            )
+            card = Card(tr("notify.sync.resumed.title"), emoji="▶️")
+            card.text(tr("notify.sync.resumed.text"))
+            await _notify(card.stamp(), severity="info")
 
 
-async def _notify(title: str, body: str, *, severity: str) -> None:
+async def _notify(card: Card, *, severity: str) -> None:
     try:
         from web.backend.core.notification_service import create_notification
         await create_notification(
-            title=title,
-            body=body,
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="alert",
             severity=severity,
             channels=["in_app", "telegram"],

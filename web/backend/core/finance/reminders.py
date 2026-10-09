@@ -15,8 +15,10 @@
 import asyncio
 import logging
 from datetime import date, datetime
-from html import escape
 from typing import Dict, List, Optional
+
+from shared.i18n import tr
+from shared.tg_card import Button, Card, b, i
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +60,6 @@ def _reminder_days() -> List[int]:
     return sorted(set(d for d in days if d >= 0), reverse=True)
 
 
-def _item_keyboard(item: Dict) -> Dict:
-    rows = [[
-        {"text": "✅ Получено" if item.get("kind") == "income" else "✅ Оплачено", "callback_data": f"fin:paid:{item['id']}"},
-        {"text": "⏭️ Пропустить", "callback_data": f"fin:skip:{item['id']}"},
-    ]]
-    if item.get("url"):
-        rows.append([{"text": "🔗 Открыть кабинет", "url": item["url"]}])
-    return {"inline_keyboard": rows}
-
-
 def _fmt_amount(item: Dict) -> str:
     return f"{item['amount']:,.2f}".replace(",", " ") + f" {item['currency']}"
 
@@ -79,20 +71,24 @@ def _fmt_date(iso: Optional[str]) -> str:
         return iso or ""
 
 
-def _telegram_body(item: Dict, when: str) -> str:
-    """HTML-карточка для Telegram: сумма/срок и мета в цитате."""
-    amount = (
-        f"<b>{escape(_fmt_amount(item))}</b>" if item.get("amount")
-        else "<i>сумма не указана</i>"
+def reminder_card(item: Dict, title_key: str, when: str, emoji: str) -> Card:
+    """Сумма и срок — сводкой, где и за что — полями, кнопки — прямо в сообщении."""
+    card = Card(tr(title_key, name=item["name"]), emoji=emoji)
+    amount = b(_fmt_amount(item)) if item.get("amount") else i(tr("notify.finance.no_amount"))
+    card.lead(amount, when)
+    card.fields([
+        (tr("notify.finance.field.date"), _fmt_date(item.get("next_due_at"))),
+        (tr("notify.finance.field.provider"), item.get("provider_name")),
+        (tr("notify.finance.field.category"), item.get("category_name")),
+    ])
+    income = item.get("kind") == "income"
+    card.buttons(
+        [Button(tr("notify.finance.btn.received" if income else "notify.finance.btn.paid"),
+                f"fin:paid:{item['id']}", style="success"),
+         Button(tr("notify.finance.btn.skip"), f"fin:skip:{item['id']}")],
+        [Button(tr("notify.finance.btn.open"), url=item["url"], style="primary")] if item.get("url") else [],
     )
-    lines = [f"💰 {amount} · {escape(when)} ({_fmt_date(item.get('next_due_at'))})"]
-    meta = " · ".join(x for x in (
-        f"🏢 {escape(item['provider_name'])}" if item.get("provider_name") else None,
-        f"🗂 {escape(item['category_name'])}" if item.get("category_name") else None,
-    ) if x)
-    if meta:
-        lines.append(meta)
-    return "<blockquote>" + "\n".join(lines) + "</blockquote>"
+    return card.stamp()
 
 
 async def check_and_send_reminders(today: Optional[date] = None) -> int:
@@ -127,38 +123,27 @@ async def check_and_send_reminders(today: Optional[date] = None) -> int:
 
         # Доход ждут, а не платят: «скоро списание» про ожидаемое поступление
         # пугало и сбивало с толку — формулировка зависит от вида записи.
-        income = item.get("kind") == "income"
+        kind = "income" if item.get("kind") == "income" else "expense"
         if overdue:
-            if income:
-                title = f"⚠️ Поступление задерживается — {item['name']}"
-                when = f"ожидалось {abs(days_left)} дн. назад"
-            else:
-                title = f"⚠️ Просрочен платёж — {item['name']}"
-                when = f"просрочен на {abs(days_left)} дн."
+            title_key, emoji = f"notify.finance.overdue.{kind}", "⚠️"
+            when = tr("notify.finance.when.late" if kind == "income" else "notify.finance.when.overdue",
+                      days=abs(days_left))
             severity = "critical"
         else:
-            title = f"{'💰 Скоро поступление' if income else '💸 Скоро списание'} — {item['name']}"
+            title_key, emoji = f"notify.finance.due.{kind}", "💰" if kind == "income" else "💸"
             when = (
-                "сегодня" if days_left == 0
-                else "завтра" if days_left == 1
-                else f"через {days_left} дн."
+                tr("notify.finance.when.today") if days_left == 0
+                else tr("notify.finance.when.tomorrow") if days_left == 1
+                else tr("notify.finance.when.in_days", days=days_left)
             )
             severity = "warning" if days_left <= 1 else "info"
-
-        # плоский текст — в БД/in-app; HTML-карточка — в Telegram
-        lines = [f"Сумма: {_fmt_amount(item)}", f"Дата: {item['next_due_at']} ({when})"]
-        if item.get("provider_name"):
-            lines.append(f"Провайдер: {item['provider_name']}")
-        if item.get("category_name"):
-            lines.append(f"Категория: {item['category_name']}")
-        if item.get("url"):
-            lines.append(f"Кабинет: {item['url']}")
+        card = reminder_card(item, title_key, when, emoji)
 
         try:
             await create_notification(
-                title=title,
-                body="\n".join(lines),
-                telegram_body=_telegram_body(item, when),
+                title=card.title_text(),
+                body=card.body_text(),
+                telegram_card=card,
                 type="finance",
                 severity=severity,
                 source="finance",
@@ -167,7 +152,6 @@ async def check_and_send_reminders(today: Optional[date] = None) -> int:
                 group_key=f"finance:{item['id']}",
                 channels=["telegram", "in_app"],
                 topic_type="finance",
-                reply_markup=_item_keyboard(item),
                 event="finance.payment_due",
             )
             await db_service.update_finance_item(item["id"], last_reminded_at=today)

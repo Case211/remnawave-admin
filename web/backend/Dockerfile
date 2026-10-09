@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir -r /app/web/backend/requirements.txt
 # Copy application code
 COPY shared/ /app/shared/
 COPY web/backend/ /app/web/backend/
+# Переводы уведомлений (shared/i18n) — те же, что у бота
+COPY locales/ /app/locales/
 
 # Copy VERSION file from repo (updated at release time)
 COPY VERSION /app/VERSION

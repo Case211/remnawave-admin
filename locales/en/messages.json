@@ -93,13 +93,6 @@
     "empty_results": "No results found for the selected filter."
   },
   "notification": {
-    "user_created_title": "🆕 <b>User created</b>",
-    "user_created_username": "👤 <b>{username}</b>",
-    "user_created_traffic": "📶 {traffic}",
-    "user_created_expire": "⏳ {expire}",
-    "user_created_squad": "🧩 {squad}",
-    "user_created_strategy": "🔄 {strategy}",
-    "user_created_created_by": "👮 Created by: <b>{created_by}</b>",
     "title_created": "✅ User created",
     "title_updated": "✏️ User updated",
     "title_deleted": "🗑 User deleted",
@@ -1077,26 +1070,25 @@
     "skip_ok": "⏭ {name}: cycle skipped. Next due: {next_due}"
   },
   "notify": {
-    "fallback": "ℹ️ <b>Notification:</b> {event}",
     "user": {
-      "fallback": "✏️ <b>User updated</b>",
+      "fallback": "✏️ User updated",
       "title": {
-        "created": "✅ <b>User created</b>",
-        "updated": "✏️ <b>User updated</b>",
-        "deleted": "🗑 <b>User deleted</b>",
-        "expired": "⏱️ <b>Subscription expired</b>",
-        "expires_in_72h": "⏰ <b>Subscription expires in 72 hours</b>",
-        "expires_in_48h": "⏰ <b>Subscription expires in 48 hours</b>",
-        "expires_in_24h": "⏰ <b>Subscription expires in 24 hours</b>",
-        "expired_24h_ago": "⏱️ <b>Subscription expired 24 hours ago</b>",
-        "revoked": "🚫 <b>Subscription revoked</b>",
-        "disabled": "❌ <b>User disabled</b>",
-        "enabled": "✅ <b>User enabled</b>",
-        "limited": "⚠️ <b>Traffic limit reached</b>",
-        "traffic_reset": "🔄 <b>Traffic reset</b>",
-        "first_connected": "🟢 <b>User first connection</b>",
-        "bandwidth_threshold": "📊 <b>Bandwidth usage threshold reached</b>",
-        "not_connected": "🔴 <b>User has not connected</b>"
+        "created": "✅ User created",
+        "updated": "✏️ User updated",
+        "deleted": "🗑 User deleted",
+        "expired": "⏱️ Subscription expired",
+        "expires_in_72h": "⏰ Subscription expires in 72 hours",
+        "expires_in_48h": "⏰ Subscription expires in 48 hours",
+        "expires_in_24h": "⏰ Subscription expires in 24 hours",
+        "expired_24h_ago": "⏱️ Subscription expired 24 hours ago",
+        "revoked": "🚫 Subscription revoked",
+        "disabled": "❌ User disabled",
+        "enabled": "✅ User enabled",
+        "limited": "⚠️ Traffic limit reached",
+        "traffic_reset": "🔄 Traffic reset",
+        "first_connected": "🟢 User first connection",
+        "bandwidth_threshold": "📊 Bandwidth usage threshold reached",
+        "not_connected": "🔴 User has not connected"
       },
       "field": {
         "traffic_limit": "Traffic limit",
@@ -1108,7 +1100,8 @@
         "telegram_id": "Telegram ID",
         "email": "Email",
         "tag": "Tag",
-        "squad": "Squad"
+        "squad": "Squad",
+        "uuid": "UUID"
       },
       "label": {
         "unlimited": "Unlimited",
@@ -1119,107 +1112,112 @@
         "subscription": "Subscription",
         "squad": "Squad",
         "telegram": "Telegram",
-        "email": "Email",
-        "card_separator": " · "
+        "created_by": "Created by"
       },
       "section": {
-        "changes": "📋 <b>Changes</b>",
-        "no_changes": "<i>Changes undefined</i>",
-        "card": "ℹ️ <b>User card</b>",
-        "traffic_limits": "📊 <b>Traffic and limits</b>"
+        "changes": "📋 Changes",
+        "no_changes": "Changes undefined",
+        "card": "ℹ️ User card",
+        "traffic_limits": "📊 Traffic and limits"
       },
-      "subscription_link": "🔗 Link: <code>{url}</code>",
-      "external_squad": "External: {uuid}..."
+      "external_squad": "External: {uuid}...",
+      "col": {
+        "field": "Field",
+        "old": "Was",
+        "new": "Now"
+      },
+      "qr": "📷 Subscription QR code"
     },
     "node": {
-      "fallback": "ℹ️ <b>Node event: {event}</b>",
+      "fallback": "ℹ️ Node event: {event}",
       "title": {
-        "node.created": "🆕 <b>Node created</b>",
-        "node.modified": "✏️ <b>Node modified</b>",
-        "node.disabled": "❌ <b>Node disabled</b>",
-        "node.enabled": "✅ <b>Node enabled</b>",
-        "node.deleted": "🗑 <b>Node deleted</b>",
-        "node.connection_lost": "🔴 <b>Node connection lost</b>",
-        "node.connection_restored": "🟢 <b>Node connection restored</b>",
-        "node.traffic_notify": "📊 <b>Node traffic notification</b>"
+        "node.created": "🆕 Node created",
+        "node.modified": "✏️ Node modified",
+        "node.disabled": "❌ Node disabled",
+        "node.enabled": "✅ Node enabled",
+        "node.deleted": "🗑 Node deleted",
+        "node.connection_lost": "🔴 Node connection lost",
+        "node.connection_restored": "🟢 Node connection restored",
+        "node.traffic_notify": "📊 Node traffic notification"
       },
       "label": {
-        "address": "Address",
         "status": "Status",
         "traffic_limit": "Traffic limit",
-        "changes": "📋 <b>Changes</b>"
+        "changes": "📋 Changes",
+        "uuid": "UUID"
       }
     },
     "service": {
-      "fallback": "ℹ️ <b>Service event: {event}</b>",
+      "fallback": "ℹ️ Service event: {event}",
       "title": {
-        "service.panel_started": "🚀 <b>Panel started</b>",
-        "service.login_attempt_failed": "⚠️ <b>Failed login attempt</b>",
-        "service.login_attempt_success": "✅ <b>Successful login</b>",
-        "panel.unavailable": "❌ <b>Panel unavailable</b>"
+        "service.panel_started": "🚀 Panel started",
+        "service.login_attempt_failed": "⚠️ Failed login attempt",
+        "service.login_attempt_success": "✅ Successful login",
+        "panel.unavailable": "❌ Panel unavailable"
       },
       "login": {
-        "username": "👤 <b>Username:</b> <code>{username}</code>",
-        "ip": "🌐 <b>IP:</b> <code>{ip}</code>",
-        "user_agent": "🔍 <b>User Agent:</b> <code>{user_agent}</code>",
-        "description": "💬 <b>Description:</b> <code>{description}</code>"
+        "username": "Login",
+        "ip": "IP",
+        "user_agent": "User-Agent",
+        "description": "Description"
       },
       "panel_unavailable": {
-        "error_type": "⚠️ <b>Error:</b> <code>{error_type}</code>",
-        "error_message": "📝 <b>Message:</b> <code>{error_message}</code>",
-        "failures": "🔄 <b>Consecutive failures:</b> {count}",
-        "last_check": "🕒 <b>Last check:</b> {last_check}"
+        "error_type": "Error",
+        "error_message": "Message",
+        "failures": "Failures in a row",
+        "last_check": "Last check"
       }
     },
     "hwid": {
-      "fallback": "💻 <b>HWID event: {event}</b>",
+      "fallback": "💻 HWID event: {event}",
       "title": {
-        "user_hwid_devices.added": "➕ <b>HWID device added</b>",
-        "user_hwid_devices.deleted": "➖ <b>HWID device deleted</b>"
+        "user_hwid_devices.added": "➕ HWID device added",
+        "user_hwid_devices.deleted": "➖ HWID device deleted"
       },
       "label": {
-        "user": "👤 <b>User:</b> <code>{username}</code>",
-        "uuid": "🆔 <b>UUID:</b> <code>{uuid}</code>",
-        "tg_id": "📱 <b>TG ID:</b> <code>{telegram_id}</code>",
-        "status": "📊 <b>Status:</b> <code>{status}</code>",
-        "description": "📝 <b>Description:</b> <code>{description}</code>",
-        "device_limit": "📲 <b>Device limit:</b> <code>{limit}</code>"
+        "user": "User",
+        "uuid": "UUID",
+        "tg_id": "Telegram",
+        "status": "Status",
+        "description": "Description",
+        "device_limit": "Device limit"
       },
-      "device_header": "💻 <b>Device info</b>",
+      "device_header": "💻 Device",
       "device": {
-        "hwid": "   HWID: <code>{hwid}</code>",
-        "platform": "   Platform: <code>{platform}</code>",
-        "os_version": "   OS version: <code>{os_version}</code>",
-        "model": "   Model: <code>{model}</code>",
-        "user_agent": "   User-Agent: <code>{user_agent}</code>",
-        "added": "   Added: <code>{created_at}</code>"
+        "hwid": "HWID",
+        "platform": "Platform",
+        "os_version": "OS version",
+        "model": "Model",
+        "user_agent": "User-Agent",
+        "added": "Added"
       },
       "action": {
         "added": "Device added",
         "deleted": "Device removed",
         "fallback": "HWID: {event}"
-      }
+      },
+      "user_header": "👤 User"
     },
     "error": {
-      "title": "⚠️ <b>System error</b>",
-      "type": "<b>Type:</b> <code>{event}</code>",
-      "message": "<b>Message:</b> <code>{message}</code>"
+      "title": "⚠️ System error",
+      "type": "Type",
+      "message": "Message"
     },
     "crm": {
-      "fallback": "💰 <b>CRM event: {event}</b>",
+      "fallback": "💰 CRM event: {event}",
       "title": {
-        "crm.infra_billing_node_payment_in_7_days": "📅 <b>Node payment in 7 days</b>",
-        "crm.infra_billing_node_payment_in_48hrs": "⏰ <b>Node payment in 48 hours</b>",
-        "crm.infra_billing_node_payment_in_24hrs": "⏰ <b>Node payment in 24 hours</b>",
-        "crm.infra_billing_node_payment_due_today": "🔴 <b>Node payment due today</b>",
-        "crm.infra_billing_node_payment_overdue_24hrs": "⚠️ <b>Node payment overdue 24 hours</b>",
-        "crm.infra_billing_node_payment_overdue_48hrs": "⚠️ <b>Node payment overdue 48 hours</b>",
-        "crm.infra_billing_node_payment_overdue_7_days": "🚨 <b>Node payment overdue 7 days</b>"
+        "crm.infra_billing_node_payment_in_7_days": "📅 Node payment in 7 days",
+        "crm.infra_billing_node_payment_in_48hrs": "⏰ Node payment in 48 hours",
+        "crm.infra_billing_node_payment_in_24hrs": "⏰ Node payment in 24 hours",
+        "crm.infra_billing_node_payment_due_today": "🔴 Node payment due today",
+        "crm.infra_billing_node_payment_overdue_24hrs": "⚠️ Node payment overdue 24 hours",
+        "crm.infra_billing_node_payment_overdue_48hrs": "⚠️ Node payment overdue 48 hours",
+        "crm.infra_billing_node_payment_overdue_7_days": "🚨 Node payment overdue 7 days"
       },
       "section": {
-        "node": "🖥 <b>Node information</b>",
-        "provider": "🏢 <b>Provider</b>",
-        "billing": "💰 <b>Billing information</b>"
+        "node": "🖥 Node information",
+        "provider": "🏢 Provider",
+        "billing": "💰 Billing information"
       },
       "label": {
         "name": "Name",
@@ -1227,34 +1225,16 @@
         "address": "Address",
         "port": "Port",
         "country": "Country",
-        "login_url": "Dashboard: {url}",
-        "next_billing": "Next payment: <code>{date}</code>",
-        "last_billing": "Last payment: <code>{date}</code>",
+        "login_url": "Account",
+        "next_billing": "Next payment",
+        "last_billing": "Last payment",
         "interval": "Interval",
         "amount": "Amount"
       }
     },
     "violation": {
-      "title": "🚨 <b>LIMIT VIOLATOR</b>",
-      "email": "📧 Email: <code>{email}</code>",
-      "username": "📧 Username: <code>{username}</code>",
-      "tg_id": "📱 TG ID: <code>{telegram_id}</code>",
-      "description": "📝 Description: <code>{description}</code>",
-      "ip_count": "🌐 IPs: <b>{count}/{limit}</b>",
-      "ips_providers": "📍 IPs (providers):",
-      "ip_with_meta": "   <code>{ip}</code> - {provider} ({country})",
-      "ip_with_country": "   <code>{ip}</code> ({country})",
-      "ip_bare": "   <code>{ip}</code>",
-      "nodes": "🖥 Nodes: <code>{nodes}</code>",
-      "devices": "📲 Devices ({count}/{limit}):",
-      "devices_ua": "📲 Devices (by UA): {details}",
-      "devices_empty": "📲 Devices: —",
       "os_list": "OS: {list}",
       "client_list": "Clients: {list}",
-      "more_devices": "... and {count} more",
-      "duration": "⏱ In violation: <code>{seconds} sec</code>",
-      "score": "📊 Score: <code>{score}/100</code>",
-      "time": "🕐 Time: <code>{time}</code>",
       "btn": {
         "info": "👤 Details",
         "block": "🔒 Block",
@@ -1274,8 +1254,6 @@
         "linux": "Linux",
         "unknown": "Unknown"
       },
-      "summary": "👤 <code>{username}</code> · 📊 Score: <b>{score}/100</b> · 🌐 IPs: <b>{count}/{limit}</b>",
-      "user_section": "👤 <b>User</b>",
       "analyzer": {
         "temporal": "time",
         "geo": "geo",
@@ -1284,6 +1262,93 @@
         "device": "devices",
         "hwid": "HWID",
         "user_agent": "UA"
+      },
+      "card": {
+        "lead_score": "score {score}/100",
+        "lead_ips": "{count} IP of {limit}",
+        "field": {
+          "username": "User",
+          "email": "Email",
+          "uuid": "UUID",
+          "telegram": "Telegram",
+          "description": "Description"
+        },
+        "connections": "🌐 Connections",
+        "col": {
+          "ip": "IP",
+          "provider": "Provider",
+          "country": "Country",
+          "platform": "Platform",
+          "os": "OS",
+          "app": "App"
+        },
+        "nodes": "🖥 Nodes: {nodes}",
+        "devices": "📲 Devices · {count} of {limit}",
+        "devices_ua": "📲 Devices by User-Agent",
+        "reasons": "🔎 Overlap details · {count}",
+        "auto_blocked": "⛔ User blocked",
+        "auto_blocked_credit": "automatically, at the hard block threshold",
+        "recommendation": "🎯 Recommendation",
+        "auto_off": "Auto-block is off — the decision is yours",
+        "history": "🔁 Violations in {days} d: {total}",
+        "history_annulled": "{count} annulled",
+        "annulled": "annulled"
+      },
+      "reason": {
+        "double_tunnel": {
+          "title": "Double tunnel: subscription pasted into a third-party client",
+          "subtitle": "A subscription link was found in the User-Agent (vless://, https://)"
+        },
+        "bot_library": {
+          "title": "Bot/script in User-Agent",
+          "subtitle": "The subscription is fetched by curl/Go-http-client/python-requests — likely automation"
+        },
+        "hwid": {
+          "title": "Account collision: shared devices (device overlap)",
+          "subtitle": "Several accounts use the same HWIDs"
+        },
+        "torrent": {
+          "title": "Torrent traffic detected (P2P)",
+          "subtitle": "The user is torrenting through the VPN"
+        },
+        "geo": {
+          "title": "Impossible travel (geo anomaly)",
+          "subtitle": "Connections from geographically incompatible locations"
+        },
+        "simultaneous": {
+          "title": "Connection limit exceeded (simultaneous)",
+          "subtitle": "Too many simultaneous connections from different IPs"
+        },
+        "asn": {
+          "title": "Suspicious provider (ASN anomaly)",
+          "subtitle": "Connection via VPN/proxy/datacenter"
+        },
+        "traffic": {
+          "title": "Excessive traffic consumption",
+          "subtitle": "The user exceeded the consumption rate threshold"
+        },
+        "generic": {
+          "title": "Violation detected",
+          "subtitle": "The system detected suspicious activity"
+        },
+        "analyzer": {
+          "temporal": "Connection timing anomaly",
+          "geo": "Geographic anomaly",
+          "asn": "Provider anomaly",
+          "profile": "Behavior profile deviation",
+          "device": "Device anomaly",
+          "user_agent": "Suspicious client User-Agent"
+        },
+        "analyzer_other": "Violation ({analyzer})",
+        "analyzer_subtitle": "Analyzer {analyzer} detected an anomaly (score: {score})"
+      },
+      "action": {
+        "no_action": "nothing to do",
+        "monitor": "monitor",
+        "warn": "warn",
+        "soft_block": "review manually",
+        "temp_block": "block temporarily",
+        "hard_block": "block"
       }
     },
     "push": {
@@ -1311,6 +1376,396 @@
         "not_connected": "No connection",
         "fallback": "User: {action}"
       }
+    },
+    "card": {
+      "brand": "Remnawave Admin",
+      "more": "… and {count} more"
+    },
+    "torrent": {
+      "title": "Torrent traffic detected",
+      "field": {
+        "window": "Window",
+        "events": "Events",
+        "peers": "Peers",
+        "ips": "IP"
+      },
+      "window_minutes": "{minutes} min",
+      "threshold": "threshold {value}",
+      "destinations": "🌐 Peers · {count}",
+      "action": {
+        "blocked": "🛑 User disabled automatically",
+        "block_failed": "⚠️ Auto-block failed — disable manually",
+        "notify": "👁 Notification only — the decision is yours"
+      }
+    },
+    "unknown": {
+      "title": "❓ Unknown event",
+      "event": "Event",
+      "data": "Data"
+    },
+    "torrent_blocker": {
+      "title": "🚫 Torrent blocker",
+      "node": "Node",
+      "user": "User",
+      "ip": "IP",
+      "destination": "Destination",
+      "action": "Action",
+      "reason": "Reason",
+      "empty": "A node sent a torrent blocker report."
+    },
+    "people": {
+      "col": {
+        "account": "Account",
+        "email": "Email",
+        "subscription": "Subscription",
+        "conns": "Connections",
+        "created": "Created",
+        "now": "Now"
+      },
+      "trial": "trial",
+      "status": {
+        "DISABLED": "disabled",
+        "EXPIRED": "expired",
+        "LIMITED": "limited"
+      },
+      "until": "until {date}",
+      "removed": "unlinked {date}"
+    },
+    "hwid_card": {
+      "device": "💻 Device",
+      "field": {
+        "hwid": "HWID",
+        "device": "Device",
+        "reason": "Reason in the list",
+        "added_by": "Added by"
+      },
+      "reuse": {
+        "repeat": {
+          "title": "Repeat trial from the same device",
+          "subtitle": "The same person took a trial again on this hardware"
+        },
+        "moved": {
+          "title": "HWID moved to another account",
+          "subtitle": "The device was already seen on another account"
+        },
+        "target": "🎯 Linked to",
+        "repeat_trials": "🔴 Earlier trials of the same person · {count}",
+        "strangers": "🟠 Other accounts on this device · {count}"
+      },
+      "blacklist": {
+        "blocked": {
+          "title": "HWID blacklist: accounts disabled",
+          "subtitle": "Device from the list, subscriptions disabled via the panel"
+        },
+        "found": {
+          "title": "HWID blacklist: match found",
+          "subtitle": "Device from the list, the action is notify only"
+        },
+        "disabled_users": "👥 Disabled · {count}",
+        "found_users": "👥 Found · {count}"
+      },
+      "revived": {
+        "blocked": {
+          "title": "Subscription revived and disabled again",
+          "subtitle": "The device is blacklisted, but the subscription came back"
+        },
+        "alive": {
+          "title": "Live subscription on a blacklisted device",
+          "subtitle": "The entry's action is notify — the subscription is left alone"
+        },
+        "users": "👥 Affected · {count}"
+      }
+    },
+    "ip_trial": {
+      "title": "Several trials from one address",
+      "subtitle": {
+        "mobile": "An address is harder to change than a HWID — but a whole district may sit behind a mobile carrier",
+        "plain": "Trials were taken from this address several times"
+      },
+      "address": "📍 Address",
+      "field": {
+        "ip": "IP",
+        "provider": "Provider",
+        "network": "Network"
+      },
+      "network": {
+        "mobile": "mobile carrier (CGNAT)",
+        "hosting": "hosting",
+        "proxy": "proxy"
+      },
+      "trials": "👥 Trials · {count}",
+      "btn": {
+        "block": "🚫 Block IP",
+        "users": "👥 Accounts",
+        "mute": "🔇 Don't remind"
+      }
+    },
+    "blocked_ip": {
+      "title": "Address blocked",
+      "subtitle": "Traffic from the address is dropped on the nodes — all of it, not just VPN",
+      "subnet": "subnet — every address in the range gets blocked",
+      "field": {
+        "expires": "Expires",
+        "admin": "Added by",
+        "nodes": "Applied on nodes"
+      },
+      "forever": "permanent",
+      "affected": "👥 Affected · {count}",
+      "summary": {
+        "trials": "trials: {count}",
+        "active": "with a live subscription: {count}"
+      },
+      "nobody": "No connections from this address in the last month",
+      "no_agents": "no agents connected — the rule is not applied"
+    },
+    "traffic_rate": {
+      "title": "High traffic consumption",
+      "lead_used": "{gb} GB in {minutes} min",
+      "lead_rate": "~{rate} GB/h",
+      "threshold_value": "{gb} GB / {minutes} min",
+      "field": {
+        "threshold": "Threshold",
+        "status": "Status",
+        "traffic": "Traffic",
+        "expires": "Expires",
+        "description": "Description",
+        "short_uuid": "Short UUID"
+      },
+      "nodes": "🖥 Nodes",
+      "col": {
+        "node": "Node",
+        "volume": "Volume"
+      }
+    },
+    "shaper": {
+      "title": "Shaper: penalty for a heavy downloader",
+      "field": {
+        "node": "Node",
+        "volume": "Downloaded",
+        "speed": "Speed",
+        "until": "Until",
+        "ip": "IP"
+      },
+      "volume_window": "{volume} in {seconds} s",
+      "speed_value": "down to {rate} Mbit/s"
+    },
+    "attack": {
+      "started": "Node under attack",
+      "escalated": "Attack escalated",
+      "finished": "Attack is over",
+      "col": {
+        "metric": "Metric",
+        "now": "Now",
+        "usual": "Usual"
+      },
+      "row": {
+        "rx": "Inbound",
+        "pps": "Packets/s"
+      },
+      "signs": "🔎 Signs",
+      "reason": {
+        "syn_flood": "SYN flood (the kernel answers with syncookies)",
+        "listen_drops": "the accept queue is overflowing",
+        "nic_drops": "the network card drops packets",
+        "conntrack_full": "the connection table is almost full",
+        "small_packets": "a stream of tiny packets"
+      },
+      "field": {
+        "duration": "Lasted",
+        "peak": "Inbound peak",
+        "started": "Started",
+        "ended": "Ended"
+      },
+      "unit": {
+        "mbit": "{value} Mbit/s",
+        "kbit": "{value} Kbit/s"
+      },
+      "duration": {
+        "minutes": "{minutes} min",
+        "hours": "{hours} h {minutes} min"
+      }
+    },
+    "sync": {
+      "stalled": {
+        "title": "Panel sync is stalled",
+        "text": "Traffic, HWID and analytics in the admin are not updating.",
+        "last": "Last successful sync",
+        "ago": "{minutes} min ago",
+        "hint": "Check the panel connection and the collector log (web-collector)."
+      },
+      "resumed": {
+        "title": "Panel sync resumed",
+        "text": "Admin data is updating again."
+      }
+    },
+    "backup": {
+      "db_failed": "Database backup failed",
+      "config_failed": "Config backup failed",
+      "error": "Error",
+      "deadman": {
+        "title": "No backup for a long time",
+        "threshold": "Threshold",
+        "threshold_value": "{hours} h",
+        "last": "Last successful",
+        "never": "never",
+        "hint": "Check the automatic backup."
+      },
+      "ready": "Backup ready",
+      "type": {
+        "database": "Database",
+        "config": "Configuration"
+      },
+      "field": {
+        "file": "File"
+      }
+    },
+    "mail": {
+      "title": "New email",
+      "no_subject": "(no subject)",
+      "field": {
+        "from": "From",
+        "to": "To",
+        "attachments": "Attachments",
+        "checks": "Checks"
+      }
+    },
+    "plugin_catalog": {
+      "new": "New plugin: {name}",
+      "update": "Plugin update: {name} {version}",
+      "new_text": "The plugin is available in the «Plugins» section.",
+      "field": {
+        "version": "Version",
+        "installed": "Installed"
+      },
+      "update_text": "Update it on the plugin card."
+    },
+    "finance": {
+      "due": {
+        "expense": "Payment due soon — {name}",
+        "income": "Income due soon — {name}"
+      },
+      "overdue": {
+        "expense": "Overdue payment — {name}",
+        "income": "Income is late — {name}"
+      },
+      "when": {
+        "today": "today",
+        "tomorrow": "tomorrow",
+        "in_days": "in {days} days",
+        "overdue": "overdue by {days} days",
+        "late": "expected {days} days ago"
+      },
+      "no_amount": "amount not set",
+      "field": {
+        "date": "Date",
+        "provider": "Provider",
+        "category": "Category",
+        "balance": "Balance",
+        "threshold": "Threshold"
+      },
+      "btn": {
+        "paid": "✅ Paid",
+        "received": "✅ Received",
+        "skip": "⏭️ Skip",
+        "open": "🔗 Open account"
+      },
+      "low_balance": "Low balance: {provider}"
+    },
+    "support": {
+      "new_ticket": "New ticket #{id}",
+      "reply": "Customer reply in #{id}",
+      "auto_reply": "Auto-reply in ticket #{id}",
+      "auto_reply_text": "The customer wrote during quiet hours — the robot confirmed receipt, the reply is yours.",
+      "sla": "Ticket #{id} unanswered for {minutes} min",
+      "no_subject": "no subject",
+      "customer": "customer",
+      "field": {
+        "channel": "Channel",
+        "username": "Username",
+        "telegram": "Telegram",
+        "email": "Email",
+        "subscription": "Subscription",
+        "balance": "Balance",
+        "waiting": "Waiting since"
+      },
+      "channel": {
+        "telegram": "Telegram",
+        "cabinet": "cabinet"
+      },
+      "sub": {
+        "none": "none",
+        "until": "until {date}",
+        "trial": "trial",
+        "devices": "devices: {count}",
+        "status": {
+          "active": "active",
+          "expired": "expired",
+          "disabled": "disabled",
+          "trial": "trial"
+        }
+      },
+      "btn": {
+        "open": "🔎 Open ticket",
+        "profile": "👤 Profile",
+        "write": "✉️ Message",
+        "take": "✅ Take it",
+        "snooze": "💤 Snooze 1 h",
+        "close": "🔒 Close ticket"
+      }
+    },
+    "report": {
+      "title": {
+        "daily": "Daily violations report",
+        "weekly": "Weekly violations report",
+        "monthly": "Monthly violations report"
+      },
+      "field": {
+        "total": "Total violations",
+        "trend": "Trend",
+        "users": "Unique users",
+        "avg": "Average score",
+        "max": "Max score"
+      },
+      "trend_was": "was {count}",
+      "severity": "🎯 By severity",
+      "level": {
+        "critical": "Critical (≥80)",
+        "warning": "Warnings (50–79)",
+        "monitor": "Monitoring (30–49)"
+      },
+      "top": "👥 Top violators",
+      "countries": "🌍 By country",
+      "details": "🔌 Providers and actions",
+      "providers": "By provider type",
+      "actions": "By recommended action",
+      "col": {
+        "level": "Level",
+        "count": "Count",
+        "share": "Share",
+        "user": "User",
+        "violations": "Violations",
+        "max": "Max score",
+        "country": "Country",
+        "type": "Type",
+        "action": "Action"
+      },
+      "asn": {
+        "mobile": "Mobile",
+        "mobile_isp": "Mobile ISP",
+        "fixed": "Fixed",
+        "isp": "ISP",
+        "regional_isp": "Regional ISP",
+        "hosting": "Hosting",
+        "datacenter": "Datacenters",
+        "vpn": "VPN",
+        "business": "Business",
+        "infrastructure": "Infrastructure"
+      },
+      "empty": "No violations in this period"
     }
+  },
+  "ipact": {
+    "blocked_note": "🚫 Address blocklisted — {admin}",
+    "muted_note": "🔇 Muted for {days} days — {admin}"
   }
 }

@@ -63,6 +63,11 @@ async def telegram_send(request: Request):
         text = body.get("body", "")
         topic_id = body.get("topic_id")
         reply_markup = body.get("reply_markup")
+        # готовые rich-блоки карточки (shared.tg_card); без них блоки
+        # строятся из HTML конвертером
+        blocks = body.get("blocks") or None
+        # клавиатура для HTML-фолбэка: в rich кнопки карточки встроены в текст
+        fallback_markup = body.get("fallback_markup") or None
 
         if not chat_id:
             raise HTTPException(status_code=400, detail="chat_id is required")
@@ -76,8 +81,10 @@ async def telegram_send(request: Request):
             bot.token,
             chat_id,
             message_text,
+            blocks=blocks,
             message_thread_id=int(topic_id) if topic_id and str(topic_id) != "0" else None,
             reply_markup=reply_markup,
+            fallback_markup=fallback_markup,
         )
         return JSONResponse(status_code=200, content={"status": "ok"})
     except HTTPException:
@@ -206,14 +213,9 @@ async def panel_event(request: Request):
             await send_crm_notification(bot=bot, event=event, event_data=event_data)
 
         else:
-            from src.utils.notifications import send_generic_notification
+            from src.utils.notifications import send_generic_notification, unknown_event_card
 
-            await send_generic_notification(
-                bot=bot,
-                title="Unknown event",
-                message=f"Event: <code>{html.escape(event)}</code>\n\nData: <code>{html.escape(str(event_data)[:200])}</code>",
-                emoji="❓",
-            )
+            await send_generic_notification(bot=bot, card=unknown_event_card(event, event_data))
 
         return JSONResponse(status_code=200, content={"status": "ok"})
     except HTTPException:
