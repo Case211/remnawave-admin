@@ -5382,7 +5382,7 @@
       },
       "maxmind_source": {
         "label": "🌍 MaxMind GeoIP source",
-        "description": "auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required)"
+        "description": "auto — GitHub mirrors (P3TERX, GitSquared), then MaxMind; github — mirrors only (no key); maxmind — official only (key required). Own mirror — MAXMIND_MIRROR_URL variable"
       },
       "notifications_topic_id": {
         "label": "💬 Topic: Default (fallback)",

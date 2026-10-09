@@ -3,7 +3,7 @@
 
 Поддерживает два источника:
 1. Официальный MaxMind (требуется лицензионный ключ с maxmind.com)
-2. GitHub-зеркало ltsdev/maxmind (без ключа, бесплатно)
+2. GitHub-зеркала GeoLite2 без ключа — по очереди, см. GITHUB_MIRRORS
 
 Базы обновляются каждый вторник, проверка раз в 24 часа.
 """
@@ -23,12 +23,26 @@ from shared.logger import logger
 # Official MaxMind (requires license key)
 MAXMIND_DOWNLOAD_URL = "https://download.maxmind.com/app/geoip_download"
 
-# GitHub mirror — ltsdev/maxmind (no key required)
-GITHUB_BASE_URL = "https://github.com/ltsdev/maxmind/raw/master"
-GITHUB_FILES = {
-    "city": "GeoLite2-City.tar.gz",
-    "asn": "GeoLite2-ASN.tar.gz",
-}
+# GitHub-зеркала GeoLite2 без ключа, пробуются по очереди. Раздавать GeoLite2
+# лицензия MaxMind не разрешает, и зеркала смертны: ltsdev/maxmind удалили в
+# октябре 2026, а зарегистрироваться в MaxMind из РФ или через VPN нельзя.
+# Поэтому их несколько, а своё ставится вперёд переменной MAXMIND_MIRROR_URL.
+# {edition} — GeoLite2-City / GeoLite2-ASN; адрес ведёт на .mmdb или .tar.gz.
+GITHUB_MIRRORS = (
+    "https://github.com/P3TERX/GeoLite.mmdb/releases/latest/download/{edition}.mmdb",
+    "https://raw.githubusercontent.com/GitSquared/node-geolite2-redist/master/redist/{edition}.tar.gz",
+)
+
+# Метка секции метаданных MaxMind DB — в конце любой настоящей базы. Без неё
+# зеркало отдало что-то другое (HTML-страницу с кодом 200), и сохранять нельзя.
+MMDB_MARKER = b"\xab\xcd\xefMaxMind.com"
+MMDB_METADATA_WINDOW = 128 * 1024
+
+
+def mirror_urls() -> list:
+    """Шаблоны зеркал по очереди: своё из MAXMIND_MIRROR_URL — первым."""
+    custom = (os.environ.get("MAXMIND_MIRROR_URL") or "").strip()
+    return ([custom] if custom else []) + list(GITHUB_MIRRORS)
 
 # Editions
 EDITIONS = {
@@ -83,32 +97,39 @@ async def download_from_maxmind(
 async def download_from_github(
     edition_key: str,
     output_path: str,
+    mirrors: Optional[list] = None,
 ) -> bool:
-    """Скачивает .mmdb базу с GitHub-зеркала ltsdev/maxmind (без ключа)."""
-    filename = GITHUB_FILES.get(edition_key)
-    if not filename:
+    """Скачивает базу с GitHub-зеркал без ключа — по очереди, до первой удачи."""
+    edition = EDITIONS.get(edition_key)
+    if not edition:
         logger.error("Unknown edition key for GitHub download: %s", edition_key)
         return False
 
-    url = f"{GITHUB_BASE_URL}/{filename}"
+    for template in (mirror_urls() if mirrors is None else mirrors):
+        if await _download_from_mirror(template.format(edition=edition), edition, output_path):
+            return True
+    logger.error("No GeoLite2 mirror served %s", edition)
+    return False
 
+
+async def _download_from_mirror(url: str, edition: str, output_path: str) -> bool:
+    """Одно зеркало: .tar.gz распаковывается, .mmdb сохраняется как есть."""
     try:
         timeout = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=30.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            logger.info("Downloading %s from GitHub (ltsdev/maxmind)...", filename)
+            logger.info("Downloading %s from %s", edition, url)
             resp = await client.get(url)
-
-            if resp.status_code != 200:
-                logger.error("GitHub download failed for %s: HTTP %d", filename, resp.status_code)
-                return False
-
-            return _save_mmdb_from_targz(resp.content, EDITIONS[edition_key], output_path)
-
+        if resp.status_code != 200:
+            logger.warning("Mirror failed for %s: HTTP %d (%s)", edition, resp.status_code, url)
+            return False
+        if url.endswith((".tar.gz", ".tgz")):
+            return _save_mmdb_from_targz(resp.content, edition, output_path)
+        return _save_mmdb(resp.content, edition, output_path)
     except httpx.HTTPError as e:
-        logger.error("HTTP error downloading %s from GitHub: %s", filename, e)
+        logger.warning("HTTP error downloading %s from %s: %s", edition, url, e)
         return False
     except Exception as e:
-        logger.error("Error downloading %s from GitHub: %s", filename, e, exc_info=True)
+        logger.error("Error downloading %s from %s: %s", edition, url, e, exc_info=True)
         return False
 
 
@@ -125,6 +146,14 @@ def _save_mmdb_from_targz(data: bytes, edition_id: str, output_path: str) -> boo
     mmdb_data = _extract_mmdb_from_targz(data, edition_id)
     if not mmdb_data:
         logger.error("Could not find .mmdb file in %s archive", edition_id)
+        return False
+    return _save_mmdb(mmdb_data, edition_id, output_path)
+
+
+def _save_mmdb(mmdb_data: bytes, edition_id: str, output_path: str) -> bool:
+    """Сохраняет .mmdb атомарно — и только настоящую базу MaxMind DB."""
+    if MMDB_MARKER not in mmdb_data[-MMDB_METADATA_WINDOW:]:
+        logger.error("Downloaded %s is not a MaxMind DB (%d bytes)", edition_id, len(mmdb_data))
         return False
 
     out = Path(output_path)

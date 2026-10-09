@@ -21,7 +21,7 @@ The basics: language, logs, access to the Remnawave panel, third-party service k
 | **📝 Log level** | `log_level` | `INFO` | Log detail level (requires restart) (`LOG_LEVEL`) |
 | **📦 Max log file size (MB)** | `log_max_size_mb` | `10` | Maximum size of a single log file before rotation |
 | **🗂️ Log backup count** | `log_backup_count` | `5` | Number of compressed backup files kept after rotation |
-| **🌍 MaxMind GeoIP source** | `maxmind_source` | `auto` | auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required) (`MAXMIND_SOURCE`) |
+| **🌍 MaxMind GeoIP source** | `maxmind_source` | `auto` | auto — GitHub mirrors (P3TERX, GitSquared), then MaxMind; github — mirrors only (no key); maxmind — official only (key required). Own mirror — MAXMIND_MIRROR_URL variable (`MAXMIND_SOURCE`) |
 | **🏷️ Panel name** | `panel_name` | empty | Project name displayed in the sidebar (next to the logo) |
 | **🕒 Time zone** | `display_timezone` | `Europe/Moscow` | IANA zone. All times are shown in it: web panel, bot, notifications, exports, report and backup times. The database and the API keep time in UTC |
 | **🔗 Public panel URL** | `web_panel_public_url` | empty | https address of the web panel. Used by the bot's "Open panel" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL (`APP_PUBLIC_URL`) |

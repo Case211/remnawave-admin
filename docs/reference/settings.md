@@ -21,7 +21,7 @@
 | **📝 Уровень логирования** | `log_level` | `INFO` | Уровень детализации логов (требует перезапуск) (`LOG_LEVEL`) |
 | **📦 Макс. размер лог-файла (MB)** | `log_max_size_mb` | `10` | Максимальный размер одного лог-файла перед ротацией |
 | **🗂️ Кол-во бэкапов логов** | `log_backup_count` | `5` | Количество сжатых бэкап-файлов при ротации |
-| **🌍 Источник MaxMind GeoIP** | `maxmind_source` | `auto` | auto — GitHub (ltsdev/maxmind) затем MaxMind; github — только GitHub (без ключа); maxmind — только официальный (нужен ключ) (`MAXMIND_SOURCE`) |
+| **🌍 Источник MaxMind GeoIP** | `maxmind_source` | `auto` | auto — зеркала GitHub (P3TERX, GitSquared), затем MaxMind; github — только зеркала (без ключа); maxmind — только официальный (нужен ключ). Своё зеркало — переменная MAXMIND_MIRROR_URL (`MAXMIND_SOURCE`) |
 | **🏷️ Название панели** | `panel_name` | пусто | Отображаемое название проекта в боковом меню (рядом с логотипом) |
 | **🕒 Часовой пояс** | `display_timezone` | `Europe/Moscow` | Зона IANA. В ней показывается всё время: веб-панель, бот, уведомления, выгрузки, время отчётов и бэкапа. В базе и в API время — в UTC |
 | **🔗 Публичный URL панели** | `web_panel_public_url` | пусто | https-адрес веб-панели. Используется кнопкой «Открыть панель» в боте (Telegram Mini App). Пусто — берётся из APP_PUBLIC_URL (`APP_PUBLIC_URL`) |

@@ -5383,7 +5383,7 @@
       },
       "maxmind_source": {
         "label": "🌍 Источник MaxMind GeoIP",
-        "description": "auto — GitHub (ltsdev/maxmind) затем MaxMind; github — только GitHub (без ключа); maxmind — только официальный (нужен ключ)"
+        "description": "auto — зеркала GitHub (P3TERX, GitSquared), затем MaxMind; github — только зеркала (без ключа); maxmind — только официальный (нужен ключ). Своё зеркало — переменная MAXMIND_MIRROR_URL"
       },
       "notifications_topic_id": {
         "label": "💬 Топик: Общий (fallback)",

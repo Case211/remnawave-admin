@@ -217,7 +217,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "category": "general",
         "subcategory": "integrations",
         "display_name": "Источник MaxMind GeoIP",
-        "description": "auto — GitHub (ltsdev/maxmind) затем MaxMind; github — только GitHub (без ключа); maxmind — только официальный (нужен ключ)",
+        "description": "auto — зеркала GitHub (P3TERX, GitSquared), затем MaxMind; github — только зеркала (без ключа); maxmind — только официальный (нужен ключ). Своё зеркало — переменная MAXMIND_MIRROR_URL",
         "default_value": "auto",
         "env_var_name": "MAXMIND_SOURCE",
         "options": ["auto", "github", "maxmind"],
