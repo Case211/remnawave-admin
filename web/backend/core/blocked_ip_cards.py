@@ -7,7 +7,7 @@
 from typing import Any, Dict, Sequence
 
 from shared.i18n import tr
-from shared.tg_card import Card, b, code, i, join, when
+from shared.tg_card import Card, b, copy, i, join, when
 from web.backend.core.hwid_cards import connections_cell, people_table
 
 
@@ -30,7 +30,7 @@ def blocked_ip_card(
     card = Card(tr("notify.blocked_ip.title"), emoji="🚫")
     card.text(i(tr("notify.blocked_ip.subtitle")))
     card.fields([
-        (tr("notify.ip_trial.field.ip"), code(ip_cidr)),
+        (tr("notify.ip_trial.field.ip"), copy(ip_cidr)),
         (tr("notify.ip_trial.field.provider"), join(provider, row.get("country_code")) if provider else None),
         (tr("notify.blocked_ip.field.expires"),
          when(expires) if expires else tr("notify.blocked_ip.forever")),

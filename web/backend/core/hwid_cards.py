@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Sequence
 
 from shared import timefmt
 from shared.i18n import tr
-from shared.tg_card import Card, code, i, join, section, tg_user, when
+from shared.tg_card import Card, copy, i, join, section, tg_user, when
 
 PLATFORM_NAMES = {
     "android": "Android", "ios": "iOS", "windows": "Windows",
@@ -59,9 +59,12 @@ def subscription_note(user: Dict[str, Any], *, mark_removed: bool = True) -> str
 
 
 def account_cell(user: Dict[str, Any]):
-    """Имя аккаунта; есть Telegram — имя ведёт в профиль, отдельная колонка не нужна."""
-    name = account_name(user)
-    return tg_user(name, user["telegram_id"]) if user.get("telegram_id") else code(name)
+    """Имя копируется касанием (без имени — полный UUID под его началом);
+    есть Telegram — рядом ссылка на профиль, отдельная колонка не нужна."""
+    uuid = str(user.get("uuid") or user.get("user_uuid") or "")
+    name = copy(user["username"]) if user.get("username") else copy(uuid, uuid[:8])
+    tg_id = user.get("telegram_id")
+    return join(name, tg_user(tr("notify.card.profile"), tg_id) if tg_id else None)
 
 
 def connections_cell(user: Dict[str, Any]):
@@ -81,7 +84,7 @@ def people_table(card, users: Sequence[Dict[str, Any]], *, extra: Sequence = (),
     shown = list(users[:PEOPLE_SHOWN])
     columns = [(tr("notify.people.col.account"), account_cell)]
     if any(u.get("email") for u in shown):
-        columns.append((tr("notify.people.col.email"), lambda u: code(u["email"]) if u.get("email") else None))
+        columns.append((tr("notify.people.col.email"), lambda u: copy(u.get("email"))))
     columns.append((tr("notify.people.col.subscription"),
                     lambda u: subscription_note(u, mark_removed=mark_removed) or None))
     columns.extend(extra)
@@ -101,7 +104,7 @@ def active_now(user: Dict[str, Any]) -> Optional[str]:
 def _device_fields(card: Card, hwid: str, device: Optional[Dict[str, Any]]) -> None:
     card.section(tr("notify.hwid_card.device"))
     card.fields([
-        (tr("notify.hwid_card.field.hwid"), code(hwid)),
+        (tr("notify.hwid_card.field.hwid"), copy(hwid)),
         (tr("notify.hwid_card.field.device"), device_line(device) or None),
     ])
 

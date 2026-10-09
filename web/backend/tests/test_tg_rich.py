@@ -15,11 +15,17 @@ class TestInline:
         assert inline("просто текст") == "просто текст"
 
     def test_bold_code(self):
+        """<code> в обычном HTML копируется касанием — в rich это кнопка copy_text."""
         parts = inline("👤 <code>vasya</code> — <b>ACTIVE</b>")
         assert parts[0] == "👤 "
-        assert parts[1] == {"type": "code", "text": "vasya"}
+        assert parts[1] == {"type": "button", "button": {"text": "vasya", "copy_text": {"text": "vasya"}}}
         assert parts[2] == " — "
         assert parts[3] == {"type": "bold", "text": "ACTIVE"}
+
+    def test_code_that_cannot_be_copied_stays_code(self):
+        long = "x" * 300  # copy_text — до 256 символов, обрезок в буфер не кладём
+        assert inline(f"<code>{long}</code>") == [{"type": "code", "text": long}]
+        assert inline("<code><b>a</b></code>")[0]["type"] == "code"  # с разметкой внутри — не кнопка
 
     def test_link(self):
         parts = inline('<a href="https://x.io">открыть</a>')
@@ -32,7 +38,7 @@ class TestInline:
         assert parts[0]["type"] == "bold"
         inner = parts[0]["text"]
         assert inner[0] == "жирный "
-        assert inner[1] == {"type": "code", "text": "код"}
+        assert inner[1] == {"type": "button", "button": {"text": "код", "copy_text": {"text": "код"}}}
 
     def test_entities_unescaped(self):
         assert inline("a &lt; b &amp; c") == "a < b & c"

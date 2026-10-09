@@ -88,7 +88,7 @@ async def test_no_nodes_line_without_data():
 async def test_card_leads_with_volume_and_rate():
     kwargs, _, _ = await _card([[], []])
     html = kwargs["telegram_card"].to_html()
-    assert "<b>alice</b> · <b>9.21 GB за 5 мин</b> · ~110.45 GB/ч" in html
+    assert "<b><code>alice</code></b> · <b>9.21 GB за 5 мин</b> · ~110.45 GB/ч" in html
     assert "Порог: 5.0 GB / 10 мин" in html
 
 

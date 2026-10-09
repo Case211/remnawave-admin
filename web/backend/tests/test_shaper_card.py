@@ -10,7 +10,7 @@ SETTINGS = {"penalty_kbit": 2000, "penalty_window_sec": 60}
 
 def test_card_names_user_node_and_penalty():
     html = build_penalty_card("Germany <W>", SETTINGS, EV, [{"username": "alice", "uuid": "u1"}]).to_html()
-    assert "<b>alice</b> · Germany &lt;W&gt;" in html
+    assert "<b><code>alice</code></b> · Germany &lt;W&gt;" in html
     assert "за 60 с" in html
     assert "Скорость: <b>до 2 Мбит/с</b>" in html
     assert "IP: <code>203.0.113.7</code>" in html

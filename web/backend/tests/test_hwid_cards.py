@@ -25,6 +25,11 @@ def _types(card):
     return [blk["type"] for blk in card.to_blocks()]
 
 
+def _copied(value, label=None):
+    """Поле, которое копируется касанием: кнопка copy_text внутри текста."""
+    return {"type": "button", "button": {"text": label or value, "copy_text": {"text": value}}}
+
+
 def _people(card):
     """Таблица людей — та, что с шапкой «Аккаунт»."""
     tables = [blk for blk in card.to_blocks() if blk["type"] == "table"]
@@ -43,14 +48,23 @@ class TestRichLayout:
             assert "table" in types
             assert types[-1] == "footer"
 
-    def test_account_name_opens_the_telegram_profile(self):
+    def test_account_name_is_copied_and_profile_is_a_link(self):
         people = _people(revived_card(HWID, {}, [_user("who")], True))
         assert all(cell.get("is_header") for cell in people["cells"][0])
-        assert people["cells"][1][0]["text"] == {"type": "url", "text": "who", "url": "tg://user?id=100"}
+        assert people["cells"][1][0]["text"] == [
+            _copied("who"),
+            " · ",
+            {"type": "url", "text": "профиль", "url": "tg://user?id=100"},
+        ]
 
-    def test_without_telegram_the_name_is_copyable_code(self):
+    def test_without_telegram_only_the_name(self):
         people = _people(revived_card(HWID, {}, [_user("who", telegram_id=None)], True))
-        assert people["cells"][1][0]["text"] == {"type": "code", "text": "who"}
+        assert people["cells"][1][0]["text"] == _copied("who")
+
+    def test_without_name_the_full_uuid_is_copied(self):
+        user = _user("x", telegram_id=None, username=None, user_uuid="0123456789abcdef")
+        people = _people(revived_card(HWID, {}, [user], True))
+        assert people["cells"][1][0]["text"] == _copied("0123456789abcdef", "01234567")
 
 
 class TestContent:
@@ -99,4 +113,4 @@ class TestContent:
         """Имя из панели попадает в разметку — без экранирования оно её порвёт."""
         card = revived_card(HWID, {}, [_user("<b>evil</b>")], True)
         assert "&lt;b&gt;evil&lt;/b&gt;" in card.to_html()
-        assert _people(card)["cells"][1][0]["text"]["text"] == "<b>evil</b>"  # в rich — как есть
+        assert _people(card)["cells"][1][0]["text"][0]["button"]["text"] == "<b>evil</b>"  # в rich — как есть

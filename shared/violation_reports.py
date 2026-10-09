@@ -20,7 +20,7 @@ from shared.analyzers.models import ACTION_LABELS
 from shared.database import db_service
 from shared.i18n import tr
 from shared.logger import logger
-from shared.tg_card import Card, b, code, i, join, section
+from shared.tg_card import Card, b, copy, i, join, section
 
 
 class ReportType(Enum):
@@ -353,7 +353,7 @@ class ViolationReportService:
         if report.top_violators:
             card.section(tr("notify.report.top"))
             card.table(
-                [[str(n), code(v.get("username") or v.get("email") or str(v.get("user_uuid"))[:8]),
+                [[str(n), _violator_cell(v),
                   b(str(v.get("violations_count", 0))), f"{(v.get('max_score') or 0):.0f}"]
                  for n, v in enumerate(report.top_violators[:10], 1)],
                 head=["#", tr("notify.report.col.user"), tr("notify.report.col.violations"),
@@ -578,6 +578,15 @@ def _json_value(value: Any, default: Any) -> Any:
         except ValueError:
             return default
     return value if value is not None else default
+
+
+def _violator_cell(v: dict):
+    """Кто в топе: имя копируется касанием; без имени — полный UUID под его началом."""
+    name = v.get("username") or v.get("email")
+    if name:
+        return copy(name)
+    uuid = str(v.get("user_uuid") or "")
+    return copy(uuid, uuid[:8]) if uuid else "—"
 
 
 def report_from_row(row: Dict[str, Any]) -> ViolationReportData:

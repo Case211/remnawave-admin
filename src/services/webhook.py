@@ -25,7 +25,7 @@ from src.utils.notifications import (
     unknown_event_card,
 )
 from src.utils.i18n import tr
-from shared.tg_card import Card, b, code
+from shared.tg_card import Card, b, code, copy
 app = FastAPI(title="Remnawave Admin Webhook")
 
 # One-time warning about missing webhook secret
@@ -427,9 +427,11 @@ async def _handle_torrent_blocker_event(bot: Bot, event: str, event_data: dict) 
     card = Card(tr("notify.torrent_blocker.title"))
     card.fields([
         (tr("notify.torrent_blocker.node"), b(node_name) if node_name else None),
-        (tr("notify.torrent_blocker.user"), code(str(who)) if who else None),
+        (tr("notify.torrent_blocker.user"), copy(who)),
+        # кто и куда — копируются касанием, служебные поля — просто текстом
+        *((tr(f"notify.torrent_blocker.{key}"), copy(data.get(key))) for key in ("ip", "destination")),
         *((tr(f"notify.torrent_blocker.{key}"), code(str(data[key])) if data.get(key) else None)
-          for key in ("ip", "destination", "action", "reason")),
+          for key in ("action", "reason")),
     ])
     if not card:
         card.text(tr("notify.torrent_blocker.empty"))

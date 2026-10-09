@@ -1379,7 +1379,9 @@
     },
     "card": {
       "brand": "Remnawave Admin",
-      "more": "… и ещё {count}"
+      "more": "… и ещё {count}",
+      "copy": "📋 Скопировать",
+      "profile": "профиль"
     },
     "torrent": {
       "title": "Торрент-трафик обнаружен",

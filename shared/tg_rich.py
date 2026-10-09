@@ -73,13 +73,24 @@ class _InlineParser(HTMLParser):
             self._stack[-1].append(data)
 
 
+def _copyable(node: dict) -> dict:
+    """<code> в обычном HTML копируется касанием, а в rich — нет: простой
+    код становится кнопкой copy_text, как поля карточек (tg_card.copy)."""
+    from shared.tg_card import copy, rich
+
+    if not isinstance(node["text"], str):
+        return node
+    span = copy(node["text"])
+    return rich(span) if span is not None and span.kind == "copy" else node
+
+
 def _simplify(parts: list) -> Any:
     """Список инлайнов → компактный RichText (склейка строк, str для простого)."""
     out: list = []
     for p in parts:
         if isinstance(p, dict):
             p = {**p, "text": _simplify(p["text"])}
-            out.append(p)
+            out.append(_copyable(p) if p["type"] == "code" else p)
         elif out and isinstance(out[-1], str) and isinstance(p, str):
             out[-1] += p
         else:

@@ -20,7 +20,7 @@ from shared.db_schema import (
 )
 from shared.db_query import select_sql
 from shared.i18n import tr
-from shared.tg_card import Card, b, code, join, mark, when
+from shared.tg_card import Card, b, code, copy, join, mark, when
 
 logger = logging.getLogger(__name__)
 
@@ -420,7 +420,7 @@ class TrafficRateMonitor:
                 pass
 
             card = Card(tr("notify.traffic_rate.title"), emoji="⚡")
-            card.lead(b(username), mark(tr("notify.traffic_rate.lead_used", gb=delta_gb, minutes=elapsed)),
+            card.lead(b(copy(username)), mark(tr("notify.traffic_rate.lead_used", gb=delta_gb, minutes=elapsed)),
                       tr("notify.traffic_rate.lead_rate", rate=rate))
             fields = [(tr("notify.traffic_rate.field.threshold"),
                        tr("notify.traffic_rate.threshold_value", gb=threshold, minutes=cfg["window_minutes"]))]
@@ -434,9 +434,8 @@ class TrafficRateMonitor:
                           f"{round(limit / 1024 ** 3, 1)} GB" if limit > 0 else "∞", sep=" / ")),
                     (tr("notify.traffic_rate.field.expires"),
                      when(user_row["expire_at"], "d") if user_row["expire_at"] else None),
-                    (tr("notify.traffic_rate.field.description"), user_row["description"]),
-                    (tr("notify.traffic_rate.field.short_uuid"),
-                     code(user_row["short_uuid"]) if user_row["short_uuid"] else None),
+                    (tr("notify.traffic_rate.field.description"), copy(user_row["description"])),
+                    (tr("notify.traffic_rate.field.short_uuid"), copy(user_row["short_uuid"])),
                 ]
             card.fields(fields)
             if node_rows:

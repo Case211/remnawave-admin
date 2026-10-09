@@ -80,6 +80,41 @@ def tg_user(text: Inline, user_id: int | str) -> Span:
     return link(text, f"tg://user?id={user_id}")
 
 
+COPY_LIMIT = 256  # copy_text в Bot API: 1–256 символов
+COPY_LABEL_LIMIT = 64
+
+
+def copy(value: Any, label: Inline = None, *, secret: bool = False) -> Optional[Span]:
+    """Значение, которое копируется касанием.
+
+    В rich-сообщении моноширинный code касанием не копируется (так умеет
+    только обычный HTML), поэтому это кнопка внутри текста с copy_text;
+    label — надпись на ней, по умолчанию само значение. В HTML-фолбэке —
+    привычный <code>. secret — само значение не показывать: на кнопке
+    только надпись, в HTML — под спойлером (ссылка подписки даёт доступ).
+    """
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return None
+    if len(text) > COPY_LIMIT:
+        # обрезанное значение в буфер не кладём — пусть останется текстом
+        return spoiler(code(text)) if secret else code(text)
+    if label is None and secret:
+        from shared.i18n import tr
+        label = tr("notify.card.copy")
+    if label is None:
+        label = text if len(text) <= COPY_LABEL_LIMIT else text[:COPY_LABEL_LIMIT - 1] + "…"
+    return Span("copy", label, (("value", text), ("secret", secret)))
+
+
+def tg_account(user_id: Any) -> Optional[list]:
+    """Telegram-аккаунт по id: сам id копируется, рядом — ссылка на профиль."""
+    if user_id is None or str(user_id).strip() == "":
+        return None
+    from shared.i18n import tr
+    return join(copy(user_id), tg_user(tr("notify.card.profile"), user_id))
+
+
 def when(moment: Any, fmt: str = "wDT", fallback: Optional[str] = None) -> Optional[Span]:
     """Момент времени, который Telegram покажет в часовом поясе читателя.
 
@@ -123,6 +158,9 @@ def rich(x: Inline) -> Any:
     if isinstance(x, str):
         return x
     if isinstance(x, Span):
+        if x.kind == "copy":
+            return {"type": "button",
+                    "button": {"text": plain(x.content), "copy_text": {"text": dict(x.attrs)["value"]}}}
         node: dict = {"type": x.kind, "text": rich(x.content)}
         node.update(dict(x.attrs))
         return node
@@ -159,6 +197,10 @@ def html(x: Inline) -> str:
         if x.kind == "date_time":
             return (f'<tg-time unix="{attrs["unix_time"]}" '
                     f'format="{attrs["date_time_format"]}">{inner}</tg-time>')
+        if x.kind == "copy":
+            # в обычном HTML копируется касанием сам моноширинный текст
+            value = f"<code>{escape(attrs['value'], quote=False)}</code>"
+            return f"<tg-spoiler>{value}</tg-spoiler>" if attrs["secret"] else value
         tag = _HTML_TAGS.get(x.kind)
         return f"<{tag}>{inner}</{tag}>" if tag else inner
     return "".join(html(p) for p in x)
@@ -171,7 +213,7 @@ def plain(x: Inline) -> str:
     if isinstance(x, str):
         return x
     if isinstance(x, Span):
-        return plain(x.content)
+        return dict(x.attrs)["value"] if x.kind == "copy" else plain(x.content)
     return "".join(plain(p) for p in x)
 
 

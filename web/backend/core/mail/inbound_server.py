@@ -11,7 +11,7 @@ from typing import Optional
 from shared.db_schema import DOMAIN_CONFIG_TABLE, EMAIL_ATTACHMENTS_TABLE, EMAIL_INBOX_TABLE
 from shared.db_query import select_sql, insert_sql
 from shared.i18n import tr
-from shared.tg_card import Card, b, code
+from shared.tg_card import Card, b, copy, join
 
 from aiosmtpd.smtp import SMTP as SMTPProtocol, Envelope, Session
 
@@ -69,9 +69,12 @@ def new_mail_card(from_header: str, subject: str, rcpt: str, body_text: str = ""
     """Письмо: тема, от кого и кому, проверки — и начало текста цитатой с отправителем."""
     card = Card(tr("notify.mail.title"), emoji="📨")
     card.lead(b(subject[:200] or tr("notify.mail.no_subject")))
+    # Имя отправителя — текстом, адрес копируется касанием: на него и отвечают
+    sender_name, sender_addr = parseaddr(from_header)
+    sender = join(sender_name[:120], copy(sender_addr)) if sender_addr else from_header[:200]
     card.fields([
-        (tr("notify.mail.field.from"), from_header[:200]),
-        (tr("notify.mail.field.to"), code(rcpt)),
+        (tr("notify.mail.field.from"), sender),
+        (tr("notify.mail.field.to"), copy(rcpt)),
         (tr("notify.mail.field.attachments"), str(attachment_count) if attachment_count else None),
         (tr("notify.mail.field.checks"), _checks_line(verdict) or None),
     ])

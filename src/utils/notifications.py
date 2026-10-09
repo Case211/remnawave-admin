@@ -9,12 +9,13 @@ import qrcode
 from aiogram import Bot
 
 from src.config import get_settings
-from src.utils.formatters import format_bytes, format_datetime
+from src.utils.formatters import format_bytes
 from src.utils.i18n import tr
 # реэкспорт для обработчиков кнопок нарушений и их тестов
 from shared.analyzers.models import VIOLATION_ANALYZERS, dominant_analyzer  # noqa: F401
+from shared import timefmt
 from shared.tg_card import (
-    CAPTION_LIMIT, HTML_LIMIT, Card, b, code, i, link, mark, s, section, spoiler, tg_user, when,
+    CAPTION_LIMIT, HTML_LIMIT, Card, b, code, copy, i, link, mark, s, section, tg_account, when,
 )
 from shared.logger import logger
 from shared.notification_config import (
@@ -167,7 +168,8 @@ def _user_diff_rows(info: dict, old_info: dict) -> list:
     unlimited = tr("notify.user.label.unlimited")
     fields = (
         ("trafficLimitBytes", "notify.user.field.traffic_limit", lambda v: format_bytes(v) if v else unlimited),
-        ("expireAt", "notify.user.field.expire", lambda v: format_datetime(v) if v else "—"),
+        ("expireAt", "notify.user.field.expire",
+         lambda v: timefmt.fmt(v, "%d.%m.%Y %H:%M", with_label=False) if v else "—"),
         ("trafficLimitStrategy", "notify.user.field.strategy", lambda v: v or "NO_RESET"),
         ("hwidDeviceLimit", "notify.user.field.hwid_limit",
          lambda v: unlimited if v == 0 else str(v) if v is not None else "—"),
@@ -224,15 +226,14 @@ async def send_user_notification(
 
         card = Card(_title(f"notify.user.title.{action}", "notify.user.fallback"))
         # Срок — относительным временем: «через 3 дня» читается быстрее даты
-        card.lead(b(info.get("username", "n/a")), code(info["status"]) if info.get("status") else None,
+        card.lead(b(copy(info.get("username") or "n/a")), code(info["status"]) if info.get("status") else None,
                   when(expire_at, "r") if expire_at else None)
-        # Полный UUID, а не обрезок: по нему юзера и находят, и копируют
+        # Полный UUID, а не обрезок: по нему юзера и находят; всё копируется касанием
         card.fields([
-            (tr("notify.user.field.uuid"), code(str(local_uuid or info.get("uuid") or info.get("id") or ""))),
-            (tr("notify.user.label.telegram"),
-             tg_user(str(telegram_id), telegram_id) if telegram_id is not None else None),
-            (tr("notify.user.field.email"), code(info["email"]) if info.get("email") else None),
-            (tr("notify.user.field.description"), info["description"][:100] if info.get("description") else None),
+            (tr("notify.user.field.uuid"), copy(local_uuid or info.get("uuid") or info.get("id"))),
+            (tr("notify.user.label.telegram"), tg_account(telegram_id)),
+            (tr("notify.user.field.email"), copy(info.get("email"))),
+            (tr("notify.user.field.description"), copy(info.get("description"))),
             (tr("notify.user.label.created_by"), created_by),
         ])
 
@@ -245,6 +246,9 @@ async def send_user_notification(
             (tr("notify.user.label.hwid"),
              code(unlimited if hwid_limit == 0 else str(hwid_limit)) if hwid_limit is not None else None),
         ]
+        # ссылка даёт доступ к подписке — на виду только кнопка, значение копируется касанием
+        subscription_row = (tr("notify.user.label.subscription"),
+                            copy(info.get("subscriptionUrl") or subscription_url, secret=True))
 
         if action == "updated" and old_user_info:
             old_info = old_user_info.get("response", old_user_info)
@@ -267,7 +271,7 @@ async def send_user_notification(
             else:
                 card.text(i(tr("notify.user.section.no_changes")))
             # Изменения главные; остальное — свёрнутой карточкой, а не простынёй
-            card.details(tr("notify.user.section.card"), section().fields(limits))
+            card.details(tr("notify.user.section.card"), section().fields([*limits, subscription_row]))
         else:
             active_squads = info.get("activeInternalSquads", [])
             squad_display = await _resolve_squads_display(active_squads)
@@ -278,9 +282,7 @@ async def send_user_notification(
             card.fields([
                 *limits,
                 (tr("notify.user.label.squad"), code(squad_display) if squad_display != "—" else None),
-                # ссылка даёт доступ к подписке — под спойлером, не на виду в общем чате
-                (tr("notify.user.label.subscription"),
-                 spoiler(code(info["subscriptionUrl"])) if info.get("subscriptionUrl") else None),
+                subscription_row,
             ])
 
         media = None
@@ -446,9 +448,9 @@ async def send_node_notification(
         traffic_limit = node_info.get("trafficLimitBytes")
 
         card = Card(_title(title_key, "notify.node.fallback", event=event))
-        card.lead(b(node_name), code(addr_str), country if country != "—" else None)
+        card.lead(b(node_name), copy(addr_str) if address != "—" else None, country if country != "—" else None)
         card.fields([
-            (tr("notify.node.label.uuid"), code(node_uuid)),
+            (tr("notify.node.label.uuid"), copy(node_info.get("uuid"))),
             (tr("notify.node.label.status"), code(status) if status != "—" else None),
             (tr("notify.node.label.traffic_limit"), code(format_bytes(traffic_limit)) if traffic_limit else None),
         ])
@@ -516,10 +518,10 @@ async def send_service_notification(
             # Remnawave вкладывает поля под data.loginAttempt (не на верхнем уровне)
             la = event_data.get("loginAttempt")
             la = la if isinstance(la, dict) else event_data
-            card.lead(b(la.get("username") or "—"), code(la["ip"]) if la.get("ip") else None)
+            card.lead(b(la.get("username") or "—"), la.get("ip"))
             card.fields([
-                (tr("notify.service.login.username"), code(la["username"]) if la.get("username") else None),
-                (tr("notify.service.login.ip"), code(la["ip"]) if la.get("ip") else None),
+                (tr("notify.service.login.username"), copy(la.get("username"))),
+                (tr("notify.service.login.ip"), copy(la.get("ip"))),
                 (tr("notify.service.login.user_agent"), code(la["userAgent"][:200]) if la.get("userAgent") else None),
                 (tr("notify.service.login.description"), la.get("description")),
             ])
@@ -599,23 +601,20 @@ async def send_hwid_notification(
             hwid_device_limit = user_data.get("hwidDeviceLimit", 0)
             card.section(tr("notify.hwid.user_header"))
             card.fields([
-                (tr("notify.hwid.label.user"), code(user_data.get("username", "n/a"))),
-                (tr("notify.hwid.label.uuid"),
-                 code(str(user_local_uuid or user_data.get("uuid") or user_data.get("id", "n/a")))),
-                (tr("notify.hwid.label.tg_id"),
-                 tg_user(str(telegram_id), telegram_id) if telegram_id is not None else None),
+                (tr("notify.hwid.label.user"), copy(user_data.get("username"))),
+                (tr("notify.hwid.label.uuid"), copy(user_local_uuid or user_data.get("uuid") or user_data.get("id"))),
+                (tr("notify.hwid.label.tg_id"), tg_account(telegram_id)),
                 (tr("notify.hwid.label.status"), code(user_data.get("status", "—"))),
                 (tr("notify.hwid.label.device_limit"),
                  code("∞" if hwid_device_limit == 0 else str(hwid_device_limit))),
-                (tr("notify.hwid.label.description"),
-                 user_data["description"][:100] if user_data.get("description") else None),
+                (tr("notify.hwid.label.description"), copy(user_data.get("description"))),
             ])
 
         if hwid_data:
             created_at = hwid_data.get("createdAt")
             card.section(tr("notify.hwid.device_header"))
             card.fields([
-                (tr("notify.hwid.device.hwid"), code(hwid_data["hwid"]) if hwid_data.get("hwid") else None),
+                (tr("notify.hwid.device.hwid"), copy(hwid_data.get("hwid"))),
                 (tr("notify.hwid.device.platform"), hwid_data.get("platform")),
                 (tr("notify.hwid.device.os_version"), hwid_data.get("osVersion")),
                 (tr("notify.hwid.device.model"), hwid_data.get("deviceModel")),
@@ -773,9 +772,8 @@ async def send_crm_notification(
                 card.section(tr("notify.crm.section.node"))
                 card.fields([
                     (tr("notify.crm.label.name"), code(node_data.get("name", "n/a"))),
-                    (tr("notify.crm.label.uuid"), code(node_data["uuid"]) if node_data.get("uuid") else None),
-                    (tr("notify.crm.label.address"),
-                     code(node_data["address"]) if node_data.get("address") else None),
+                    (tr("notify.crm.label.uuid"), copy(node_data.get("uuid"))),
+                    (tr("notify.crm.label.address"), copy(node_data.get("address"))),
                     (tr("notify.crm.label.port"), code(str(node_data["port"])) if node_data.get("port") else None),
                     (tr("notify.crm.label.country"), node_data.get("countryCode")),
                 ])
@@ -783,8 +781,7 @@ async def send_crm_notification(
                 card.section(tr("notify.crm.section.provider"))
                 card.fields([
                     (tr("notify.crm.label.name"), code(provider_data.get("name", "n/a"))),
-                    (tr("notify.crm.label.uuid"),
-                     code(provider_data["uuid"]) if provider_data.get("uuid") else None),
+                    (tr("notify.crm.label.uuid"), copy(provider_data.get("uuid"))),
                 ])
             if billing_data:
                 amount = billing_data.get("amount")

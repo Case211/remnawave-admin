@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from shared.db_schema import NODE_SHAPER_PENALTIES_TABLE, NODE_SHAPERS_TABLE, NODES_TABLE
 from shared.i18n import tr
-from shared.tg_card import Card, b, code, join, when
+from shared.tg_card import Card, b, copy, join, when
 
 logger = logging.getLogger(__name__)
 
@@ -401,14 +401,15 @@ def build_penalty_card(node_name: str, settings_row, ev: Dict[str, Any], users: 
     window = settings_row["penalty_window_sec"] if settings_row else None
     volume = _format_bytes(ev["bytes"])
     card = Card(tr("notify.shaper.title"), emoji="🐌")
-    card.lead(join(*(b(u["username"] or u["uuid"][:8]) for u in users), sep=", "), node_name)
+    card.lead(join(*(b(copy(u["username"]) if u["username"] else copy(u["uuid"], u["uuid"][:8]))
+                     for u in users), sep=", "), node_name)
     card.fields([
         (tr("notify.shaper.field.node"), b(node_name)),
         (tr("notify.shaper.field.volume"),
          tr("notify.shaper.volume_window", volume=volume, seconds=window) if window else volume),
         (tr("notify.shaper.field.speed"), b(tr("notify.shaper.speed_value", rate=f"{rate:g}")) if rate else None),
         (tr("notify.shaper.field.until"), when(ev["until"], "t") if rate else None),
-        (tr("notify.shaper.field.ip"), code(ev["ip"])),
+        (tr("notify.shaper.field.ip"), copy(ev["ip"])),
     ])
     return card.stamp()
 

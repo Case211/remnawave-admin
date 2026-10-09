@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Sequence
 
 from shared.i18n import tr
 from shared.logger import logger
-from shared.tg_card import Button, Card, code, i, join, when
+from shared.tg_card import Button, Card, copy, i, join, when
 from web.backend.core.hwid_cards import connections_cell, people_table
 
 NOTIFY_SOURCE = "ip_trial_reuse"
@@ -57,7 +57,7 @@ def build_card(group: Dict[str, Any], users: Sequence[Dict[str, Any]]) -> Card:
                    else "notify.ip_trial.subtitle.plain")))
     card.section(tr("notify.ip_trial.address"))
     card.fields([
-        (tr("notify.ip_trial.field.ip"), code(group["ip"])),
+        (tr("notify.ip_trial.field.ip"), copy(group["ip"])),
         (tr("notify.ip_trial.field.provider"), join(provider, group.get("country_code")) if provider else None),
         (tr("notify.ip_trial.field.network"), _network_note(group) or None),
     ])

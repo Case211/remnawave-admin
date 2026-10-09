@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from shared import i18n
 from shared.tg_card import (
-    Card, b, code, html, join, link, mark, plain, rich, s, section, spoiler, tg_user, when,
+    Card, b, code, copy, html, join, link, mark, plain, rich, s, section, spoiler, tg_account, tg_user, when,
 )
 
 
@@ -54,6 +54,60 @@ class TestInline:
 
     def test_join_skips_empty_parts(self):
         assert plain(join("a", None, "", b("c"))) == "a · c"
+
+
+class TestCopy:
+    """Поля, которые копируются касанием: в rich — кнопка copy_text внутри текста."""
+
+    def test_value_is_a_copy_button_in_rich_and_code_in_html(self):
+        span = copy(" 05e2f14b-8a9b ")
+        assert rich(span) == {"type": "button",
+                              "button": {"text": "05e2f14b-8a9b", "copy_text": {"text": "05e2f14b-8a9b"}}}
+        assert html(span) == "<code>05e2f14b-8a9b</code>"
+        assert plain(span) == "05e2f14b-8a9b"
+
+    def test_label_differs_from_value(self):
+        span = copy("0123456789abcdef", "01234567")
+        assert rich(span)["button"] == {"text": "01234567", "copy_text": {"text": "0123456789abcdef"}}
+        # в HTML и в тексте in-app — полное значение
+        assert html(span) == "<code>0123456789abcdef</code>" and plain(span) == "0123456789abcdef"
+
+    def test_long_label_is_shortened_but_value_is_whole(self):
+        value = "a" * 100
+        button = rich(copy(value))["button"]
+        assert len(button["text"]) == 64 and button["text"].endswith("…")
+        assert button["copy_text"]["text"] == value
+
+    def test_too_long_for_clipboard_stays_text(self):
+        value = "x" * 257
+        assert copy(value) == code(value)
+        assert html(copy(value, secret=True)) == f"<tg-spoiler><code>{value}</code></tg-spoiler>"
+
+    def test_empty_is_skipped(self):
+        assert copy(None) is None and copy("  ") is None
+        card = Card("t").fields([("Email", copy(None)), ("UUID", copy("u-1"))])
+        assert len(card.to_blocks()[1]["cells"]) == 1
+
+    def test_secret_value_is_not_shown(self):
+        span = copy("https://sub.example.com/abc", secret=True)
+        button = rich(span)["button"]
+        assert "sub.example.com" not in button["text"]
+        assert button["copy_text"]["text"] == "https://sub.example.com/abc"
+        assert html(span) == "<tg-spoiler><code>https://sub.example.com/abc</code></tg-spoiler>"
+
+    def test_copy_inside_bold_and_table_cell(self):
+        card = Card("t").lead(b(copy("alex"))).table([[copy("1.2.3.4"), "MTS"]])
+        blocks = card.to_blocks()
+        assert blocks[1]["text"] == {"type": "bold", "text": rich(copy("alex"))}
+        assert blocks[2]["cells"][0][0]["text"] == rich(copy("1.2.3.4"))
+
+    def test_telegram_account_is_copied_with_profile_link(self):
+        assert rich(tg_account(366945364)) == [
+            rich(copy("366945364")), " · ",
+            {"type": "url", "text": "профиль", "url": "tg://user?id=366945364"},
+        ]
+        assert html(tg_account(42)) == '<code>42</code> · <a href="tg://user?id=42">профиль</a>'
+        assert tg_account(None) is None and tg_account("") is None
 
 
 class TestBlocks:

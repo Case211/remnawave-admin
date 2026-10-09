@@ -33,7 +33,7 @@ def test_report_is_tables_not_lines():
     severity = next(t for t in _tables(card) if t["cells"][0][0]["text"] == "Уровень")
     assert [row[2]["text"] for row in severity["cells"][1:]] == ["25%", "50%", "25%"]
     top = next(t for t in _tables(card) if t["cells"][0][0]["text"] == "#")
-    assert top["cells"][1][1]["text"] == {"type": "code", "text": "alex"}
+    assert top["cells"][1][1]["text"] == {"type": "button", "button": {"text": "alex", "copy_text": {"text": "alex"}}}
     assert top["cells"][1][3]["text"] == "97"
     countries = next(t for t in _tables(card) if t["cells"][0][0]["text"] == "Страна")
     assert countries["cells"][1][0]["text"] == "🇷🇺 RU"

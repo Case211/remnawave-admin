@@ -217,6 +217,11 @@ class TestSendViolationNotification:
 # ── Рекомендация против свершившегося факта ───────────────────
 
 
+def _copied(value, label=None):
+    """Поле, которое копируется касанием: кнопка copy_text внутри текста."""
+    return {"type": "button", "button": {"text": label or value, "copy_text": {"text": value}}}
+
+
 def _card_of(mock_create):
     return mock_create.call_args.kwargs["telegram_card"]
 
@@ -373,8 +378,7 @@ class TestRichCard:
         )
         tables = [blk for blk in _card_of(mock_create).to_blocks() if blk["type"] == "table"]
         connections = next(t for t in tables if t["cells"][0][0]["text"] == "IP")
-        assert [row[0]["text"] for row in connections["cells"][1:]] == [
-            {"type": "code", "text": "10.0.0.1"}, {"type": "code", "text": "10.0.0.2"}]
+        assert [row[0]["text"] for row in connections["cells"][1:]] == [_copied("10.0.0.1"), _copied("10.0.0.2")]
         assert connections["cells"][1][1]["text"] == "MTS PJSC"
         assert connections["cells"][2][1]["text"] == "—"  # провайдер неизвестен
 

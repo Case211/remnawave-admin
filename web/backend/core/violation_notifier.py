@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 
 from shared.analyzers.models import ACTION_LABELS, dominant_analyzer
 from shared.i18n import tr
-from shared.tg_card import Button, Card, b, code, i, join, section, tg_user, when
+from shared.tg_card import Button, Card, b, code, copy, i, join, section, tg_account, when
 
 logger = logging.getLogger(__name__)
 
@@ -188,16 +188,14 @@ def _add_history(card: Card, recap: Optional[dict]) -> None:
 
 
 def _user_fields(card: Card, user_uuid: str, info: dict, with_description: bool = True) -> None:
-    telegram_id = info.get("telegramId")
-    description = info.get("description") or ""
+    """Кто это: всё копируется касанием — искать юзера потом по этим полям."""
     card.fields([
-        (tr("notify.violation.card.field.username"), code(info.get("username", "n/a"))),
-        (tr("notify.violation.card.field.email"), code(info["email"]) if info.get("email") else None),
-        (tr("notify.violation.card.field.uuid"), code(user_uuid)),
-        (tr("notify.violation.card.field.telegram"),
-         tg_user(str(telegram_id), telegram_id) if telegram_id is not None else None),
+        (tr("notify.violation.card.field.username"), copy(info.get("username"))),
+        (tr("notify.violation.card.field.email"), copy(info.get("email"))),
+        (tr("notify.violation.card.field.uuid"), copy(user_uuid)),
+        (tr("notify.violation.card.field.telegram"), tg_account(info.get("telegramId"))),
         (tr("notify.violation.card.field.description"),
-         description[:100] if with_description and description else None),
+         copy(info.get("description")) if with_description else None),
     ])
 
 
@@ -354,7 +352,7 @@ async def send_violation_notification(
             rows = []
             for ip in sorted(unique_ips):
                 meta = (ip_metadata or {}).get(ip)
-                rows.append([code(ip), _short_provider(getattr(meta, "asn_org", None)),
+                rows.append([copy(ip), _short_provider(getattr(meta, "asn_org", None)),
                              getattr(meta, "country_code", None)])
             card.section(tr("notify.violation.card.connections"))
             card.table(
@@ -510,7 +508,7 @@ async def send_torrent_notification(
         card.lead(b(info.get("email") or info.get("username", "n/a")), code(node_name) if node_name else None)
         _user_fields(card, user_uuid, info, with_description=False)
         card.fields([
-            (tr("notify.torrent.field.ips"), join(*(code(ip) for ip in (ips or [])[:5]), sep=", ")),
+            (tr("notify.torrent.field.ips"), join(*(copy(ip) for ip in (ips or [])[:5]), sep=", ")),
             (tr("notify.torrent.field.window"),
              tr("notify.torrent.window_minutes", minutes=window["minutes"]) if window.get("minutes") else None),
             (tr("notify.torrent.field.events"), counted(events, "min_events")),
@@ -519,7 +517,7 @@ async def send_torrent_notification(
 
         if destinations:
             shown = destinations[:10]
-            body = section().bullets([code(dest) for dest in shown])
+            body = section().bullets([copy(dest) for dest in shown])
             if peers_total > len(shown):
                 body.text(i(tr("notify.card.more", count=peers_total - len(shown))))
             card.details(tr("notify.torrent.destinations", count=peers_total), body)

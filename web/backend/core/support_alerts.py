@@ -16,7 +16,7 @@ from typing import Any, Sequence
 
 from shared import timefmt
 from shared.i18n import tr
-from shared.tg_card import CAPTION_LIMIT, Button, Card, b, code, link, tg_user, when
+from shared.tg_card import CAPTION_LIMIT, Button, Card, b, copy, link, tg_account, when
 
 logger = logging.getLogger(__name__)
 
@@ -334,8 +334,8 @@ async def _customer_fields(bot_user_id: int) -> tuple[list[tuple[str, Any]], dic
     balance = user.get("balance_rubles")
     fields = [
         (tr("notify.support.field.username"), link(f"@{username}", f"https://t.me/{username}") if username else None),
-        (tr("notify.support.field.telegram"), tg_user(str(telegram_id), telegram_id) if telegram_id else None),
-        (tr("notify.support.field.email"), code(email) if email else None),
+        (tr("notify.support.field.telegram"), tg_account(telegram_id) if telegram_id else None),
+        (tr("notify.support.field.email"), copy(email)),
         (tr("notify.support.field.subscription"), sub_text),
         (tr("notify.support.field.balance"), b(f"{balance} ₽") if balance is not None else None),
     ]
