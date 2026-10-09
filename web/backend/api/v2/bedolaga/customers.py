@@ -178,7 +178,8 @@ async def list_transactions(
     """История транзакций."""
     return await proxy_request(lambda: bedolaga_client.list_transactions(
         limit=limit, offset=offset, user_id=user_id,
-        transaction_type=transaction_type, payment_method=payment_method,
+        # в webapi Bedolaga фильтр зовётся type — transaction_type молча игнорировался
+        type=transaction_type, payment_method=payment_method,
         is_completed=is_completed, date_from=date_from, date_to=date_to,
     ))
 

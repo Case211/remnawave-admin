@@ -208,9 +208,6 @@ class BedolagaClient:
     async def add_devices(self, sub_id: int, data: dict) -> dict:
         return await self._post(f"/subscriptions/{sub_id}/devices", json=data)
 
-    async def reset_devices(self, sub_id: int) -> dict:
-        return await self._post(f"/subscriptions/{sub_id}/reset-devices")
-
     # ── Referrals ──
 
     async def get_all_users(self, limit: int = 200, offset: int = 0) -> dict:

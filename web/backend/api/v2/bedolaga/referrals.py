@@ -76,7 +76,7 @@ async def _load_all_partners(force: bool = False) -> list[dict]:
 
 @router.get("/referrers")
 async def list_referrers(
-    admin: AdminUser = Depends(require_permission("bedolaga", "view")),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
     search: Optional[str] = Query(None, description="Filter by username/first_name/referral_code (substring)."),
     min_refs: int = Query(0, ge=0, description="Hide referrers with fewer invitees than this."),
     top_only: bool = Query(False, description="Only return referrers with ≥10 invitees."),
@@ -130,7 +130,7 @@ async def list_referrers(
 @router.get("/referrers/{user_id}/refs")
 async def list_referrer_refs(
     user_id: int = Path(..., ge=1),
-    admin: AdminUser = Depends(require_permission("bedolaga", "view")),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
     refresh: bool = Query(False, description="Force-refresh the cached user list."),
 ):
     """List users invited by the given referrer (from cached full user dump)."""
@@ -167,7 +167,7 @@ async def list_referrer_refs(
 
 @router.get("/stats")
 async def referrer_stats(
-    admin: AdminUser = Depends(require_permission("bedolaga", "view")),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
 ):
     """Aggregate counters for the referrals page header."""
     return await proxy_request(bedolaga_client.get_partner_global_stats)

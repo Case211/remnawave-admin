@@ -7730,7 +7730,8 @@
       "addDevices": "Добавить устройства",
       "addAmount": "Сколько добавить",
       "trafficAdded": "Трафик добавлен",
-      "devicesAdded": "Лимит устройств увеличен"
+      "devicesAdded": "Лимит устройств увеличен",
+      "balancePlaceholder": "+100 или -50"
     },
     "trial": "Пробных",
     "conversions": "Конверсий",

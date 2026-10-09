@@ -7725,7 +7725,8 @@
       "addDevices": "Add devices",
       "addAmount": "Amount to add",
       "trafficAdded": "Traffic added",
-      "devicesAdded": "Device limit increased"
+      "devicesAdded": "Device limit increased",
+      "balancePlaceholder": "+100 or -50"
     },
     "trial": "Trial",
     "conversions": "Conversions",
