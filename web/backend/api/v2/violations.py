@@ -1241,6 +1241,21 @@ async def notify_violation_user(
     return result
 
 
+def _raw_breakdown(violation: dict) -> Optional[dict]:
+    """Разбор скоринга из TEXT-колонки — объектом.
+
+    С тех пор как сборщик сохраняет raw_breakdown, в колонке лежит JSON-строка,
+    а схема ждёт объект: строка роняла карточку нарушения в 500.
+    """
+    raw = violation.get('raw_breakdown') or violation.get('raw_data')
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return None
+    return raw if isinstance(raw, dict) else None
+
+
 @router.get("/{violation_id}", response_model=ViolationDetail)
 async def get_violation(
     violation_id: int,
@@ -1311,7 +1326,7 @@ async def get_violation(
         action_taken_by=violation.get('action_taken_by'),
         notified_at=violation.get('notified_at'),
         client_notified_at=(await _client_notices([violation_id])).get(violation_id),
-        raw_data=violation.get('raw_breakdown') or violation.get('raw_data'),
+        raw_data=_raw_breakdown(violation),
         hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
         admin_comment=violation.get('admin_comment'),
         score_source=score_source,
