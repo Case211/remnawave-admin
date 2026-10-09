@@ -56,6 +56,8 @@ class OutboundMailQueue:
 
     POLL_INTERVAL = 10  # seconds
     BATCH_SIZE = 10
+    # Дольше одной доставки (до трёх MX по 30 с таймаута) с запасом.
+    STALE_SENDING_MINUTES = 10
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
@@ -121,6 +123,30 @@ class OutboundMailQueue:
                 logger.error("Queue loop error: %s", e)
                 await asyncio.sleep(5)
 
+    async def _recover_stale_sending(self, conn) -> int:
+        """Вернуть в очередь письма, застрявшие в ``sending``.
+
+        Статус ставится перед доставкой, а выборка берёт только ``pending`` и
+        ``failed``. Если процесс остановлен посреди отправки (рестарт после
+        обновления, OOM, ребут), письмо иначе не уйдёт никогда и не станет
+        ``failed``. ``attempts`` уже увеличен при переходе в ``sending``,
+        так что ``max_attempts`` продолжает работать.
+        """
+        result = await conn.execute(
+            update_sql(EMAIL_QUEUE_TABLE,
+                "status = 'failed', last_error = 'stale sending state (process restarted)', "
+                "next_attempt_at = NOW()",
+                "status = 'sending' AND last_attempt_at < NOW() - make_interval(mins => $1)"),
+            self.STALE_SENDING_MINUTES,
+        )
+        try:
+            recovered = int(str(result).rsplit(" ", 1)[-1])
+        except ValueError:
+            recovered = 0
+        if recovered:
+            logger.warning("Recovered %d email(s) stuck in 'sending'", recovered)
+        return recovered
+
     async def _process_queue(self):
         """Pick up pending emails and attempt delivery."""
         try:
@@ -129,6 +155,7 @@ class OutboundMailQueue:
                 return
 
             async with db_service.acquire() as conn:
+                await self._recover_stale_sending(conn)
                 rows = await conn.fetch(
                     f"""
                     SELECT eq.*, dc.domain, dc.dkim_selector, dc.dkim_private_key,
@@ -271,11 +298,13 @@ class OutboundMailQueue:
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain=row.get("domain") or "localhost")
 
-        # List-Unsubscribe header (recommended by spam filters)
+        # List-Unsubscribe header (recommended by spam filters). One-Click
+        # (List-Unsubscribe-Post, RFC 8058) is defined only for an https URI,
+        # so with a mailto-only header it is not sent — Gmail/Yahoo treat the
+        # combination as malformed.
         domain = row.get("domain")
         if domain:
             msg["List-Unsubscribe"] = f"<mailto:unsubscribe@{domain}>"
-            msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
         body_text = row.get("body_text") or ""
         body_html = row.get("body_html")

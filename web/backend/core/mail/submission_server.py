@@ -210,6 +210,39 @@ class SubmissionAuthenticator:
             logger.debug("Failed to update last login for credential %d: %s", cred_id, e)
 
 
+# Категории писем, ретранслированных через submission. Личное письмо (код,
+# ссылка, ответ) отписка не блокирует; рассылку — блокирует.
+SUBMISSION_CATEGORY = "smtp_submission"
+SUBMISSION_BULK_CATEGORY = "smtp_submission_bulk"
+
+_BULK_PRECEDENCE = frozenset({"bulk", "list", "junk"})
+
+
+def submission_category(msg) -> str:
+    """Рассылка это или личное письмо — по заголовкам самого письма.
+
+    Внешний клиент шлёт через submission и коды подтверждения, и промо.
+    Отличить одно от другого может только отправитель, и способ для этого
+    давно есть: рассылка помечается ``Precedence: bulk`` (или ``list``),
+    ``List-Id`` либо собственным ``List-Unsubscribe``. Письмо без этих
+    заголовков считается личным.
+    """
+    precedence = str(msg.get("Precedence", "") or "").strip().lower()
+    if precedence in _BULK_PRECEDENCE:
+        return SUBMISSION_BULK_CATEGORY
+    if msg.get("List-Id") or msg.get("List-Unsubscribe"):
+        return SUBMISSION_BULK_CATEGORY
+    return SUBMISSION_CATEGORY
+
+
+def sender_domain_allowed(address: str, allowed_domains) -> bool:
+    """Подходит ли домен адреса под ограничение учётки (пустой список — любой)."""
+    if not allowed_domains:
+        return True
+    domain = address.rpartition("@")[2].strip().lower() if "@" in (address or "") else ""
+    return bool(domain) and domain in {str(d).strip().lower() for d in allowed_domains}
+
+
 class SubmissionHandler:
     """aiosmtpd handler for authenticated submission — enqueues messages for delivery."""
 
@@ -234,11 +267,12 @@ class SubmissionHandler:
         from_email = envelope.mail_from
         allowed_domains = getattr(session, "smtp_allowed_domains", [])
 
-        # Check sender domain restrictions
-        if allowed_domains:
-            sender_domain = from_email.split("@")[-1].lower() if "@" in from_email else ""
-            if sender_domain not in [d.lower() for d in allowed_domains]:
-                return "550 Sender domain not allowed for this account"
+        # Envelope MAIL FROM is checked here; the From header is checked below,
+        # once parsed — that is the address that actually goes out and gets
+        # DKIM-signed, so a header from a foreign domain must not slip past
+        # a restriction that only looked at the envelope.
+        if not sender_domain_allowed(from_email, allowed_domains):
+            return "550 Sender domain not allowed for this account"
 
         # Parse the submitted message
         import email
@@ -283,6 +317,8 @@ class SubmissionHandler:
             from email.utils import parseaddr
             from_name, parsed_email = parseaddr(from_header)
             if parsed_email:
+                if not sender_domain_allowed(parsed_email, allowed_domains):
+                    return "550 From header domain not allowed for this account"
                 from_email = parsed_email
 
             # Enqueue for each recipient
@@ -290,6 +326,7 @@ class SubmissionHandler:
             username = getattr(session, "smtp_username", "unknown")
             attempted = len(envelope.rcpt_tos)
             queued = 0
+            category = submission_category(msg)
             for rcpt in envelope.rcpt_tos:
                 queue_id = await outbound_queue.enqueue(
                     from_email=from_email,
@@ -298,7 +335,7 @@ class SubmissionHandler:
                     body_text=body_text or None,
                     body_html=body_html or None,
                     from_name=from_name or None,
-                    category="smtp_submission",
+                    category=category,
                 )
                 if queue_id:
                     queued += 1
@@ -313,7 +350,8 @@ class SubmissionHandler:
             # while it was silently dropped. A 4xx tells the client it failed
             # and it can retry later.
             if attempted and queued == 0:
-                return "452 4.3.1 Message not queued (send limit reached), try again later"
+                return ("452 4.3.1 Message not queued (recipient suppressed, send limit "
+                        "reached or temporary error), try again later")
 
             # Partial acceptance: some recipients queued, some rejected. Keep the
             # 250 (a 4xx would make the client resend to the already-queued ones
