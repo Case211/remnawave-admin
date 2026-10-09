@@ -1959,6 +1959,30 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 3,
     },
     {
+        "key": "webauthn_rp_id",
+        "value_type": "string",
+        "category": "security",
+        "subcategory": "auth_methods",
+        "display_name": "Passkey: домен (RP ID)",
+        "description": "Домен, к которому привязываются passkeys, например panel.example.com. "
+                       "Пусто — домен, по которому открыта панель. После смены passkeys, "
+                       "добавленные под прежним доменом, перестанут работать",
+        "default_value": "",
+        "sort_order": 10,
+    },
+    {
+        "key": "webauthn_origin",
+        "value_type": "string",
+        "category": "security",
+        "subcategory": "auth_methods",
+        "display_name": "Passkey: адрес панели (origin)",
+        "description": "Адрес со схемой, например https://panel.example.com. Пусто — собирается "
+                       "из заголовков запроса (Host и X-Forwarded-Proto). Задайте, если прокси "
+                       "перед панелью не передаёт X-Forwarded-Proto",
+        "default_value": "",
+        "sort_order": 11,
+    },
+    {
         "key": "auth_max_attempts",
         "value_type": "int",
         "category": "security",

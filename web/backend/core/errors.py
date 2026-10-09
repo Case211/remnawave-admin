@@ -29,6 +29,10 @@ class ErrorCode(str, Enum):
     FORBIDDEN = "FORBIDDEN"
     EMAIL_NOT_CONFIGURED = "EMAIL_NOT_CONFIGURED"
     RESET_TOKEN_INVALID = "RESET_TOKEN_INVALID"
+    PASSKEY_DOMAIN_UNKNOWN = "PASSKEY_DOMAIN_UNKNOWN"
+    PASSKEY_CHALLENGE_EXPIRED = "PASSKEY_CHALLENGE_EXPIRED"
+    PASSKEY_NOT_FOUND = "PASSKEY_NOT_FOUND"
+    PASSKEY_VERIFICATION_FAILED = "PASSKEY_VERIFICATION_FAILED"
 
     # ── Admins ────────────────────────────────────────────────
     USERNAME_EXISTS = "USERNAME_EXISTS"
@@ -184,6 +188,10 @@ E = ErrorCode
 # Default human-readable messages per code (English fallback)
 _DEFAULT_MESSAGES: dict[str, str] = {
     E.ADMIN_NOT_FOUND: "Admin not found",
+    E.PASSKEY_DOMAIN_UNKNOWN: "Could not determine the panel address for passkeys",
+    E.PASSKEY_CHALLENGE_EXPIRED: "The passkey request has expired, start again",
+    E.PASSKEY_NOT_FOUND: "Passkey not found",
+    E.PASSKEY_VERIFICATION_FAILED: "Passkey verification failed",
     E.TELEGRAM_NOT_CONFIGURED: "Telegram notifications are not configured: set the bot token and chat.",
     E.WEAK_PASSWORD: "Password does not meet the requirements: 8+ characters, lowercase and uppercase Latin letters, a digit and a special character, no Cyrillic.",
     E.USERNAME_EXISTS: "Username already exists",

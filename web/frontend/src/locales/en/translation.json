@@ -5263,6 +5263,14 @@
         "label": "🔐 Mandatory 2FA (TOTP)",
         "description": "Require TOTP setup for all accounts"
       },
+      "webauthn_rp_id": {
+        "label": "🔑 Passkey domain (RP ID)",
+        "description": "Domain passkeys are bound to, e.g. panel.example.com. Empty — the domain the panel is opened on. After a change, passkeys added under the previous domain stop working"
+      },
+      "webauthn_origin": {
+        "label": "🔑 Passkey origin",
+        "description": "Panel address with the scheme, e.g. https://panel.example.com. Empty — built from the request headers (Host and X-Forwarded-Proto). Set it if the proxy in front of the panel does not pass X-Forwarded-Proto"
+      },
       "auth_max_attempts": {
         "label": "🚫 Max attempts before lockout",
         "description": "Number of failed login attempts before IP is blocked"
@@ -7126,6 +7134,10 @@
     "FORBIDDEN": "Access denied",
     "EMAIL_NOT_CONFIGURED": "Email sending is not configured",
     "RESET_TOKEN_INVALID": "Invalid or expired password reset link",
+    "PASSKEY_DOMAIN_UNKNOWN": "Could not determine the panel address for passkeys. You can set it in Settings → Security",
+    "PASSKEY_CHALLENGE_EXPIRED": "The passkey request has expired, start again",
+    "PASSKEY_NOT_FOUND": "Passkey not found. Add it in settings",
+    "PASSKEY_VERIFICATION_FAILED": "Passkey verification failed: {{detail}}",
     "USERNAME_EXISTS": "Username already exists",
     "CANNOT_MODIFY_SELF": "Cannot modify your own account",
     "ADMIN_CREATE_FAILED": "Failed to create administrator",

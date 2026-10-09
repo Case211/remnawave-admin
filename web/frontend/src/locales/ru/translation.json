@@ -5264,6 +5264,14 @@
         "label": "🔐 Обязательная 2FA (TOTP)",
         "description": "Требовать настройку TOTP для всех аккаунтов"
       },
+      "webauthn_rp_id": {
+        "label": "🔑 Passkey: домен (RP ID)",
+        "description": "Домен, к которому привязываются passkeys, например panel.example.com. Пусто — домен, по которому открыта панель. После смены passkeys, добавленные под прежним доменом, перестанут работать"
+      },
+      "webauthn_origin": {
+        "label": "🔑 Passkey: адрес панели (origin)",
+        "description": "Адрес со схемой, например https://panel.example.com. Пусто — собирается из заголовков запроса (Host и X-Forwarded-Proto). Задайте, если прокси перед панелью не передаёт X-Forwarded-Proto"
+      },
       "auth_max_attempts": {
         "label": "🚫 Макс. попыток до блокировки",
         "description": "Количество неудачных попыток входа до блокировки IP-адреса"
@@ -7129,6 +7137,10 @@
     "FORBIDDEN": "Доступ запрещён",
     "EMAIL_NOT_CONFIGURED": "Email не настроен для отправки",
     "RESET_TOKEN_INVALID": "Ссылка для сброса пароля недействительна или истекла",
+    "PASSKEY_DOMAIN_UNKNOWN": "Не удалось определить адрес панели для passkey. Его можно задать в Настройки → Безопасность",
+    "PASSKEY_CHALLENGE_EXPIRED": "Запрос passkey устарел, начните заново",
+    "PASSKEY_NOT_FOUND": "Passkey не найден. Добавьте его в настройках",
+    "PASSKEY_VERIFICATION_FAILED": "Passkey не прошёл проверку: {{detail}}",
     "USERNAME_EXISTS": "Имя пользователя уже занято",
     "CANNOT_MODIFY_SELF": "Нельзя изменить свой собственный аккаунт",
     "ADMIN_CREATE_FAILED": "Не удалось создать администратора",

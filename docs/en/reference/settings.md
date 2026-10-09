@@ -225,6 +225,8 @@ Protection of the panel itself plus node attack detection: login methods, brute-
 | **✈️ Telegram Authentication** | `auth_telegram_enabled` | `true` | Allow login via Telegram Login Widget |
 | **🔒 Password Authentication** | `auth_password_enabled` | `true` | Allow login with username and password |
 | **🔐 Mandatory 2FA (TOTP)** | `auth_totp_required` | `false` | Require TOTP setup for all accounts |
+| **🔑 Passkey domain (RP ID)** | `webauthn_rp_id` | empty | Domain passkeys are bound to, e.g. panel.example.com. Empty — the domain the panel is opened on. After a change, passkeys added under the previous domain stop working |
+| **🔑 Passkey origin** | `webauthn_origin` | empty | Panel address with the scheme, e.g. https://panel.example.com. Empty — built from the request headers (Host and X-Forwarded-Proto). Set it if the proxy in front of the panel does not pass X-Forwarded-Proto |
 | **✈️ Telegram Mini App auto-login** | `auth_telegram_webapp_enabled` | `true` | Sign in automatically when the panel is opened inside Telegram (Mini App). Requires Telegram authentication to be enabled |
 
 

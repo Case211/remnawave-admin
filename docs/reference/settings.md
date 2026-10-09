@@ -225,6 +225,8 @@
 | **✈️ Авторизация через Telegram** | `auth_telegram_enabled` | `true` | Разрешить вход через Telegram Login Widget |
 | **🔒 Авторизация по паролю** | `auth_password_enabled` | `true` | Разрешить вход по логину и паролю |
 | **🔐 Обязательная 2FA (TOTP)** | `auth_totp_required` | `false` | Требовать настройку TOTP для всех аккаунтов |
+| **🔑 Passkey: домен (RP ID)** | `webauthn_rp_id` | пусто | Домен, к которому привязываются passkeys, например panel.example.com. Пусто — домен, по которому открыта панель. После смены passkeys, добавленные под прежним доменом, перестанут работать |
+| **🔑 Passkey: адрес панели (origin)** | `webauthn_origin` | пусто | Адрес со схемой, например https://panel.example.com. Пусто — собирается из заголовков запроса (Host и X-Forwarded-Proto). Задайте, если прокси перед панелью не передаёт X-Forwarded-Proto |
 | **✈️ Автовход в Telegram Mini App** | `auth_telegram_webapp_enabled` | `true` | Входить автоматически, когда панель открыта внутри Telegram (мини-приложение). Требует включённой авторизации через Telegram |
 
 
