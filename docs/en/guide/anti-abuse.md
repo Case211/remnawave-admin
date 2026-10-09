@@ -52,6 +52,8 @@ The whole cluster gets blocked, not just the account under review: otherwise, on
 
 Which subscriptions count as trials is defined by a list of tags and internal squad UUIDs, in the same thresholds section.
 
+Unlinked devices stay on record — the user card shows them on the **Removed** tab — so re-linking the same hardware to a new account remains visible. The flip side: such a link keeps raising violations even after the case is settled and the customer has removed the extra devices. Delete those records on the same tab, one by one or with **Clear removed** (the “Users → edit” permission). Only the admin's history is erased: active devices and the panel are not touched, but re-linking these devices to other accounts will no longer be visible either.
+
 ## What happens on a violation
 
 The score picks a **recommendation**, not a verdict: watch, warn, review manually, block temporarily, block. The panel itself touches nobody — with one exception: at the hard-block threshold with auto-blocking on (`violation_auto_hard_block`, enabled by default) the user is disabled right away. The notification then says "Done: user blocked" instead of a recommendation, so there is nothing to guess about.
@@ -176,11 +178,14 @@ A delayed step waits in the database and survives a restart. Before running, it 
 - the customer is whitelisted;
 - the action is already in place — otherwise a delayed one-day block would unblock someone blocked forever, and a limit would override a manual one;
 - the customer contacted support in the meantime (Bedolaga tickets or [external support events](/en/reference/api-endpoints#external-support-contact)) — then the operator decides; the check can be turned off for the step;
+- the customer paid after the trigger or already has a paid subscription — if these checkboxes are set on the step (off by default). Payment is checked against Bedolaga transactions, or by subscription status without it: paid means live and without a trial tag or squad. The customer's other accounts are found by Telegram ID, or by email without one;
 - the rule was turned off — this cancels all waiting steps.
 
 If the warning in the chain did not reach the customer, the delayed action is not applied at all: punishing without explanation is exactly what the chain protects against. A repeated trigger for the same customer does not add a second action while the first one is waiting. What is waiting, what ran and why a step was skipped is in the automations log.
 
 The detector's built-in auto-block (hard_block, e.g. for trial abuse) fires immediately. To route it through a warning too, turn off `violation_auto_hard_block` and create a rule: “Violation detected” with the condition `recommended_action = hard_block` → “Warn user” → after N hours “Block user” with the **“Also trial-abuse accomplices on the same HWID”** checkbox. Like the built-in auto-block, the action reaches other subscriptions with a live trial on the same device — otherwise the bundle keeps working; it does not touch customers who are already blocked, limited or whitelisted.
+
+Sharing, torrents and User-Agent can carry the same `hard_block`. To make the rule about trial farming only, use the condition **“Trial abuse” = yes** instead, and **“Triggered hard-block rules”** narrows it further — for example, to a repeated trial on a device only. These are machine signals and do not depend on the wording of the reasons. The **“Skip if the customer paid after the trigger”** and **“…already has a paid subscription”** checkboxes keep the rule from blocking someone who bought a subscription while the step was waiting: the log shows the step as skipped with that reason.
 
 ## Violations in the Bedolaga cabinet
 
