@@ -184,6 +184,21 @@ async def list_transactions(
     ))
 
 
+# ── Events feed (static path — before /{user_id}) ──
+
+@router.get("/events")
+async def list_events(
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    event_type: Optional[list[str]] = Query(None),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
+):
+    """Лента событий подписок по всем клиентам: кто купил, продлил, пополнил."""
+    return await proxy_request(lambda: bedolaga_client.list_subscription_events(
+        limit=limit, offset=offset, event_types=event_type,
+    ))
+
+
 # ── Subscriptions list (static path — before /{user_id}) ──
 
 @router.get("/subscriptions/list")

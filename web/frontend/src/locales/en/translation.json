@@ -7910,6 +7910,38 @@
     "tg": "TG",
     "capabilities": {
       "noActivity": "Bot v{{version}} does not provide the customer activity feed, so that section is hidden in the customer card. It appears after the bot is updated."
+    },
+    "events": {
+      "title": "Event feed",
+      "tooltip": "Purchases, renewals, top-ups, trials, promo codes and campaign visits from the bot, cabinet and mini app, newest first. Purchases, trials and promo codes from the cabinet and mini app are recorded by the bot only when admin notifications are enabled in Bedolaga (ADMIN_NOTIFICATIONS_ENABLED).",
+      "empty": "No events yet",
+      "error": "Failed to load events",
+      "more": "Show more",
+      "filters": {
+        "all": "All",
+        "payments": "Payments",
+        "trials": "Trials",
+        "promo": "Promo",
+        "campaigns": "Campaigns"
+      },
+      "types": {
+        "activation": "Trial started",
+        "purchase": "Subscription purchase",
+        "renewal": "Renewal",
+        "balance_topup": "Balance top-up",
+        "promocode_activation": "Promo code",
+        "promo_group_change": "Promo group change",
+        "referral_link_visit": "Campaign link visit",
+        "campaign_registration": "Campaign sign-up"
+      },
+      "details": {
+        "days": "{{count}} d",
+        "devices": "{{count}} dev.",
+        "fromTrial": "after trial",
+        "balance": "balance {{amount}}",
+        "returning": "existing customer",
+        "automatic": "automatic"
+      }
     }
   },
   "notFound": {

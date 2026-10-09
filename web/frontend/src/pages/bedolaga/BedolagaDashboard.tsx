@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   Users,
@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InfoTooltip } from '@/components/InfoTooltip'
+import { EventsFeed } from '@/components/bedolaga/EventsFeed'
+import { usePermissionStore } from '@/store/permissionStore'
 import { cn } from '@/lib/utils'
 
 // ── Types ──
@@ -72,6 +74,9 @@ interface MaintenanceData {
 
 export default function BedolagaDashboard() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  // В ленте имена клиентов и суммы — как и сами клиенты, нужен bedolaga_customers
+  const canViewCustomers = usePermissionStore((s) => s.hasPermission('bedolaga_customers', 'view'))
 
   const { data: statusData } = useQuery({
     queryKey: ['bedolaga-status'],
@@ -108,7 +113,10 @@ export default function BedolagaDashboard() {
   })
 
   const isLoading = overviewLoading
-  const refetchAll = () => { refetchOverview(); refetchFull(); refetchHealth(); refetchMaintenance() }
+  const refetchAll = () => {
+    refetchOverview(); refetchFull(); refetchHealth(); refetchMaintenance()
+    queryClient.invalidateQueries({ queryKey: ['bedolaga-events'] })
+  }
 
   // Not configured
   if (isConfigured === false) {
@@ -413,6 +421,8 @@ export default function BedolagaDashboard() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
         </div>
       )}
+
+      {isConfigured === true && canViewCustomers && <EventsFeed />}
     </div>
   )
 }

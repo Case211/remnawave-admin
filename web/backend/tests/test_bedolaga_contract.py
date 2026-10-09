@@ -208,3 +208,36 @@ async def test_referrals_need_customer_access(app, viewer_client):
         "viewer", "watcher", account_id=4, permissions={("bedolaga", "view")})
     resp = await viewer_client.get("/api/v2/bedolaga/referrals/stats")
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_events_feed_uses_notifications_route(monkeypatch, client):
+    """Ручки /subscription-events у Bedolaga нет: лента живёт в /notifications/subscriptions."""
+    sent = {}
+
+    async def fake_get(path, params=None):
+        sent["path"], sent["params"] = path, params
+        return {"items": [], "total": 0}
+
+    monkeypatch.setattr(customers.bedolaga_client, "_get", fake_get)
+    # /events объявлен до /{user_id}: иначе «events» разбирался бы как id клиента
+    resp = await client.get("/api/v2/bedolaga/customers/events?event_type=purchase&event_type=renewal")
+    assert resp.status_code == 200
+    assert sent == {
+        "path": "/notifications/subscriptions",
+        "params": {"limit": 20, "offset": 0, "event_type": ["purchase", "renewal"]},
+    }
+    # httpx повторяет ключ — так FastAPI бота и собирает список типов
+    url = httpx.URL("http://bot/notifications/subscriptions", params=sent["params"])
+    assert url.query.decode() == "limit=20&offset=0&event_type=purchase&event_type=renewal"
+
+
+@pytest.mark.asyncio
+async def test_events_feed_needs_customer_access(app, viewer_client):
+    """В ленте имена клиентов и суммы — базового bedolaga:view для неё мало."""
+    from web.backend.api.deps import get_current_admin
+    from .conftest import make_admin
+    app.dependency_overrides[get_current_admin] = lambda: make_admin(
+        "viewer", "watcher", account_id=4, permissions={("bedolaga", "view")})
+    resp = await viewer_client.get("/api/v2/bedolaga/customers/events")
+    assert resp.status_code == 403

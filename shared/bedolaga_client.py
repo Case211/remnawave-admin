@@ -289,10 +289,18 @@ class BedolagaClient:
 
     # ── Subscription Events ──
 
-    async def list_subscription_events(self, limit: int = 20, offset: int = 0, **filters) -> dict:
-        params = {"limit": limit, "offset": offset}
-        params.update({k: v for k, v in filters.items() if v is not None})
-        return await self._get("/subscription-events", params=params)
+    async def list_subscription_events(
+        self, limit: int = 20, offset: int = 0, event_types: Optional[list] = None,
+    ) -> dict:
+        """Лента событий подписок по всем клиентам — свежие первыми.
+
+        Бот пишет их сам: покупки, продления, пополнения, триалы, промокоды,
+        кампании. Несколько типов — повтором параметра event_type.
+        """
+        params: dict = {"limit": limit, "offset": offset}
+        if event_types:
+            params["event_type"] = list(event_types)
+        return await self._get("/notifications/subscriptions", params=params)
 
     # ── Promo codes ──
 

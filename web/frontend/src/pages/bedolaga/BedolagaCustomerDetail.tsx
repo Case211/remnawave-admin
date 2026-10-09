@@ -46,6 +46,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { eventDetails, eventTitle } from '@/components/bedolaga/EventsFeed'
 
 // ── Helpers ──
 
@@ -737,27 +738,33 @@ export default function BedolagaCustomerDetail() {
                   </div>
                 ) : (
                   <div className="space-y-1 max-h-[320px] overflow-y-auto pr-1">
-                    {activityItems.map((item: any, index: number) => (
-                      <div
-                        key={`${item.type}-${item.timestamp}-${index}`}
-                        className="flex items-start gap-2.5 py-2 border-b border-[var(--glass-border)] last:border-0"
-                      >
-                        <span className="font-mono text-[10px] text-dark-400 leading-tight flex-shrink-0 w-9 pt-0.5">
-                          {formatDateShort(item.timestamp)}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-dark-100 truncate">
-                            {item.title || t(`bedolaga.customerDetail.activity.types.${item.type}`, { defaultValue: item.type })}
-                          </div>
-                          {item.subtype && <div className="text-[10px] text-dark-400 truncate">{item.subtype}</div>}
-                        </div>
-                        {typeof item.amount_kopeks === 'number' && item.amount_kopeks !== 0 && (
-                          <span className="text-xs font-bold tabular-nums text-emerald-400 flex-shrink-0">
-                            {(item.amount_kopeks / 100).toLocaleString()} ₽
+                    {activityItems.map((item: any, index: number) => {
+                      // У событий подписок бот кладёт в title английский текст, а в meta — те же поля, что в общей ленте
+                      const isEvent = item.type === 'event' && item.subtype
+                      const title = isEvent
+                        ? eventTitle(item.subtype, t)
+                        : item.title || t(`bedolaga.customerDetail.activity.types.${item.type}`, { defaultValue: item.type })
+                      const subtitle = isEvent ? eventDetails(item.subtype, item.meta, t).join(' · ') : item.subtype
+                      return (
+                        <div
+                          key={`${item.type}-${item.timestamp}-${index}`}
+                          className="flex items-start gap-2.5 py-2 border-b border-[var(--glass-border)] last:border-0"
+                        >
+                          <span className="font-mono text-[10px] text-dark-400 leading-tight flex-shrink-0 w-9 pt-0.5">
+                            {formatDateShort(item.timestamp)}
                           </span>
-                        )}
-                      </div>
-                    ))}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-dark-100 truncate">{title}</div>
+                            {subtitle && <div className="text-[10px] text-dark-400 truncate">{subtitle}</div>}
+                          </div>
+                          {typeof item.amount_kopeks === 'number' && item.amount_kopeks !== 0 && (
+                            <span className="text-xs font-bold tabular-nums text-emerald-400 flex-shrink-0">
+                              {(item.amount_kopeks / 100).toLocaleString()} ₽
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>
