@@ -4292,7 +4292,12 @@
       "violations_last_hour": "Violations in an hour",
       "users_new_today": "New users",
       "downtime_minutes": "Down for, min",
-      "created_by": "Created by"
+      "created_by": "Created by",
+      "violation_kind": "Main analyzer",
+      "trial_abuse": "Trial abuse",
+      "trial_abuse_type": "Trial abuse kind",
+      "signals": "Triggered hard-block rules",
+      "reasons": "Reasons (text)"
     },
     "actionTypes": {
       "disable_user": "Disable user",
@@ -4732,7 +4737,9 @@
       },
       "forMinutes": "Holds for at least, min",
       "forMinutesHint": "A single spike is not worth waking anyone — fires only if the value holds this long.",
-      "conditionsAnyLabel": "WITH CONDITIONS (any one is enough)"
+      "conditionsAnyLabel": "WITH CONDITIONS (any one is enough)",
+      "selectValue": "Select value",
+      "reasonsHint": "Reason text in the detector's language, matched as a substring with contains or not contains. Wording changes between versions — for trial abuse the Trial abuse and Triggered hard-block rules fields are more reliable."
     },
     "testResult": {
       "title": "Test result",
@@ -4783,7 +4790,9 @@
         "whitelisted": "the customer is whitelisted",
         "support_contacted": "the customer wrote to support — an operator decides",
         "already_scheduled": "this step is already waiting",
-        "warning_not_delivered": "the warning did not reach the customer"
+        "warning_not_delivered": "the warning did not reach the customer",
+        "payment_received": "the customer paid after the trigger",
+        "active_paid_subscription": "the customer already has a paid subscription"
       },
       "notQueued": "Not queued: {{action}} — {{reason}}"
     },
@@ -4792,6 +4801,37 @@
       "hint": "Like the built-in auto-block: other subscriptions with a live trial on the same device. Without them the ring keeps working — after the measure hits one, the rest no longer match the rule. Already blocked, throttled and whitelisted customers are left alone.",
       "short": "+ HWID accomplices",
       "summary": "Accomplices: applied {{done}}, skipped {{skipped}}"
+    },
+    "conditionValues": {
+      "trial_abuse": {
+        "true": "yes",
+        "false": "no"
+      },
+      "trial_abuse_type": {
+        "multiple_active_trials": "Several accounts with a live trial on one device",
+        "repeated_trial": "Repeated trial of one account on one device"
+      },
+      "signals": {
+        "trial_abuse": {
+          "active_trials": "Trial abuse: several live trials on a device",
+          "repeated_trial": "Trial abuse: repeated trial on a device"
+        },
+        "hwid": {
+          "accounts": "Many accounts on one device",
+          "matches": "Mass HWID matches"
+        },
+        "sharing": {
+          "sources": "Abnormally many sources",
+          "simultaneous": "Many simultaneous connections",
+          "devices": "Many devices by fingerprint"
+        }
+      }
+    },
+    "payment": {
+      "unlessPaid": "Skip if the customer already has a paid subscription",
+      "unlessPaidAfter": "Skip if the customer paid after the trigger",
+      "hint": "Paid means a live subscription without a trial tag or squad (Settings → Violations). The customer's other accounts are found by Telegram ID, or by email without one. Payment after the trigger is checked against Bedolaga transactions, or by subscription status without it.",
+      "short": "· except paying"
     }
   },
   "settings": {

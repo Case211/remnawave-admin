@@ -48,6 +48,7 @@ import {
   categoryColor,
   triggerTypeLabel,
   conditionFieldsFor,
+  conditionValueOptions,
   messageVarsFor,
 } from './helpers'
 import { timeZoneLabel, useDisplayTimeZone } from '@/lib/timezone'
@@ -105,6 +106,8 @@ const DELAY_EVENTS = ['violation.detected', 'torrent.detected']
 const MAX_STEP_DELAY_HOURS = 720
 // Меры, которые можно применить заодно к соучастникам накрутки триалов по HWID
 const ACCOMPLICE_ACTIONS = ['block_user', 'disable_user', 'throttle_user']
+// Меры, которые можно не применять к уже платящему клиенту
+const PAYMENT_ACTIONS = ['warn_user', 'block_user', 'disable_user', 'throttle_user']
 
 const withoutKey = (obj: Record<string, unknown>, key: string) =>
   Object.fromEntries(Object.entries(obj).filter(([k]) => k !== key))
@@ -177,6 +180,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [throttleHours, setThrottleHours] = useState('')
   const [warnForce, setWarnForce] = useState(false)
   const [withAccomplices, setWithAccomplices] = useState(false)
+  const [unlessPaid, setUnlessPaid] = useState(false)
   // Своя пауза, «И»/«ИЛИ», тихие часы, цепочка действий
   const [cooldownMinutes, setCooldownMinutes] = useState('')
   const [conditionsMatch, setConditionsMatch] = useState<'all' | 'any'>('all')
@@ -278,6 +282,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setThrottleHours(editRule.action_type === 'throttle_user' ? ac.duration_hours?.toString() || '' : '')
         setWarnForce(!!ac.force)
         setWithAccomplices(!!ac.with_accomplices)
+        setUnlessPaid(!!ac.unless_paid)
         setCooldownMinutes(tc.cooldown_minutes?.toString() || '')
         setConditionsMatch(tc.conditions_match === 'any' ? 'any' : 'all')
         setQuietFrom(ac.quiet_from || '')
@@ -323,6 +328,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setThrottleHours('')
         setWarnForce(false)
         setWithAccomplices(false)
+        setUnlessPaid(false)
         setCooldownMinutes('')
         setConditionsMatch('all')
         setQuietFrom('')
@@ -380,9 +386,18 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   // Build action_config
   const buildActionConfig = (): Record<string, unknown> => {
     const cfg = buildBaseActionConfig()
-    return accomplicesAllowed && withAccomplices && ACCOMPLICE_ACTIONS.includes(actionType)
-      ? { ...cfg, with_accomplices: true }
-      : cfg
+    if (accomplicesAllowed && withAccomplices && ACCOMPLICE_ACTIONS.includes(actionType)) cfg.with_accomplices = true
+    // Основное действие идёт сразу: «оплатил после срабатывания» для него не бывает
+    if (delaysAllowed && unlessPaid && PAYMENT_ACTIONS.includes(actionType)) cfg.unless_paid = true
+    return cfg
+  }
+
+  // Галочки шага, которые при этом триггере и задержке ничего не значат, не сохраняем
+  const stepConfig = (s: ExtraAction): Record<string, unknown> => {
+    let cfg = accomplicesAllowed ? s.action_config : withoutKey(s.action_config, 'with_accomplices')
+    if (!delaysAllowed) cfg = withoutKey(withoutKey(cfg, 'unless_paid'), 'unless_paid_after')
+    else if (!s.delay_hours) cfg = withoutKey(cfg, 'unless_paid_after')
+    return cfg
   }
 
   const buildBaseActionConfig = (): Record<string, unknown> => {
@@ -475,10 +490,10 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       conditions: validConditions,
       action_type: actionType,
       action_config: buildActionConfig(),
-      // Задержки и соучастники есть только у шагов по нарушениям: сменили триггер — шаги как раньше
+      // Задержки, соучастники и «кроме платящих» есть только у шагов по нарушениям: сменили триггер — шаги как раньше
       extra_actions: extraActions.map((s) => ({
         ...s,
-        action_config: accomplicesAllowed ? s.action_config : withoutKey(s.action_config, 'with_accomplices'),
+        action_config: stepConfig(s),
         delay_hours: delaysAllowed ? s.delay_hours || 0 : 0,
       })),
     }
@@ -987,17 +1002,39 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className={`min-w-0 ${cond.operator === 'in' || cond.operator === 'not_in' ? 'sm:w-40' : 'sm:w-24'}`}>
-                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.valueLabel')}</Label>
-                    <Input
-                      value={cond.value}
-                      onChange={(e) => updateCondition(idx, 'value', e.target.value)}
-                      className="mt-1 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
-                      placeholder={cond.operator === 'in' || cond.operator === 'not_in' ? 'RU, BY' : '80'}
-                      title={cond.operator === 'in' || cond.operator === 'not_in' ? t('automations.constructor.listValueHint') : undefined}
-                    />
-                  </div>
+                  {(() => {
+                    const isList = cond.operator === 'in' || cond.operator === 'not_in'
+                    const options = isList ? null : conditionValueOptions(cond.field)
+                    return (
+                      <div className={`min-w-0 ${isList || options ? 'sm:w-48' : 'sm:w-24'}`}>
+                        <Label className="text-[11px] text-dark-400">{t('automations.constructor.valueLabel')}</Label>
+                        {options ? (
+                          <Select value={cond.value || undefined} onValueChange={(v) => updateCondition(idx, 'value', v)}>
+                            <SelectTrigger className="mt-1 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white">
+                              <SelectValue placeholder={t('automations.constructor.selectValue')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {options.map((o) => (
+                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            value={cond.value}
+                            onChange={(e) => updateCondition(idx, 'value', e.target.value)}
+                            className="mt-1 bg-[var(--glass-bg)] border-[var(--glass-border)] text-white"
+                            placeholder={isList ? 'RU, BY' : '80'}
+                            title={isList ? t('automations.constructor.listValueHint') : undefined}
+                          />
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
+                {cond.field === 'reasons' && (
+                  <p className="text-[11px] text-dark-400">{t('automations.constructor.reasonsHint')}</p>
+                )}
               </div>
             ))}
 
@@ -1393,6 +1430,16 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               </div>
             )}
 
+            {delaysAllowed && PAYMENT_ACTIONS.includes(actionType) && (
+              <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-2">
+                <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                  <Checkbox checked={unlessPaid} onCheckedChange={(v) => setUnlessPaid(!!v)} />
+                  {t('automations.payment.unlessPaid')}
+                </label>
+                <p className="text-[11px] text-dark-400">{t('automations.payment.hint')}</p>
+              </div>
+            )}
+
             {actionType === 'warn_user' && (
               <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-2">
                 <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.warn.title')}</Label>
@@ -1478,6 +1525,19 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                           {t('automations.accomplices.option')}
                         </label>
                       )}
+                      {delaysAllowed && PAYMENT_ACTIONS.includes(step.action_type) && (
+                        <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                          <Checkbox
+                            checked={!!step.action_config.unless_paid}
+                            onCheckedChange={(v) => updateStep(idx, {
+                              action_config: v
+                                ? { ...step.action_config, unless_paid: true }
+                                : withoutKey(step.action_config, 'unless_paid'),
+                            })}
+                          />
+                          {t('automations.payment.unlessPaid')}
+                        </label>
+                      )}
                       {delaysAllowed && (
                         <div className="space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2 text-xs text-dark-300">
@@ -1504,6 +1564,19 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                               {t('automations.delayed.unlessSupport')}
                             </label>
                           )}
+                          {!!step.delay_hours && PAYMENT_ACTIONS.includes(step.action_type) && (
+                            <label className="flex items-center gap-2 text-xs text-dark-200 cursor-pointer">
+                              <Checkbox
+                                checked={!!step.action_config.unless_paid_after}
+                                onCheckedChange={(v) => updateStep(idx, {
+                                  action_config: v
+                                    ? { ...step.action_config, unless_paid_after: true }
+                                    : withoutKey(step.action_config, 'unless_paid_after'),
+                                })}
+                              />
+                              {t('automations.payment.unlessPaidAfter')}
+                            </label>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1518,6 +1591,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 <p className="text-[11px] text-dark-400 mt-1">{t('automations.constructor.chain.hint')}</p>
                 {delaysAllowed && extraActions.some((s) => s.delay_hours) && (
                   <p className="text-[11px] text-dark-300 mt-1">{t('automations.delayed.recheckHint')}</p>
+                )}
+                {delaysAllowed && extraActions.some((s) => s.action_config.unless_paid || s.action_config.unless_paid_after) && (
+                  <p className="text-[11px] text-dark-400 mt-1">{t('automations.payment.hint')}</p>
                 )}
               </div>
             </div>

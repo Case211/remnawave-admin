@@ -1652,9 +1652,16 @@ async def _handle_violation(
                 )
 
         try:
+            from shared.analyzers.models import dominant_analyzer
             from web.backend.api.v2.websocket import broadcast_violation
             countries = sorted(geo.countries) if geo and geo.countries else []
             asn_types = sorted(asn.asn_types) if asn and asn.asn_types else []
+            signals = list(getattr(violation_score, "signals", None) or [])
+            trial_abuse_type = (
+                "multiple_active_trials" if "trial_abuse.active_trials" in signals
+                else "repeated_trial" if "trial_abuse.repeated_trial" in signals
+                else ""
+            )
             await broadcast_violation({
                 "user_uuid": user_uuid,
                 "username": username,
@@ -1675,6 +1682,12 @@ async def _handle_violation(
                 # Соучастники накрутки триалов (чужие живые триалы на том же HWID) —
                 # правило может применить меру и к ним, как встроенный автоблок
                 "trial_accomplices": list(getattr(hwid, "active_trial_accomplices", None) or []),
+                # Машинные признаки для условий: правило «только абуз триалов» не
+                # должно зависеть от текста причин и задевать шаринг, торренты и UA
+                "violation_kind": dominant_analyzer(breakdown) or "",
+                "signals": signals,
+                "trial_abuse": bool(trial_abuse_type),
+                "trial_abuse_type": trial_abuse_type,
             })
         except Exception:
             pass

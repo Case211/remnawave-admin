@@ -467,6 +467,8 @@ class IntelligentViolationDetector:
 
             # --- Проверка экстремального абьюза (жёсткая блокировка) ---
             extreme_abuse_reasons = []
+            # Какие правила сработали — машинными кодами (VIOLATION_SIGNALS)
+            signals: List[str] = []
             hb_ips = config_service.get("violations_hard_block_ips", 50)
             hb_sim = config_service.get("violations_hard_block_simultaneous", 20)
             hb_dev = config_service.get("violations_hard_block_devices", 80)
@@ -477,6 +479,7 @@ class IntelligentViolationDetector:
             # и жёстко блокировать его не за что.
             current_sources = {source_of.get(ip, ip) for ip in current_ips}
             if hb_ips > 0 and len(current_sources) >= hb_ips:
+                signals.append("sharing.sources")
                 extreme_abuse_reasons.append(
                     f"Экстремальное количество источников: {len(current_sources)}"
                     f" ({len(current_ips)} адресов, порог: {hb_ips})"
@@ -485,18 +488,21 @@ class IntelligentViolationDetector:
             # 2) Много одновременных активных подключений
             sim_count = getattr(temporal_score, 'simultaneous_connections_count', 0)
             if hb_sim > 0 and sim_count >= hb_sim:
+                signals.append("sharing.simultaneous")
                 extreme_abuse_reasons.append(
                     f"Экстремальное количество одновременных подключений: {sim_count} (порог: {hb_sim})"
                 )
 
             # 3) Много устройств по fingerprint
             if hb_dev > 0 and hasattr(device_score, 'unique_fingerprints_count') and device_score.unique_fingerprints_count >= hb_dev:
+                signals.append("sharing.devices")
                 extreme_abuse_reasons.append(
                     f"Экстремальное количество устройств: {device_score.unique_fingerprints_count} fingerprints (порог: {hb_dev})"
                 )
 
             # 4) Много одинаковых устройств по HWID
             if hb_hwid > 0 and hasattr(hwid_score, 'shared_hwids_count') and hwid_score.shared_hwids_count >= hb_hwid:
+                signals.append("hwid.matches")
                 extreme_abuse_reasons.append(
                     f"Массовый HWID абьюз: {hwid_score.shared_hwids_count} совпадающих HWID (порог: {hb_hwid})"
                 )
@@ -509,6 +515,7 @@ class IntelligentViolationDetector:
             hb_hwid_accounts = config_service.get("violations_hard_block_hwid_accounts", 5)
             hwid_accounts = getattr(hwid_score, 'max_accounts_per_hwid', 1)
             if hb_hwid_accounts > 0 and hwid_accounts >= hb_hwid_accounts:
+                signals.append("hwid.accounts")
                 extreme_abuse_reasons.append(
                     f"Массовый кросс-аккаунт: {hwid_accounts} аккаунтов на одном HWID (порог: {hb_hwid_accounts})"
                 )
@@ -527,6 +534,7 @@ class IntelligentViolationDetector:
                 max_active_trials = 1
             hwid_active_trials = getattr(hwid_score, 'max_active_trials_per_hwid', 0)
             if max_active_trials > 0 and hwid_active_trials > max_active_trials:
+                signals.append("trial_abuse.active_trials")
                 # Текст дословно повторяет причину HwidCrossAccountAnalyzer — причины
                 # дедуплицируются по строке, так что в уведомление уйдёт одна запись.
                 extreme_abuse_reasons.append(
@@ -545,6 +553,7 @@ class IntelligentViolationDetector:
                 max_trial_subs = 1
             hwid_trial_subs = getattr(hwid_score, 'max_trial_subs_per_hwid', 0)
             if max_trial_subs > 0 and hwid_trial_subs > max_trial_subs:
+                signals.append("trial_abuse.repeated_trial")
                 # Текст дословно повторяет причину HwidCrossAccountAnalyzer —
                 # причины дедуплицируются по строке.
                 extreme_abuse_reasons.append(
@@ -605,7 +614,8 @@ class IntelligentViolationDetector:
                 },
                 recommended_action=recommended_action,
                 confidence=confidence,
-                reasons=all_reasons
+                reasons=all_reasons,
+                signals=signals,
             )
             
         except Exception as e:

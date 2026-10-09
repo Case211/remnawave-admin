@@ -569,6 +569,76 @@ async def support_contact_since(telegram_id: Optional[int], since, user_uuid: Op
         ))
 
 
+# Оплатой считаем пришедшие деньги (пополнение) и покупку подписки. Нулевая
+# сумма — подписку выдал админ, а возвраты, бонусы и подарки — не оплата клиента
+_PAYMENT_TX_TYPES = {"deposit", "subscription_payment"}
+
+
+async def paid_since(telegram_id: Optional[int], since) -> Optional[bool]:
+    """Платил ли клиент в Bedolaga начиная с since.
+
+    None — проверить нечем: Bedolaga не подключена, у клиента нет telegram_id
+    или API не ответил. Тогда решает статус подписки (person_has_paid_subscription).
+    """
+    import httpx
+    from shared.bedolaga_client import bedolaga_client
+
+    if not telegram_id or not bedolaga_client.is_configured:
+        return None
+    try:
+        try:
+            customer = await bedolaga_client.get_user_by_telegram(int(telegram_id))
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return False
+            raise
+        customer_id = (customer or {}).get("id")
+        if not customer_id:
+            return False
+        page = await bedolaga_client.list_transactions(
+            limit=50, user_id=customer_id, is_completed=True, date_from=since.isoformat(),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Bedolaga payment lookup for telegram_id %s failed: %s", telegram_id, e)
+        return None
+    return any(
+        tx.get("type") in _PAYMENT_TX_TYPES and (tx.get("amount_kopeks") or 0) > 0
+        for tx in (page or {}).get("items") or []
+    )
+
+
+async def person_has_paid_subscription(user_uuid: str) -> Optional[bool]:
+    """Есть ли у клиента живая платная подписка — на этом аккаунте или на другом
+    его же: с тем же telegram_id, а без него — с той же почтой (так же личность
+    группирует HWID-анализатор).
+
+    Платная — живая и без триального тега или сквада из настроек триала.
+    None — клиента нет в базе.
+    """
+    from shared.database import db_service
+    from shared.db.network import _is_trial_user, _load_trial_settings, _subscription_is_active
+
+    trial_tags, trial_squads = _load_trial_settings()
+    async with db_service.acquire() as conn:
+        me = await conn.fetchrow("SELECT telegram_id, email FROM users WHERE uuid = $1", user_uuid)
+        if me is None:
+            return None
+        rows = await conn.fetch(
+            """
+            SELECT tag, raw_data, status, expire_at FROM users
+             WHERE uuid = $1
+                OR ($2::bigint IS NOT NULL AND telegram_id = $2)
+                OR ($2::bigint IS NULL AND $3::text IS NOT NULL AND lower(email) = lower($3))
+            """,
+            user_uuid, me["telegram_id"], me["email"],
+        )
+    return any(
+        _subscription_is_active(r["expire_at"], r["status"])
+        and not _is_trial_user(r["tag"], r["raw_data"], trial_tags, trial_squads)
+        for r in rows
+    )
+
+
 async def claim_due_actions(limit: int = 50) -> List[dict]:
     """Наступившие отложенные действия — забрать атомарно (без двойного исполнения)."""
     from shared.database import db_service

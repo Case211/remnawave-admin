@@ -34,6 +34,18 @@ ACTION_LABELS = {
 # кнопка частичного исключения под уведомлением.
 VIOLATION_ANALYZERS = ("temporal", "geo", "asn", "profile", "device", "hwid", "user_agent")
 
+# Машинные признаки нарушения — какое правило жёсткой меры сработало. По ним
+# автоматизация выбирает нарушения, не завися от языка и формулировок причин.
+VIOLATION_SIGNALS = (
+    "sharing.sources",             # аномально много источников
+    "sharing.simultaneous",        # много одновременных подключений
+    "sharing.devices",             # много устройств по fingerprint
+    "hwid.matches",                # массовые совпадения HWID
+    "hwid.accounts",               # много разных аккаунтов на одном устройстве
+    "trial_abuse.active_trials",   # несколько аккаунтов с живым триалом на одном устройстве
+    "trial_abuse.repeated_trial",  # повторный триал одного аккаунта на одном устройстве
+)
+
 
 def _analyzer_score(entry: Any) -> float:
     """Вклад анализатора. Breakdown приходит и датаклассами, и словарями."""
@@ -169,3 +181,4 @@ class ViolationScore:
     recommended_action: ViolationAction
     confidence: float
     reasons: List[str]
+    signals: List[str] = field(default_factory=list)  # коды из VIOLATION_SIGNALS

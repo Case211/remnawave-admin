@@ -167,6 +167,40 @@ def _handle_violation_mocks(save_result, config: dict | None = None):
 
 class TestHandleViolationCreatedGate:
     @pytest.mark.asyncio
+    async def test_event_carries_machine_signals(self):
+        """#308: по этим полям автоматизация выбирает абуз триалов без разбора текста причин."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(43, True),
+                                                       config={"violation_auto_hard_block": False})
+        score = _trial_score([])
+        score.signals = ["trial_abuse.active_trials", "hwid.accounts"]
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, score, {"username": "t"}, [], False)
+
+        event = broadcast.await_args.args[0]
+        assert event["violation_kind"] == "hwid"
+        assert event["signals"] == ["trial_abuse.active_trials", "hwid.accounts"]
+        assert event["trial_abuse"] is True
+        assert event["trial_abuse_type"] == "multiple_active_trials"
+
+    @pytest.mark.asyncio
+    async def test_event_without_signals(self):
+        db, monitor, patches = _handle_violation_mocks(save_result=(44, True))
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, _score(), {"username": "t"}, [], False)
+
+        event = broadcast.await_args.args[0]
+        assert (event["signals"], event["trial_abuse"], event["trial_abuse_type"]) == ([], False, "")
+        assert event["violation_kind"] == ""
+
+    @pytest.mark.asyncio
     async def test_violation_keeps_telegram_recipient_from_api_user(self):
         """Panel API user data is camelCase; keep the recipient on the violation."""
         db, monitor, patches = _handle_violation_mocks(save_result=(41, True))

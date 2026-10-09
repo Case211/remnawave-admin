@@ -266,6 +266,34 @@ async def test_hwid_trial_abuse_collects_accomplices():
 
 
 @pytest.mark.asyncio
+async def test_trial_abuse_has_machine_signal():
+    """Правило «только абуз триалов» выбирает нарушение по коду, а не по тексту причины."""
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    shared = [{
+        "hwid": "HW1", "self_telegram_id": 100, "self_email": None,
+        "self_is_trial": True, "self_is_active": True,
+        "other_users": [
+            {"uuid": "U-trial", "telegram_id": 201, "email": None, "username": "trial2",
+             "status": "ACTIVE", "is_trial": True, "is_active": True},
+        ],
+    }]
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
+    assert "trial_abuse.active_trials" in res.signals
+    assert not any(s.startswith("sharing.") for s in res.signals)
+
+
+@pytest.mark.asyncio
+async def test_clean_user_has_no_signals():
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)])
+    assert res.signals == []
+
+
+@pytest.mark.asyncio
 async def test_hwid_no_accomplices_when_threshold_not_hit():
     """Порог не пробит — список соучастников пуст, блокировать некого."""
     geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
