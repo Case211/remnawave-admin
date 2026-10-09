@@ -41,12 +41,12 @@ import client from '@/api/client'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
 import { InteractiveChart } from '@/components/charts/InteractiveChart'
 import { MiddleTruncate } from '@/components/MiddleTruncate'
-import type { GeoCity, GeoCityUser, TopUser, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem, TorrentTopUser } from '@/api/advancedAnalytics'
+import type { GeoCity, GeoCityUser, GeoData, TopUser, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem, TorrentTopUser } from '@/api/advancedAnalytics'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON, formatBytesForExport } from '@/lib/export'
 
-// Lazy-load the map component (leaflet + react-leaflet + clustering)
-const LazyGeoMap = lazy(() => import('@/components/LazyGeoMap'))
+// Lazy-load the geo map (d3-geo + bundled Natural Earth geometry)
+const GeoExplorer = lazy(() => import('@/components/geo/GeoExplorer'))
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -161,25 +161,27 @@ function DateRangePicker({
   onClear: () => void
 }) {
   const { t } = useTranslation()
+  // На телефоне — отдельной строкой во всю ширину, поля делят её поровну:
+  // по своей ширине два поля даты на узком экране не помещались
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex w-full items-center gap-1.5 sm:w-auto">
       <input
         type="date"
         value={dateFrom}
         onChange={(e) => onChange(e.target.value, dateTo)}
-        className="h-7 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+        className="h-7 w-0 min-w-0 flex-1 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50 sm:w-auto sm:flex-none"
       />
       <span className="text-xs text-muted-foreground">–</span>
       <input
         type="date"
         value={dateTo}
         onChange={(e) => onChange(dateFrom, e.target.value)}
-        className="h-7 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+        className="h-7 w-0 min-w-0 flex-1 px-1.5 text-xs rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-white focus:outline-none focus:ring-1 focus:ring-primary/50 sm:w-auto sm:flex-none"
       />
       {(dateFrom || dateTo) && (
         <button
           onClick={onClear}
-          className="text-xs text-muted-foreground hover:text-white px-1.5 py-0.5 rounded hover:bg-[var(--glass-bg-hover)]"
+          className="shrink-0 text-xs text-muted-foreground hover:text-white px-1.5 py-0.5 rounded hover:bg-[var(--glass-bg-hover)]"
           title={t('common.clear', { defaultValue: 'Clear' })}
           aria-label={t('common.clear', { defaultValue: 'Clear' })}
         >
@@ -197,7 +199,8 @@ function GeoMapCard() {
   const [geoPeriod, setGeoPeriod] = useUrlParam('geo_period', '7d')
   const [geoDateFrom, setGeoDateFrom] = useUrlParam('geo_from', '')
   const [geoDateTo, setGeoDateTo] = useUrlParam('geo_to', '')
-  const chart = useChartTheme()
+  const [geoView, setGeoView] = useUrlParam('geo_view', '')
+  const [geoMetric, setGeoMetric] = useUrlParam('geo_metric', 'users')
 
   const hasCustomDates = Boolean(geoDateFrom)
   const apiDateFrom = hasCustomDates ? geoDateFrom : undefined
@@ -210,33 +213,10 @@ function GeoMapCard() {
     refetchInterval: 60_000,
   })
 
-  // URL тайлов приходит с бэкенда: с ключом CARTO — чистые, без ключа —
-  // старый адрес с водяным знаком; тогда под картой подсказка про ключ.
-  const { data: mapTiles } = useQuery({
-    queryKey: ['map-tiles'],
-    queryFn: advancedAnalyticsApi.mapTiles,
-    staleTime: 5 * 60_000,
-  })
-  const mapTileUrl = mapTiles?.[chart.isLight ? 'light' : 'dark'] || chart.mapTileUrl
-
   const cities = geoData?.cities || []
   const countries = geoData?.countries || []
 
-  // Compute max count for radius scaling
-  const maxCount = useMemo(
-    () => Math.max(1, ...cities.map((c: GeoCity) => c.count)),
-    [cities],
-  )
-
-  // Map center: if we have cities, use weighted center; otherwise default
-  const center = useMemo(() => {
-    if (cities.length === 0) return [50, 40] as [number, number]
-    const totalWeight = cities.reduce((s: number, c: GeoCity) => s + c.count, 0)
-    if (totalWeight === 0) return [50, 40] as [number, number]
-    const lat = cities.reduce((s: number, c: GeoCity) => s + c.lat * c.count, 0) / totalWeight
-    const lon = cities.reduce((s: number, c: GeoCity) => s + c.lon * c.count, 0) / totalWeight
-    return [lat, lon] as [number, number]
-  }, [cities])
+  const metric = geoMetric === 'ips' ? 'ips' : 'users'
 
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
@@ -250,7 +230,7 @@ function GeoMapCard() {
               side="right"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {!hasCustomDates && (
               <PeriodSwitcher
                 value={geoPeriod}
@@ -287,30 +267,16 @@ function GeoMapCard() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Map — lazy-loaded with clustering */}
-            <div className="h-[400px] rounded-lg overflow-hidden border border-[var(--glass-border)]/50">
-              <Suspense fallback={
-                <div className="h-full flex items-center justify-center bg-[var(--glass-bg)]">
-                  <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-                </div>
-              }>
-                <LazyGeoMap
-                  cities={cities}
-                  maxCount={maxCount}
-                  center={center}
-                  mapBackground={chart.mapBackground}
-                  mapTileUrl={mapTileUrl}
-                />
-              </Suspense>
-            </div>
-            {mapTiles && !mapTiles.has_key && (
-              <p className="text-xs text-muted-foreground">{t('analytics.geo.noMapKey')}</p>
-            )}
-
-            {/* Top countries */}
-            {countries.length > 0 && (
-              <CountryGrid countries={countries} />
-            )}
+            {/* Векторная карта — отдельный чанк вместе с геометрией */}
+            <Suspense fallback={<Skeleton className="h-[400px] w-full rounded-lg" />}>
+              <GeoExplorer
+                data={geoData as GeoData}
+                view={geoView}
+                onViewChange={setGeoView}
+                metric={metric}
+                onMetricChange={setGeoMetric}
+              />
+            </Suspense>
 
             {/* Users by city — collapsible list */}
             {cities.length > 0 && (
@@ -490,7 +456,7 @@ function CityUsersList({
                   )}
                   {city.unique_users > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {city.unique_users} {t('analytics.geo.users').toLowerCase()}
+                      {t('analytics.geo.uniqueUsers', { count: city.unique_users })}
                     </Badge>
                   )}
                   {hasUsers && (
@@ -575,45 +541,6 @@ function CityUsersList({
   )
 }
 
-// ── Country Grid (B3 fix — totalConns via useMemo) ──────────────
-
-function CountryGrid({ countries }: { countries: { country: string; country_code: string; count: number }[] }) {
-  const totalConns = useMemo(() => countries.reduce((s, x) => s + x.count, 0), [countries])
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-      {countries.slice(0, 10).map((c) => {
-        const pct = totalConns > 0 ? ((c.count / totalConns) * 100).toFixed(1) : '0'
-        return (
-          <div
-            key={c.country_code}
-            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]"
-          >
-            <span className="text-lg leading-none">
-              {countryFlag(c.country_code)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-white truncate">{c.country}</p>
-              <p className="text-xs text-muted-foreground">
-                {c.count.toLocaleString()} ({pct}%)
-              </p>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/** Convert 2-letter country code to flag emoji */
-function countryFlag(code: string): string {
-  if (!code || code.length !== 2) return '\u{1F310}'
-  const offset = 0x1f1e6
-  const a = code.charCodeAt(0) - 65
-  const b = code.charCodeAt(1) - 65
-  if (a < 0 || a > 25 || b < 0 || b > 25) return '\u{1F310}'
-  return String.fromCodePoint(offset + a, offset + b)
-}
-
 // ── Top Users Card ──────────────────────────────────────────────
 
 function TopUsersCard() {
@@ -641,7 +568,7 @@ function TopUsersCard() {
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
       <CardHeader className="pb-2">
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-primary-400" />
               <CardTitle className="text-base">{t('analytics.topUsers.title')}</CardTitle>
@@ -1028,7 +955,7 @@ function TrendsCard() {
               side="right"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {period !== 'all' && (
               <Button
                 variant={compare ? 'default' : 'outline'}

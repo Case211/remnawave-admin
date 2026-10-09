@@ -50,6 +50,7 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Features',
           items: [
             { text: 'Anti-abuse', link: '/en/guide/anti-abuse' },
+            { text: 'Warnings via Bedolaga', link: '/en/guide/bedolaga-warnings' },
             { text: 'Mail server', link: '/en/guide/mail' },
             { text: 'Plugins', link: '/en/guide/plugins' },
             { text: 'Monitoring', link: '/en/guide/monitoring' },
@@ -106,6 +107,7 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Releases',
           items: [
             { text: 'All releases', link: '/en/releases/' },
+            { text: '5.2.0', link: '/en/releases/5.2.0' },
             { text: '5.1.0', link: '/en/releases/5.1.0' },
             { text: '5.0.0', link: '/en/releases/5.0.0' },
           ],

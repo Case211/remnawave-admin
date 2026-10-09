@@ -115,6 +115,7 @@ class IntelligentViolationDetector:
         prefetched_baseline: Optional[Dict[str, Any]] = None,
         prefetched_shared_hwids: Optional[List[Dict[str, Any]]] = None,
         prefetched_srh_records: Optional[List[Dict[str, Any]]] = None,
+        prefetched_ua_review: Optional[Dict[str, Any]] = None,
     ) -> Optional[ViolationScore]:
         """
         Проверить пользователя на нарушения.
@@ -139,7 +140,10 @@ class IntelligentViolationDetector:
             return None
 
         try:
-            user_device_count = prefetched_device_count if prefetched_device_count is not None else await self.db.get_user_devices_count(user_uuid)
+            # Лимит устройств из панели: 0 — безлимит. Анализаторам нужна база не
+            # меньше 1, а превышению лимита (относительный порог шеринга) — настоящий
+            device_limit = prefetched_device_count if prefetched_device_count is not None else await self.db.get_user_devices_count(user_uuid)
+            user_device_count = max(1, device_limit)
 
             if prefetched_active_connections is not None:
                 active_connections = prefetched_active_connections
@@ -206,7 +210,7 @@ class IntelligentViolationDetector:
 
             temporal_score = self.temporal_analyzer.analyze(
                 active_connections, connection_history, user_device_count,
-                is_mobile=_has_mobile, source_of=source_of,
+                is_mobile=_has_mobile, source_of=source_of, device_limit=device_limit,
             )
 
             # Анализируем геолокацию (используем общий кэш)
@@ -262,7 +266,14 @@ class IntelligentViolationDetector:
                         ua_blacklist_extra = config_service.get("violation_ua_blacklist_extra", []) or []
                         self.user_agent_analyzer.set_extra_patterns(ua_whitelist_extra, ua_blacklist_extra)
                         max_age = int(config_service.get("violation_ua_max_age_days", 0) or 0)
-                        ua_score = self.user_agent_analyzer.analyze(srh_records, max_age_days=max_age)
+                        review = prefetched_ua_review
+                        if review is None:
+                            review = (await self._load_ua_reviews([user_uuid])).get(user_uuid, {})
+                        ua_score = self.user_agent_analyzer.analyze(
+                            srh_records, max_age_days=max_age,
+                            reviewed_until=review.get("reviewed_until"),
+                            accepted=review.get("accepted"),
+                        )
                 except Exception as ua_err:
                     logger.warning("UserAgent analysis failed for %s: %s", user_uuid, ua_err)
 
@@ -459,6 +470,8 @@ class IntelligentViolationDetector:
 
             # --- Проверка экстремального абьюза (жёсткая блокировка) ---
             extreme_abuse_reasons = []
+            # Какие правила сработали — машинными кодами (VIOLATION_SIGNALS)
+            signals: List[str] = []
             hb_ips = config_service.get("violations_hard_block_ips", 50)
             hb_sim = config_service.get("violations_hard_block_simultaneous", 20)
             hb_dev = config_service.get("violations_hard_block_devices", 80)
@@ -469,6 +482,7 @@ class IntelligentViolationDetector:
             # и жёстко блокировать его не за что.
             current_sources = {source_of.get(ip, ip) for ip in current_ips}
             if hb_ips > 0 and len(current_sources) >= hb_ips:
+                signals.append("sharing.sources")
                 extreme_abuse_reasons.append(
                     f"Экстремальное количество источников: {len(current_sources)}"
                     f" ({len(current_ips)} адресов, порог: {hb_ips})"
@@ -477,18 +491,38 @@ class IntelligentViolationDetector:
             # 2) Много одновременных активных подключений
             sim_count = getattr(temporal_score, 'simultaneous_connections_count', 0)
             if hb_sim > 0 and sim_count >= hb_sim:
+                signals.append("sharing.simultaneous")
                 extreme_abuse_reasons.append(
                     f"Экстремальное количество одновременных подключений: {sim_count} (порог: {hb_sim})"
                 )
 
+            # 2б) Шаринг сверх лимита устройств: источников больше лимита юзера
+            # больше чем на N, и они вышли за порог с буферами на смену сети и
+            # CGNAT. Абсолютный порог выше одинаков для лимита 1 и 10, этот —
+            # нет. Безлимитных (лимит 0) не касается: превышения у них не бывает.
+            try:
+                hb_excess = int(config_service.get("violations_hard_block_simultaneous_excess", 0) or 0)
+            except (TypeError, ValueError):
+                hb_excess = 0
+            sim_excess = getattr(temporal_score, 'simultaneous_excess', None)
+            if (hb_excess > 0 and sim_excess is not None and sim_excess > hb_excess
+                    and getattr(temporal_score, 'effective_excess', 0) > 0):
+                signals.append("sharing.excess")
+                extreme_abuse_reasons.append(
+                    f"Шаринг сверх лимита устройств: {sim_count} источников при лимите "
+                    f"{temporal_score.device_limit} (превышение на {sim_excess}, порог: {hb_excess})"
+                )
+
             # 3) Много устройств по fingerprint
             if hb_dev > 0 and hasattr(device_score, 'unique_fingerprints_count') and device_score.unique_fingerprints_count >= hb_dev:
+                signals.append("sharing.devices")
                 extreme_abuse_reasons.append(
                     f"Экстремальное количество устройств: {device_score.unique_fingerprints_count} fingerprints (порог: {hb_dev})"
                 )
 
             # 4) Много одинаковых устройств по HWID
             if hb_hwid > 0 and hasattr(hwid_score, 'shared_hwids_count') and hwid_score.shared_hwids_count >= hb_hwid:
+                signals.append("hwid.matches")
                 extreme_abuse_reasons.append(
                     f"Массовый HWID абьюз: {hwid_score.shared_hwids_count} совпадающих HWID (порог: {hb_hwid})"
                 )
@@ -501,6 +535,7 @@ class IntelligentViolationDetector:
             hb_hwid_accounts = config_service.get("violations_hard_block_hwid_accounts", 5)
             hwid_accounts = getattr(hwid_score, 'max_accounts_per_hwid', 1)
             if hb_hwid_accounts > 0 and hwid_accounts >= hb_hwid_accounts:
+                signals.append("hwid.accounts")
                 extreme_abuse_reasons.append(
                     f"Массовый кросс-аккаунт: {hwid_accounts} аккаунтов на одном HWID (порог: {hb_hwid_accounts})"
                 )
@@ -519,6 +554,7 @@ class IntelligentViolationDetector:
                 max_active_trials = 1
             hwid_active_trials = getattr(hwid_score, 'max_active_trials_per_hwid', 0)
             if max_active_trials > 0 and hwid_active_trials > max_active_trials:
+                signals.append("trial_abuse.active_trials")
                 # Текст дословно повторяет причину HwidCrossAccountAnalyzer — причины
                 # дедуплицируются по строке, так что в уведомление уйдёт одна запись.
                 extreme_abuse_reasons.append(
@@ -537,6 +573,7 @@ class IntelligentViolationDetector:
                 max_trial_subs = 1
             hwid_trial_subs = getattr(hwid_score, 'max_trial_subs_per_hwid', 0)
             if max_trial_subs > 0 and hwid_trial_subs > max_trial_subs:
+                signals.append("trial_abuse.repeated_trial")
                 # Текст дословно повторяет причину HwidCrossAccountAnalyzer —
                 # причины дедуплицируются по строке.
                 extreme_abuse_reasons.append(
@@ -597,7 +634,8 @@ class IntelligentViolationDetector:
                 },
                 recommended_action=recommended_action,
                 confidence=confidence,
-                reasons=all_reasons
+                reasons=all_reasons,
+                signals=signals,
             )
             
         except Exception as e:
@@ -609,6 +647,19 @@ class IntelligentViolationDetector:
             )
             return None
     
+    async def _load_ua_reviews(self, user_uuids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Улики User-Agent, которые оператор уже разобрал (см. UserAgentAnalyzer.analyze).
+
+        Сбой здесь не должен глушить сам анализ: без отметок о разборе
+        детектор просто работает как раньше.
+        """
+        try:
+            state = await self.db.batch_get_ua_review_state(user_uuids)
+        except Exception as e:
+            logger.debug("UA review state fetch failed: %s", e)
+            return {}
+        return state if isinstance(state, dict) else {}
+
     async def _fetch_srh_records(self, user_uuid: str) -> Optional[List[Dict[str, Any]]]:
         """
         Получить Subscription Request History для юзера.
@@ -993,8 +1044,10 @@ class IntelligentViolationDetector:
 
         ua_enabled = config_service.get("violations_analyzer_user_agent", True)
         srh_map: Dict[str, List[Dict[str, Any]]] = {}
+        ua_reviews: Dict[str, Dict[str, Any]] = {}
         if ua_enabled:
             srh_map = await self.db.batch_get_srh_records(user_uuids, limit_per_user=100)
+            ua_reviews = await self._load_ua_reviews(user_uuids)
 
         # Convert raw active_conns rows to ActiveConnection dataclasses
         active_connections_map: Dict[str, List[ActiveConnection]] = dict(live_connections or {})
@@ -1036,6 +1089,7 @@ class IntelligentViolationDetector:
                     prefetched_baseline=baselines.get(uid),
                     prefetched_shared_hwids=shared_hwids_map.get(uid, []),
                     prefetched_srh_records=srh_normalized.get(uid),
+                    prefetched_ua_review=ua_reviews.get(uid, {}),
                 )
                 results[uid] = result
                 if uid not in baselines and histories_30d.get(uid):

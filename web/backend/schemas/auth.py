@@ -125,6 +125,8 @@ class AdminInfo(BaseModel):
     password_is_generated: bool = False
     totp_enabled: bool = False
     unrestricted_user_access: bool = False
+    # Видит не всех юзеров: разделы Bedolaga ему закрыты (см. deps.user_scope_restricted)
+    user_scope_restricted: bool = False
     permissions: List[PermissionEntry] = []
 
 

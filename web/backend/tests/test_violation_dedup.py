@@ -167,6 +167,96 @@ def _handle_violation_mocks(save_result, config: dict | None = None):
 
 class TestHandleViolationCreatedGate:
     @pytest.mark.asyncio
+    async def test_event_carries_machine_signals(self):
+        """#308: по этим полям автоматизация выбирает абуз триалов без разбора текста причин."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(43, True),
+                                                       config={"violation_auto_hard_block": False})
+        score = _trial_score([])
+        score.signals = ["trial_abuse.active_trials", "hwid.accounts"]
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, score, {"username": "t"}, [], False)
+
+        event = broadcast.await_args.args[0]
+        assert event["violation_kind"] == "hwid"
+        assert event["signals"] == ["trial_abuse.active_trials", "hwid.accounts"]
+        assert event["trial_abuse"] is True
+        assert event["trial_abuse_type"] == "multiple_active_trials"
+
+    @pytest.mark.asyncio
+    async def test_event_without_signals(self):
+        db, monitor, patches = _handle_violation_mocks(save_result=(44, True))
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, _score(), {"username": "t"}, [], False)
+
+        event = broadcast.await_args.args[0]
+        assert (event["signals"], event["trial_abuse"], event["trial_abuse_type"]) == ([], False, "")
+        assert event["violation_kind"] == ""
+
+    @pytest.mark.asyncio
+    async def test_event_carries_threshold_breakdown(self):
+        """#309: «источников сверх лимита устройств > N» — условием, без арифметики в конструкторе."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(45, True),
+                                                       config={"violation_auto_hard_block": False})
+        score = _score()
+        score.breakdown = {"temporal": SimpleNamespace(
+            score=80.0, reasons=[], simultaneous_connections_count=7, simultaneous_addresses=9,
+            device_limit=1, simultaneous_excess=6, effective_threshold=2, effective_excess=5,
+        )}
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, score, {"username": "t", "hwidDeviceLimit": 1}, [], False)
+
+        event = broadcast.await_args.args[0]
+        fields = ("device_limit", "simultaneous_sources", "simultaneous_addresses",
+                  "simultaneous_excess", "effective_threshold", "effective_excess")
+        assert [event[f] for f in fields] == [1, 7, 9, 6, 2, 5]
+
+    @pytest.mark.asyncio
+    async def test_event_without_temporal_takes_panel_limit(self):
+        db, monitor, patches = _handle_violation_mocks(save_result=(46, True))
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, _score(), {"username": "t", "hwidDeviceLimit": 0}, [], False)
+
+        event = broadcast.await_args.args[0]
+        assert (event["device_limit"], event["simultaneous_excess"]) == (0, None)
+
+    @pytest.mark.asyncio
+    async def test_violation_keeps_telegram_recipient_from_api_user(self):
+        """Panel API user data is camelCase; keep the recipient on the violation."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(41, True))
+        user_info = {
+            "username": "trial-user",
+            "telegramId": 366945364,
+            "email": "trial@example.com",
+            "hwidDeviceLimit": 1,
+        }
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6],
+        ):
+            await collector._handle_violation(USER_UUID, _score(), user_info, [], False)
+
+        saved = db.save_violation.await_args.kwargs
+        assert saved["telegram_id"] == 366945364
+        assert saved["email"] == "trial@example.com"
+
+    @pytest.mark.asyncio
     async def test_dedup_suppresses_events_and_autoblock(self):
         db, monitor, patches = _handle_violation_mocks(save_result=(42, False))
         with patches[0], patches[1], patches[2] as fire, patches[3], patches[4], patches[5] as disable, patches[6]:

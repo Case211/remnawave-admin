@@ -22,7 +22,10 @@ from src.utils.notifications import (
     send_error_notification,
     send_crm_notification,
     send_generic_notification,
+    unknown_event_card,
 )
+from src.utils.i18n import tr
+from shared.tg_card import Card, b, code, copy
 app = FastAPI(title="Remnawave Admin Webhook")
 
 # One-time warning about missing webhook secret
@@ -46,8 +49,11 @@ async def catch_invalid_requests(request: Request, call_next):
             # Некорректный метод - возвращаем 405 без логирования
             return JSONResponse(status_code=405, content={"error": "Method not allowed"})
         
-        # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования
-        if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"]:
+        # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования.
+        # /internal/* — колбэки бэкенда из bot_callbacks.py: run_webhook_server()
+        # подключает их к этому же приложению, секрет они проверяют сами.
+        if (request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"]
+                and not request.url.path.startswith("/internal/")):
             # Для корневого пути возвращаем простой ответ
             if request.url.path == "/":
                 return JSONResponse(status_code=200, content={"service": "remnawave-admin-webhook", "status": "ok"})
@@ -264,12 +270,7 @@ async def remnawave_webhook(request: Request):
             await _handle_torrent_blocker_event(bot, event, event_data)
         else:
             logger.debug("Unknown event type: %s", event)
-            await send_generic_notification(
-                bot=bot,
-                title="Неизвестное событие",
-                message=f"Получено событие: <code>{_esc(event)}</code>\n\nДанные: <code>{_esc(str(event_data)[:200])}</code>",
-                emoji="❓",
-            )
+            await send_generic_notification(bot=bot, card=unknown_event_card(event, event_data))
         
         return JSONResponse(
             status_code=200,
@@ -412,36 +413,29 @@ async def _handle_torrent_blocker_event(bot: Bot, event: str, event_data: dict) 
     падало в общую ветку: владелец получал «Неизвестное событие» с куском
     сырого словаря вместо человеческого текста.
     """
-    node = event_data.get("node") if isinstance(event_data, dict) else None
-    node_name = ""
-    if isinstance(node, dict):
-        node_name = str(node.get("name") or "").strip()
-
-    lines = []
-    if node_name:
-        lines.append(f"Нода: <b>{_esc(node_name)}</b>")
+    data = event_data if isinstance(event_data, dict) else {}
+    node = data.get("node")
+    node_name = str(node.get("name") or "").strip() if isinstance(node, dict) else ""
 
     # Человек один, а полей под него в отчёте два: username и email. Берём
     # первое непустое — иначе в уведомлении дважды подряд идёт строка
     # «Пользователь» с разными написаниями одного и того же абонента.
-    who = event_data.get("username") or event_data.get("email") if isinstance(event_data, dict) else None
-    if who:
-        lines.append(f"Пользователь: <code>{_esc(str(who))}</code>")
+    who = data.get("username") or data.get("email")
 
     # Состав отчёта у плагина меняется от версии к версии, поэтому берём то,
     # что есть, и не пытаемся угадать полную схему.
-    for key, label in (("ip", "IP"), ("destination", "Назначение"),
-                       ("action", "Действие"), ("reason", "Причина")):
-        value = event_data.get(key) if isinstance(event_data, dict) else None
-        if value:
-            lines.append(f"{label}: <code>{_esc(str(value))}</code>")
-
-    await send_generic_notification(
-        bot=bot,
-        title="Торрент-блокировщик",
-        message=chr(10).join(lines) if lines else "Нода прислала отчёт торрент-блокировщика.",
-        emoji="🚫",
-    )
+    card = Card(tr("notify.torrent_blocker.title"))
+    card.fields([
+        (tr("notify.torrent_blocker.node"), b(node_name) if node_name else None),
+        (tr("notify.torrent_blocker.user"), copy(who)),
+        # кто и куда — копируются касанием, служебные поля — просто текстом
+        *((tr(f"notify.torrent_blocker.{key}"), copy(data.get(key))) for key in ("ip", "destination")),
+        *((tr(f"notify.torrent_blocker.{key}"), code(str(data[key])) if data.get(key) else None)
+          for key in ("action", "reason")),
+    ])
+    if not card:
+        card.text(tr("notify.torrent_blocker.empty"))
+    await send_generic_notification(bot=bot, card=card.stamp())
 
 
 async def _handle_service_event(bot: Bot, event: str, event_data: dict) -> None:
@@ -489,9 +483,6 @@ async def _handle_crm_event(bot: Bot, event: str, event_data: dict) -> None:
         event=event,
         event_data=event_data,
     )
-
-
-from src.utils.formatters import _esc  # noqa: E402
 
 
 @app.get("/webhook/health")

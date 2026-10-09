@@ -284,9 +284,9 @@ await panel_notify(
 
 The notification goes out at once to the panel UI, to Telegram (the shared chat and admins' personal channels) and to push. It returns a `bool` — delivery never raises, so it cannot take the calling code down with it.
 
-Details: the panel adds the severity emoji itself, so keep it out of `title`; `body` is Telegram HTML, and lines indented by three spaces become a list; `group_key` mutes repeats: a notification with the same key arriving within the next few minutes never reaches anyone.
+Details: the panel adds the severity emoji itself, so keep it out of `title`; `body` is Telegram HTML, lines indented by three spaces become a list, and a plain `<code>` is copied with a tap; `group_key` mutes repeats: a notification with the same key arriving within the next few minutes never reaches anyone.
 
-The `actions` argument builds buttons under the Telegram message from `{text, action, ref}` triples. The panel will render the markup, but the press is handled by the bot, whose handlers are listed in the panel's own code — that part is out of reach for a third-party plugin, and the press answers "unknown plugin".
+The `actions` argument builds the Telegram notification buttons from `{text, action, ref}` triples; an optional `style` colors a button — `danger`, `success` or `primary`, other values are ignored. The panel will render the markup, but the press is handled by the bot, whose handlers are listed in the panel's own code — that part is out of reach for a third-party plugin, and the press answers "unknown plugin".
 
 ## The rest of the facade
 

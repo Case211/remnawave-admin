@@ -28,14 +28,18 @@ import { resultBadgeClass, resultLabel, formatDateTime, actionTypeLabel } from '
 
 type ChainStepResult = { action?: string; result?: string; details?: { run_at?: string; reason?: string } }
 type AccompliceResult = { user_uuid: string; result: string; reason?: string }
+// Мера не нужна: клиент уже платит (галочки «кроме платящих» у шагов)
+const PAYMENT_REASONS = ['payment_received', 'active_paid_subscription']
 // Причины, по которым отложенный шаг не встал в очередь
-const NOT_QUEUED = ['already_scheduled', 'warning_not_delivered']
+const NOT_QUEUED = ['already_scheduled', 'warning_not_delivered', ...PAYMENT_REASONS]
 
 /** Почему шаг не выполнился — для отложенных шагов и предупреждений своими словами. */
 function skipReason(entry: AutomationLogEntry, t: (key: string, opts?: Record<string, unknown>) => string): string | null {
   const reason = entry.details?.reason
   if (entry.result !== 'skipped' || typeof reason !== 'string') return null
-  if (entry.details?.delayed) return t(`automations.delayed.reasons.${reason}`, { defaultValue: reason })
+  if (entry.details?.delayed || PAYMENT_REASONS.includes(reason)) {
+    return t(`automations.delayed.reasons.${reason}`, { defaultValue: reason })
+  }
   if (entry.action_taken === 'warn_user') return t(`violations.warnReasons.${reason}`, { defaultValue: reason })
   return reason
 }

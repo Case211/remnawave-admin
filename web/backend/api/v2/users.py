@@ -1964,6 +1964,27 @@ async def get_user_hwid_devices(
     return []
 
 
+@router.delete("/{user_uuid}/hwid-devices/removed")
+async def purge_removed_hwid_devices(
+    user_uuid: str,
+    hwid: Optional[str] = None,
+    admin: AdminUser = Depends(require_permission("users", "edit")),
+):
+    """Стереть отвязанные устройства (вкладка «Удалённые») совсем.
+
+    По ним детектор связывает аккаунты дальше, и нарушения приходят снова, даже
+    когда с клиентом разобрались и он удалил устройства. ``hwid`` — стереть одно,
+    без него — все отвязанные. Активные устройства и панель не трогаются.
+    Маршрут объявлен выше ``/{device_id}``: иначе «removed» ушло бы туда как HWID.
+    """
+    await _ensure_user_visible(admin, user_uuid)
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+    deleted = await db_service.purge_removed_hwid_devices(user_uuid, hwid=hwid)
+    return {"success": True, "deleted": deleted}
+
+
 @router.delete("/{user_uuid}/hwid-devices/{device_id}")
 async def delete_user_hwid_device(
     user_uuid: str,

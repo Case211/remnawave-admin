@@ -74,16 +74,17 @@ def sent(monkeypatch):
     calls: list[dict] = []
 
     async def fake_notify(
-        title, body, *, severity, group_key, ticket_id, telegram_body=None, attachment=None,
+        card, body, *, severity, group_key, ticket_id, attachment=None,
         bot_user_id=None, username=None,
     ):
         calls.append({
-            "title": title,
+            "title": card.title_text(),
             "body": body,
             "severity": severity,
             "group_key": group_key,
             "ticket_id": ticket_id,
-            "telegram_body": telegram_body,
+            "card": card,
+            "telegram_body": card.to_html(),
             "attachment": attachment,
         })
 
@@ -240,26 +241,26 @@ def _panel_url(monkeypatch, value: str):
 def test_alert_carries_button_to_the_ticket(monkeypatch):
     _panel_url(monkeypatch, "https://panel.example.com/")
 
-    markup = support_alerts._ticket_button(42)
+    rows = support_alerts.ticket_buttons(42)
 
-    assert markup["inline_keyboard"][0][0]["url"] == "https://panel.example.com/support?ticket=42"
+    assert rows[0][0].url == "https://panel.example.com/support?ticket=42"
 
 
 def test_no_link_without_public_url(monkeypatch):
     # Пустая настройка — ссылок нет, но действия остаются: они работают без панели.
     _panel_url(monkeypatch, "")
 
-    flat = [b for row in support_alerts._ticket_button(42)["inline_keyboard"] for b in row]
-    assert not any(b.get("url") for b in flat)
-    assert any(b.get("callback_data") == "sact:take:42" for b in flat)
+    flat = [b for row in support_alerts.ticket_buttons(42) for b in row]
+    assert not any(b.url for b in flat)
+    assert any(b.callback_data == "sact:take:42" for b in flat)
 
 
 def test_no_link_for_plain_http(monkeypatch):
     # Telegram отклоняет http-кнопку вместе со всем сообщением — лучше без неё.
     _panel_url(monkeypatch, "http://panel.example.com")
 
-    flat = [b for row in support_alerts._ticket_button(42)["inline_keyboard"] for b in row]
-    assert not any(b.get("url") for b in flat)
+    flat = [b for row in support_alerts.ticket_buttons(42) for b in row]
+    assert not any(b.url for b in flat)
 
 
 # ── Карточка нового обращения ──
@@ -280,9 +281,10 @@ async def test_new_ticket_alert_carries_the_card(monkeypatch, sent):
         }
 
     async def context(bot_user_id):
+        from shared.tg_card import b, tg_user
         return (
-            [("📱", "Username", "@ispanec_nn"), ("🆔", "Telegram ID", "366945364"),
-             ("💳", "Подписка", "активна · до 2026-10-19"), ("💰", "Баланс", "100 ₽")],
+            [("Telegram", tg_user("366945364", 366945364)),
+             ("Подписка", "активна · до 19.10.2026"), ("Баланс", b("100 ₽"))],
             {"username": "ispanec_nn", "telegram_id": 366945364},
         )
 
@@ -301,13 +303,14 @@ async def test_new_ticket_alert_carries_the_card(monkeypatch, sent):
     await support_alerts.notify_new_ticket({"id": 65})
 
     card = sent[0]["telegram_body"]
-    assert "Илья" in card
-    assert "Тест тикет-системы" in card
-    assert "тест тикет системы админки" in card
-    assert "Telegram ID:</b> 366945364" in card, "оператору нужен id, а не только имя"
-    assert "Вложений" not in card, "число вложений в карточке не нужно — файл приходит следом"
-    assert sent[0]["attachment"]["kind"] == "photo", "скриншот клиента уходит файлом"
-    assert "Баланс:</b> 100 ₽" in card
+    assert "<b>Илья</b> · Тест тикет-системы" in card
+    assert 'Telegram: <a href="tg://user?id=366945364">366945364</a>' in card, "оператору нужен id, а не только имя"
+    assert "Вложений" not in card, "число вложений в карточке не нужно — файл в ней самой"
+    assert sent[0]["attachment"]["kind"] == "photo", "скриншот клиента уходит вместе с карточкой"
+    assert "Баланс: <b>100 ₽</b>" in card
+    # слова клиента — цитатой с его именем
+    quote = next(blk for blk in sent[0]["card"].to_blocks() if blk["type"] == "blockquote")
+    assert "тест тикет системы админки" in str(quote["blocks"]) and quote["credit"] == "Илья"
     # Колокольчик в панели остаётся коротким — там рядом сама карточка.
     assert sent[0]["body"] == "Илья: Тест тикет-системы"
 
@@ -328,7 +331,7 @@ async def test_new_ticket_alert_survives_silent_bot(monkeypatch, sent):
     await support_alerts.notify_new_ticket({"id": 7})
 
     assert "Пётр" in sent[0]["telegram_body"]
-    assert "кабинет" in sent[0]["telegram_body"]
+    assert "Канал: кабинет" in sent[0]["telegram_body"]
 
 
 def test_card_escapes_customer_text():
@@ -436,35 +439,59 @@ async def test_reply_alert_respects_setting(monkeypatch, sent):
     assert sent == []
 
 
-def test_card_has_no_attachment_counter():
-    """Число вложений не пишем: файл приходит следом и говорит сам за себя."""
-    card = support_alerts._card([("👤", "Клиент", "Илья")], "текст")
+def test_ticket_card_quotes_the_customer():
+    """Слова клиента — цитатой с его именем; число вложений не пишем: файл в карточке."""
+    card = support_alerts._ticket_card("Новое обращение #1", "🆘", "Илья", "Тема", "текст")
+    html = card.to_html()
 
-    assert "Вложений" not in card
-    assert "<blockquote expandable>текст</blockquote>" in card
-    assert card.startswith("   👤 <b>Клиент:</b>"), "поля идут списком rich-разметки"
+    assert "Вложений" not in html
+    assert "<blockquote>текст\n— <i>Илья</i></blockquote>" in html
+    assert html.startswith("<b>🆘 Новое обращение #1</b>")
+
+
+def test_attachment_is_embedded_into_the_card(monkeypatch):
+    """Вложение — медиа-блок карточки, а кнопки — в самом сообщении."""
+    captured = {}
+
+    async def fake_send(card, ticket_id, attachment):
+        captured["blocks"] = card.to_blocks()
+        return True
+
+    async def fake_create(**kwargs):
+        captured["channels"] = kwargs["channels"]
+
+    monkeypatch.setattr(support_alerts, "_send_with_media", fake_send)
+    monkeypatch.setattr(support_alerts, "_panel_base", lambda: "")
+    monkeypatch.setattr("web.backend.core.notification_service.create_notification", fake_create)
+    import asyncio
+    asyncio.run(support_alerts._notify(
+        support_alerts._ticket_card("t", "🆘", "Илья"), "Илья: t",
+        severity="info", group_key="g", ticket_id=5, attachment={"kind": "photo", "content": b"x"},
+    ))
+    types = [blk["type"] for blk in captured["blocks"]]
+    assert "photo" in types and "buttons" in types and types[-1] == "footer"
+    assert captured["channels"] == ["in_app"], "в чат уже ушла карточка с файлом"
 
 
 def test_keyboard_offers_actions_without_panel_url(monkeypatch):
     """Кнопки действий работают и без публичного адреса — ссылки просто пропадают."""
     monkeypatch.setattr(support_alerts, "_panel_base", lambda: "")
 
-    keyboard = support_alerts._ticket_button(65, bot_user_id=667, username="ispanec_nn")
-    flat = [button for row in keyboard["inline_keyboard"] for button in row]
+    flat = [button for row in support_alerts.ticket_buttons(65, bot_user_id=667, username="ispanec_nn")
+            for button in row]
 
-    assert any(b.get("callback_data") == "sact:take:65" for b in flat)
-    assert any(b.get("callback_data") == "sact:close:65" for b in flat)
-    assert any(b.get("url") == "https://t.me/ispanec_nn" for b in flat)
-    assert not any("/support?ticket=" in (b.get("url") or "") for b in flat)
+    assert any(b.callback_data == "sact:take:65" and b.style == "success" for b in flat)
+    assert any(b.callback_data == "sact:close:65" and b.style == "danger" for b in flat)
+    assert any(b.url == "https://t.me/ispanec_nn" for b in flat)
+    assert not any("/support?ticket=" in (b.url or "") for b in flat)
 
 
 def test_keyboard_links_into_panel(monkeypatch):
     monkeypatch.setattr(support_alerts, "_panel_base", lambda: "https://panel.example.com")
 
-    keyboard = support_alerts._ticket_button(65, bot_user_id=667, username=None)
-    flat = [button for row in keyboard["inline_keyboard"] for button in row]
+    flat = [button for row in support_alerts.ticket_buttons(65, bot_user_id=667, username=None) for button in row]
 
-    assert any(b.get("url") == "https://panel.example.com/support?ticket=65" for b in flat)
-    assert any(b.get("url") == "https://panel.example.com/bedolaga/customers/667" for b in flat)
+    assert any(b.url == "https://panel.example.com/support?ticket=65" for b in flat)
+    assert any(b.url == "https://panel.example.com/bedolaga/customers/667" for b in flat)
     # Личку без username не предлагаем: Telegram отклонит такую ссылку.
-    assert not any("t.me" in (b.get("url") or "") for b in flat)
+    assert not any("t.me" in (b.url or "") for b in flat)

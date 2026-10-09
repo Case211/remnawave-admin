@@ -217,7 +217,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "category": "general",
         "subcategory": "integrations",
         "display_name": "Источник MaxMind GeoIP",
-        "description": "auto — GitHub (ltsdev/maxmind) затем MaxMind; github — только GitHub (без ключа); maxmind — только официальный (нужен ключ)",
+        "description": "auto — зеркала GitHub (P3TERX, GitSquared), затем MaxMind; github — только зеркала (без ключа); maxmind — только официальный (нужен ключ). Своё зеркало — переменная MAXMIND_MIRROR_URL",
         "default_value": "auto",
         "env_var_name": "MAXMIND_SOURCE",
         "options": ["auto", "github", "maxmind"],
@@ -241,7 +241,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "category": "notifications",
         "subcategory": "delivery",
         "display_name": "Rich-оформление уведомлений",
-        "description": "Отправлять Telegram-уведомления «документами» Bot API 10.1: настоящие заголовки, списки, сворачиваемые секции. При отказе Telegram автоматически откатывается на обычный HTML",
+        "description": "Отправлять Telegram-уведомления rich-карточками (Bot API 10.1+): таблицы, сворачиваемые секции, цитаты, кнопки прямо в карточке, поля копируются касанием. При отказе Telegram автоматически откатывается на обычный HTML",
         "default_value": "true",
         "sort_order": 2,
     },
@@ -489,6 +489,19 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 4,
     },
     {
+        "key": "finance_reminder_hour",
+        "value_type": "int",
+        "category": "finance",
+        "subcategory": "reminders",
+        "display_name": "Час отправки напоминаний",
+        "description": (
+            "С какого часа (0–23) слать напоминания за день. Час и сам «день» считаются "
+            "в часовом поясе панели, а не по UTC"
+        ),
+        "default_value": "10",
+        "sort_order": 5,
+    },
+    {
         "key": "finance_autosync_enabled",
         "value_type": "bool",
         "category": "finance",
@@ -527,19 +540,6 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Ежедневно заносить пополнения баланса из Bedolaga в доходы (P&L-график, доход за месяц). ⚠️ Не совмещать с ручным импортом выручки подписок — двойной учёт",
         "default_value": "true",
         "sort_order": 8,
-    },
-
-    # === MAP (CARTO) ===
-    # Карта в аналитике рисуется тайлами CARTO; с августа 2026 без ключа они с
-    # водяным знаком «API key required». Ключ бесплатный, живёт в URL тайла.
-    {
-        "key": "map_tiles_api_key",
-        "value_type": "string", "category": "general",
-        "subcategory": "integrations",
-        "display_name": "Ключ карт CARTO",
-        "description": "Ключ CARTO Basemaps для карты в аналитике. Без ключа тайлы с водяным знаком "
-                       "«API key required». Бесплатный ключ (5 млн тайлов в месяц): carto.com/basemaps/apikey",
-        "default_value": "", "env_var_name": "MAP_TILES_API_KEY", "is_secret": True, "sort_order": 40,
     },
 
     # === INTEGRATIONS (DNS) ===
@@ -1271,8 +1271,9 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "value_type": "int",
         "category": "violations",
         "subcategory": "thresholds",
-        "display_name": "Макс. одновременных IP",
-        "description": "Максимальное количество одновременных IP сверх лимита устройств для срабатывания (0 = авто по кол-ву устройств)",
+        "display_name": "Общий предел одновременных IP",
+        "description": "Общий для всех юзеров предел одновременных источников вместо их лимита устройств; "
+                       "к нему прибавляются буферы на смену сети и CGNAT. 0 = у каждого свой лимит устройств из панели",
         "default_value": "0",
         "sort_order": 10,
     },
@@ -1465,6 +1466,19 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 24,
     },
     {
+        "key": "violations_hard_block_simultaneous_excess",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "hard_block",
+        "display_name": "Жёсткая блокировка: источников сверх лимита устройств",
+        "description": "Жёсткая блокировка, когда одновременных источников больше лимита устройств юзера "
+                       "больше чем на это число: при 5 и лимите 1 — с 7 источников, при лимите 3 — с 9. "
+                       "Источники должны выйти и за порог с буферами на смену сети и CGNAT. "
+                       "Безлимитных (лимит 0) не касается. 0 = отключено",
+        "default_value": "0",
+        "sort_order": 25,
+    },
+    {
         "key": "violations_trial_tags",
         "value_type": "string",
         "category": "violations",
@@ -1544,6 +1558,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "display_name": "Порог разных адресов (рой)",
         "description": "Со сколькими РАЗНЫМИ адресами должен идти обмен за полчаса. Торрент — это рой из десятков пиров; события по одному и тому же адресу набивает обычное долгое соединение, и на этом ловились антивирус и игровые лаунчеры. 1 — не проверять рой",
         "default_value": "3",
+        "sort_order": 44,
+    },
+    {
+        "key": "torrent_min_events_per_peer",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Событий на адрес (глубина обмена)",
+        "description": "Сколько событий в среднем должно приходиться на один адрес за полчаса. Торрент-клиент подолгу качает с одних и тех же пиров, и событий на адрес у него в разы больше одного; игровой лаунчер и опрос DHT касаются каждого адреса по разу. 1 — не проверять",
+        "default_value": "1.5",
         "sort_order": 44,
     },
     {
@@ -1947,6 +1971,30 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Требовать настройку TOTP для всех аккаунтов (при входе без 2FA будет предложено настроить)",
         "default_value": "false",
         "sort_order": 3,
+    },
+    {
+        "key": "webauthn_rp_id",
+        "value_type": "string",
+        "category": "security",
+        "subcategory": "auth_methods",
+        "display_name": "Passkey: домен (RP ID)",
+        "description": "Домен, к которому привязываются passkeys, например panel.example.com. "
+                       "Пусто — домен, по которому открыта панель. После смены passkeys, "
+                       "добавленные под прежним доменом, перестанут работать",
+        "default_value": "",
+        "sort_order": 10,
+    },
+    {
+        "key": "webauthn_origin",
+        "value_type": "string",
+        "category": "security",
+        "subcategory": "auth_methods",
+        "display_name": "Passkey: адрес панели (origin)",
+        "description": "Адрес со схемой, например https://panel.example.com. Пусто — собирается "
+                       "из заголовков запроса (Host и X-Forwarded-Proto). Задайте, если прокси "
+                       "перед панелью не передаёт X-Forwarded-Proto",
+        "default_value": "",
+        "sort_order": 11,
     },
     {
         "key": "auth_max_attempts",

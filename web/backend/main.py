@@ -877,7 +877,7 @@ async def lifespan(app: FastAPI):
         logger.warning("API key usage buffer start failed: %s", e)
 
     # Ensure MaxMind GeoLite2 databases are downloaded
-    # Supports: license key (official), GitHub mirror (ltsdev/maxmind), or auto
+    # Supports: license key (official), GitHub mirrors (see maxmind_updater.GITHUB_MIRRORS), or auto
     try:
         from shared.maxmind_updater import ensure_databases
         maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")

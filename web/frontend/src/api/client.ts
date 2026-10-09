@@ -146,7 +146,8 @@ function normalizeApiError(error: AxiosError): void {
     const { code, detail: fallbackMessage } = respData.detail as { code?: string; detail?: string }
     if (code) {
       const i18nKey = `errors.${code}`
-      const translated = i18n.t(i18nKey)
+      // {{detail}} в переводе — место для текста сервера (причина отказа passkey)
+      const translated = i18n.t(i18nKey, { detail: fallbackMessage ?? '' })
       // Use translation if available, otherwise fallback to server message
       respData.detail = translated !== i18nKey ? translated : (fallbackMessage || code)
       respData.code = code

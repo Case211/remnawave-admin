@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
+from shared.i18n import tr
+from shared.tg_card import Card, b, when
 from shared.db_schema import (
     NODE_ATTACK_EVENTS_TABLE,
     NODE_METRICS_SNAPSHOTS_TABLE,
@@ -43,14 +45,6 @@ _CONNTRACK_FULL_RATIO = 0.9
 
 # Признаки, по которым всплеск считается атакой. Первые четыре означают, что
 # ноде уже больно; small_packets — что трафик не похож на полезный.
-REASON_LABELS: dict[str, str] = {
-    "syn_flood": "SYN-флуд (ядро отвечает syncookies)",
-    "listen_drops": "очередь входящих соединений переполнена",
-    "nic_drops": "сетевая карта роняет пакеты",
-    "conntrack_full": "таблица соединений почти заполнена",
-    "small_packets": "поток из мелких пакетов",
-}
-
 _PAINFUL = ("syn_flood", "listen_drops", "nic_drops", "conntrack_full")
 
 # Мелкие пакеты без признаков боли — атака только при потоке на порядок выше
@@ -314,19 +308,50 @@ async def _close_finished(conn) -> list[dict[str, Any]]:
 
 def _fmt_speed(bps: int) -> str:
     mbit = bps * 8 / 1_000_000
-    return f"{mbit:.0f} Мбит/с" if mbit >= 1 else f"{bps * 8 / 1000:.0f} Кбит/с"
+    if mbit >= 1:
+        return tr("notify.attack.unit.mbit", value=f"{mbit:.0f}")
+    return tr("notify.attack.unit.kbit", value=f"{bps * 8 / 1000:.0f}")
 
 
 def _fmt_int(value: int) -> str:
     """Разряды через неразрывный пробел: «1 200 000»."""
-    return f"{value:,}".replace(",", " ")
+    return f"{value:,}".replace(",", " ")
 
 
 def _fmt_duration(started: datetime, ended: datetime) -> str:
     minutes = max(1, int((ended - started).total_seconds() // 60))
     if minutes < 60:
-        return f"{minutes} мин"
-    return f"{minutes // 60} ч {minutes % 60} мин"
+        return tr("notify.attack.duration.minutes", minutes=minutes)
+    return tr("notify.attack.duration.hours", hours=minutes // 60, minutes=minutes % 60)
+
+
+def started_card(sample: NetSample, verdict: Verdict, baseline: Baseline, escalated: bool = False) -> Card:
+    """Атака началась (или усилилась): что сейчас против обычного и по каким признакам."""
+    card = Card(tr("notify.attack.escalated" if escalated else "notify.attack.started"),
+                emoji="🔥" if escalated else "🛡")
+    card.lead(b(sample.name))
+    card.table(
+        [[tr("notify.attack.row.rx"), b(_fmt_speed(sample.rx_bps)), _fmt_speed(int(baseline.rx_bps))],
+         [tr("notify.attack.row.pps"), b(_fmt_int(sample.rx_pps)), _fmt_int(int(baseline.rx_pps))]],
+        head=[tr("notify.attack.col.metric"), tr("notify.attack.col.now"), tr("notify.attack.col.usual")],
+        align=["left", "right", "right"],
+    )
+    card.section(tr("notify.attack.signs"))
+    card.bullets(tr(f"notify.attack.reason.{reason}") for reason in verdict.reasons)
+    return card.stamp()
+
+
+def finished_card(event: dict[str, Any]) -> Card:
+    started, ended = event["started_at"], event["last_seen_at"]
+    card = Card(tr("notify.attack.finished"), emoji="✅")
+    card.lead(b(event["name"]))
+    card.fields([
+        (tr("notify.attack.field.duration"), b(_fmt_duration(started, ended))),
+        (tr("notify.attack.field.peak"), _fmt_speed(event["peak_rx_bps"] or 0)),
+        (tr("notify.attack.field.started"), when(started)),
+        (tr("notify.attack.field.ended"), when(ended)),
+    ])
+    return card.stamp()
 
 
 async def _notify_started(
@@ -334,23 +359,15 @@ async def _notify_started(
 ) -> None:
     from web.backend.core.notification_service import create_notification
 
-    reasons = "\n".join(f"   • {REASON_LABELS[r]}" for r in verdict.reasons)
-    body = (
-        f"<b>Нода:</b> {sample.name}\n"
-        f"<b>Приём:</b> {_fmt_speed(sample.rx_bps)} · {_fmt_int(sample.rx_pps)} пакетов/с\n"
-        f"<b>Обычно:</b> {_fmt_speed(int(baseline.rx_bps))} · "
-        f"{_fmt_int(int(baseline.rx_pps))} пакетов/с\n"
-        f"<b>Признаки:</b>\n{reasons}"
-    )
-
+    card = started_card(sample, verdict, baseline, escalated)
     # Отдельный group_key для эскалации: иначе дедуп примет её за повтор
     # начального алерта и проглотит ровно то сообщение, которое важнее
-    prefix = "Атака усилилась" if escalated else "Нода под атакой"
     key = "node_attack_critical" if escalated else "node_attack"
 
     await create_notification(
-        title=f"{prefix}: {sample.name}",
-        body=body,
+        title=f"{card.title_text()}: {sample.name}",
+        body=card.body_text(),
+        telegram_card=card,
         type="alert",
         severity=verdict.severity,
         channels=["in_app", "telegram", "push"],
@@ -365,16 +382,11 @@ async def _notify_started(
 async def _notify_finished(event: dict[str, Any]) -> None:
     from web.backend.core.notification_service import create_notification
 
-    started, ended = event["started_at"], event["last_seen_at"]
-    body = (
-        f"<b>Нода:</b> {event['name']}\n"
-        f"<b>Длилась:</b> {_fmt_duration(started, ended)}\n"
-        f"<b>Пик приёма:</b> {_fmt_speed(event['peak_rx_bps'] or 0)}"
-    )
-
+    card = finished_card(event)
     await create_notification(
-        title=f"Атака закончилась: {event['name']}",
-        body=body,
+        title=f"{card.title_text()}: {event['name']}",
+        body=card.body_text(),
+        telegram_card=card,
         type="alert",
         severity="info",
         channels=["in_app", "telegram"],

@@ -33,7 +33,7 @@ All of them live in **Settings → Violations → Thresholds**.
 | Setting | Meaning | Default |
 |---------|---------|---------|
 | Minimum notification score | below this a violation stays quiet | `50` |
-| Max simultaneous IPs | above the device limit; `0` means derive it | `0` |
+| Shared simultaneous IP limit | one limit for everyone instead of the user's device limit, network-switch and CGNAT buffers are added on top; `0` — each user's own limit from the panel | `0` |
 | Mobile CGNAT buffer | how many extra addresses to forgive a mobile connection | `3` |
 | Max distance between cities | below this, movement is not suspicious | `50` km |
 | Max accounts per HWID | how many different people may share a device | `2` |
@@ -44,6 +44,12 @@ All of them live in **Settings → Violations → Thresholds**.
 Subscriptions of one person are grouped by `telegram_id`, or by email when the registration had no Telegram. Two plans of the same user do not look like two accounts.
 :::
 
+### Sharing above the device limit
+
+The absolute hard-block threshold on simultaneous connections is the same for a one-device plan and a ten-device one: it either cuts large plans or is too soft on small ones. The relative one — **“Hard block: sources above the device limit”** in the hard block section: with a value of 5, a plan with a limit of 1 is blocked from 7 simultaneous sources, with a limit of 3 — from 9. Sources are counted after collapsing carrier pools, and they must also exceed the threshold with network-switch and CGNAT buffers. Unlimited users (limit 0) are not affected. Off by default.
+
+The same can be built as an automation: the violation event carries the **device limit**, **sources above the device limit**, **threshold with buffers** and **sources above the threshold** — a “Sources above the device limit > 5” condition plus the action you need, with a warning and a delay. The threshold breakdown is also saved in the violation itself.
+
 ## Trial farming
 
 The live-trials rule catches exactly what new accounts are created for: one device carrying several active trials. The upgrade path — trial expired, paid plan bought — does not trigger it, and neither do two paying people sharing a tablet.
@@ -51,6 +57,8 @@ The live-trials rule catches exactly what new accounts are created for: one devi
 The whole cluster gets blocked, not just the account under review: otherwise, once it is banned, the rest see a single live trial on the device, fall below the threshold, and the farming costs the abuser exactly one account out of N. Paid and expired subscriptions are never included.
 
 Which subscriptions count as trials is defined by a list of tags and internal squad UUIDs, in the same thresholds section.
+
+Unlinked devices stay on record — the user card shows them on the **Removed** tab — so re-linking the same hardware to a new account remains visible. The flip side: such a link keeps raising violations even after the case is settled and the customer has removed the extra devices. Delete those records on the same tab, one by one or with **Clear removed** (the “Users → edit” permission). Only the admin's history is erased: active devices and the panel are not touched, but re-linking these devices to other accounts will no longer be visible either.
 
 ## What happens on a violation
 
@@ -113,6 +121,10 @@ Several clients can sit behind one mobile carrier address — they share the cap
 
 The violation card shows which analyzers fired and with what weight, the addresses and sources, cities and providers, devices. Actions and the review note are made from there.
 
+The **“Connections behind the violation”** block names the connections themselves rather than a reason string: which addresses from which countries were online at the same time, both ends of an impossible trip, which addresses came through hosting or VPN — with country, provider, node and time. Below it, **addresses around the violation** (±1 h): one line per address with first and last appearance, number of connections and nodes, instead of hundreds of timeline rows. The event timeline now shows the country and network type of every connection, and the devices in the card show when they were last updated. The evidence block exists for violations recorded after the update: older ones did not keep the breakdown.
+
+A decision on a violation also closes its evidence. The User-Agent analyzer no longer raises subscription requests that were part of a reviewed violation — otherwise an old `curl` request in the subscription history would spawn a new violation every half hour. Suspicious requests made after the review are caught as usual. Annulling goes further: once the operator calls it a false positive, the detector stops treating that same User-Agent of this customer as suspicious. Torrents follow the same rule — see [Torrents](/en/guide/torrents).
+
 Nearby tools: **IP Lookup** for a single address, the connection geo map, and the shared-HWID tab with its live-trial counter.
 
 ## Torrents
@@ -132,6 +144,8 @@ A separate story: [torrent detection](/en/guide/torrents), the Xray routing tag 
 A violation is not yet a reason to cut access. People often do not know they are breaking the rules: they shared a key with a relative, left a torrent client running, or moved and log in from two countries within an hour. Access cut without explanation comes back to you as a “my VPN is broken” ticket, and sorting it out takes longer than the violation itself.
 
 That is why you can write to the customer: from the violation card, from the Telegram notification with the **“⚠️ Warn”** button, or automatically together with the applied action.
+
+Step-by-step setup of the Bedolaga bot and cabinet side is in [Warnings via Bedolaga](/en/guide/bedolaga-warnings).
 
 ### Texts
 
@@ -156,9 +170,11 @@ Sending requires the `violations:resolve` permission — the same as blocking: t
 
 Telegram goes through the Bedolaga bot — the same bot the customer already talks to. Email goes through it too, and if the bot did not deliver it (not connected, did not find the customer, the customer has no email in the bot), it is sent by the panel's **built-in mail server**, provided a sending domain is set up. Any customer with an email gets the letter, whether they have Telegram or not.
 
+The exception is an **unconfirmed email**. The bot does not write to such an address: anyone could have entered it, and the violation letter would reach a stranger. The panel does not send this letter either — it holds the same email as the bot. If there are no other channels, the operator sees the reason "email not confirmed".
+
 Channels report separately: a customer who blocked the bot still gets the email. If the customer has no contacts for the enabled channels, the warning is not sent, and the operator sees why.
 
-Telegram requires a bot with the `POST /users/{id}/notify` endpoint in its external API and `BEDOLAGA_API_URL` with `BEDOLAGA_API_TOKEN` filled in — the same ones tickets and customer cards work with.
+Telegram requires Bedolaga bot 4.16.0 or newer — that release added the `POST /users/{id}/notify` external API endpoint — and `BEDOLAGA_API_URL` with `BEDOLAGA_API_TOKEN` filled in, the same ones tickets and customer cards work with.
 
 ### Warn first, act later
 
@@ -170,11 +186,14 @@ A delayed step waits in the database and survives a restart. Before running, it 
 - the customer is whitelisted;
 - the action is already in place — otherwise a delayed one-day block would unblock someone blocked forever, and a limit would override a manual one;
 - the customer contacted support in the meantime (Bedolaga tickets or [external support events](/en/reference/api-endpoints#external-support-contact)) — then the operator decides; the check can be turned off for the step;
+- the customer paid after the trigger or already has a paid subscription — if these checkboxes are set on the step (off by default). Payment is checked against Bedolaga transactions, or by subscription status without it: paid means live and without a trial tag or squad. The customer's other accounts are found by Telegram ID, or by email without one;
 - the rule was turned off — this cancels all waiting steps.
 
 If the warning in the chain did not reach the customer, the delayed action is not applied at all: punishing without explanation is exactly what the chain protects against. A repeated trigger for the same customer does not add a second action while the first one is waiting. What is waiting, what ran and why a step was skipped is in the automations log.
 
 The detector's built-in auto-block (hard_block, e.g. for trial abuse) fires immediately. To route it through a warning too, turn off `violation_auto_hard_block` and create a rule: “Violation detected” with the condition `recommended_action = hard_block` → “Warn user” → after N hours “Block user” with the **“Also trial-abuse accomplices on the same HWID”** checkbox. Like the built-in auto-block, the action reaches other subscriptions with a live trial on the same device — otherwise the bundle keeps working; it does not touch customers who are already blocked, limited or whitelisted.
+
+Sharing, torrents and User-Agent can carry the same `hard_block`. To make the rule about trial farming only, use the condition **“Trial abuse” = yes** instead, and **“Triggered hard-block rules”** narrows it further — for example, to a repeated trial on a device only. These are machine signals and do not depend on the wording of the reasons. The **“Skip if the customer paid after the trigger”** and **“…already has a paid subscription”** checkboxes keep the rule from blocking someone who bought a subscription while the step was waiting: the log shows the step as skipped with that reason.
 
 ## Violations in the Bedolaga cabinet
 

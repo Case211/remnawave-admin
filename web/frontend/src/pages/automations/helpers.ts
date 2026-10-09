@@ -267,7 +267,9 @@ function actionLabel(action: string): string {
 
 export function describeAction(rule: { action_type: string; action_config: Record<string, unknown> }): string {
   const cfg = rule.action_config as AnyConfig
-  const base = actionLabel(rule.action_type) + (cfg.with_accomplices ? ` ${t('automations.accomplices.short')}` : '')
+  const base = actionLabel(rule.action_type)
+    + (cfg.with_accomplices ? ` ${t('automations.accomplices.short')}` : '')
+    + (cfg.unless_paid || cfg.unless_paid_after ? ` ${t('automations.payment.short')}` : '')
 
   if (rule.action_type === 'notify') {
     const channel = cfg.channel === 'webhook' ? 'Webhook' : 'Telegram'
@@ -405,8 +407,11 @@ export const CONDITION_OPERATORS = new Proxy([] as unknown as ReturnType<typeof 
 // Условие на поле, которого нет в данных, всегда ложно, и правило молчит.
 const TRIGGER_FIELDS: Record<string, string[]> = {
   'violation.detected': [
-    'score', 'recommended_action', 'country', 'countries', 'asn_types',
+    'score', 'recommended_action', 'violation_kind', 'trial_abuse', 'trial_abuse_type', 'signals', 'reasons',
+    'country', 'countries', 'asn_types',
     'is_mobile', 'is_datacenter', 'is_vpn', 'unique_ips', 'simultaneous', 'devices',
+    'device_limit', 'simultaneous_sources', 'simultaneous_addresses', 'simultaneous_excess',
+    'effective_threshold', 'effective_excess',
   ],
   'torrent.detected': ['event_count', 'window_events', 'peers', 'node_name'],
   'node.went_offline': ['offline_minutes', 'users_before', 'country_code', 'node_name'],
@@ -430,7 +435,10 @@ const TRIGGER_FIELDS: Record<string, string[]> = {
 
 // Переменные для текста уведомления — по триггеру
 const TRIGGER_VARS: Record<string, string[]> = {
-  'violation.detected': ['{user}', '{user_code}', '{score}', '{recommended_action}', '{country}', '{unique_ips}'],
+  'violation.detected': [
+    '{user}', '{user_code}', '{score}', '{recommended_action}', '{country}', '{unique_ips}',
+    '{simultaneous_sources}', '{device_limit}', '{simultaneous_excess}',
+  ],
   'torrent.detected': ['{user}', '{user_code}', '{window_events}', '{peers}', '{node}'],
   'node.went_offline': ['{node}', '{node_code}', '{offline_minutes}', '{users_before}', '{country_code}'],
   'user.traffic_exceeded': ['{user}', '{user_code}', '{percent}', '{traffic_gb}', '{days_left}'],
@@ -470,6 +478,28 @@ function fieldOption(value: string) {
 /** Поля условий для выбранного триггера. */
 export function conditionFieldsFor(triggerType: string, event: string, metric: string) {
   return (TRIGGER_FIELDS[triggerKey(triggerType, event, metric)] || []).map(fieldOption)
+}
+
+// Поля с известным набором значений: выбор из списка вместо ручного ввода,
+// иначе опечатка в коде признака делает правило вечно ложным
+const CONDITION_VALUES: Record<string, readonly string[]> = {
+  violation_kind: ['hwid', 'temporal', 'geo', 'asn', 'profile', 'device', 'user_agent'],
+  trial_abuse: ['true', 'false'],
+  trial_abuse_type: ['multiple_active_trials', 'repeated_trial'],
+  signals: [
+    'trial_abuse.active_trials', 'trial_abuse.repeated_trial', 'hwid.accounts', 'hwid.matches',
+    'sharing.sources', 'sharing.simultaneous', 'sharing.devices', 'sharing.excess',
+  ],
+}
+
+// Виды нарушений уже переведены в «Предупреждениях» — подписи берём оттуда
+const VALUE_LABELS: Record<string, string> = { violation_kind: 'violations.notices.kinds' }
+
+/** Варианты значения условия для поля с известным набором; null — ввод вручную. */
+export function conditionValueOptions(field: string) {
+  const values = CONDITION_VALUES[field]
+  const prefix = VALUE_LABELS[field] ?? `automations.conditionValues.${field}`
+  return values ? values.map((value) => ({ value, label: t(`${prefix}.${value}`, { defaultValue: value }) })) : null
 }
 
 /** Переменные текста уведомления для выбранного триггера. */

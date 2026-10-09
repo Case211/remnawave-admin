@@ -102,6 +102,8 @@ export interface AdminInfo {
   password_is_generated: boolean
   totp_enabled: boolean
   unrestricted_user_access: boolean
+  // Видит не всех юзеров — разделы Bedolaga закрыты
+  user_scope_restricted?: boolean
   permissions: PermissionEntry[]
 }
 

@@ -16,6 +16,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Iterable, Optional
 
+from shared.i18n import tr
+from shared.tg_card import Card, b, code, i
+
 logger = logging.getLogger(__name__)
 
 # Событие: ("new" | "update", карточка каталога, прежняя версия или "")
@@ -125,16 +128,22 @@ async def announce(events: list[CatalogEvent]) -> None:
     for kind, card, old_version in events:
         name = _title(card)
         version = str(card.get("latest_version") or "")
+        message = Card(tr(f"notify.plugin_catalog.{kind}", name=name, version=version), emoji="🧩")
         if kind == "new":
-            title = f"Новый плагин: {name}"
-            body = _summary(card) or "Плагин доступен для покупки в разделе «Плагины»."
+            message.text(_summary(card) or tr("notify.plugin_catalog.new_text"))
+            message.fields([(tr("notify.plugin_catalog.field.version"), code(version) if version else None)])
         else:
-            title = f"Обновление плагина: {name} {version}"
-            body = f"Установлена версия {old_version}. Обновить можно на карточке плагина."
+            message.fields([
+                (tr("notify.plugin_catalog.field.version"), b(version)),
+                (tr("notify.plugin_catalog.field.installed"), code(str(old_version))),
+            ])
+            message.text(i(tr("notify.plugin_catalog.update_text")))
+        message.stamp()
         try:
             await create_notification(
-                title=title,
-                body=body,
+                title=message.title_text(),
+                body=message.body_text(),
+                telegram_card=message,
                 type="info",
                 severity="info",
                 channels=["in_app", "telegram"],

@@ -74,6 +74,23 @@ describe('usePermissionStore', () => {
       expect(hasPermission('settings', 'read')).toBe(false)
     })
 
+    it('closes Bedolaga to an admin who sees only part of the users', () => {
+      usePermissionStore.setState({
+        isLoaded: true,
+        role: 'operator',
+        userScopeRestricted: true,
+        permissions: [
+          { resource: 'bedolaga_customers', action: 'view' },
+          { resource: 'users', action: 'view' },
+        ],
+      })
+      const { hasPermission } = usePermissionStore.getState()
+      expect(hasPermission('bedolaga_customers', 'view')).toBe(false)
+      expect(hasPermission('users', 'view')).toBe(true)
+      usePermissionStore.setState({ userScopeRestricted: false })
+      expect(usePermissionStore.getState().hasPermission('bedolaga_customers', 'view')).toBe(true)
+    })
+
     it('denies permissions not in the list for viewer role', () => {
       usePermissionStore.setState({
         isLoaded: true,

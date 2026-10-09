@@ -112,13 +112,16 @@ class TestBackupUsesBotSettings:
             async def __aexit__(self, *a):
                 return False
 
-            async def post(self, url, data=None, files=None):
+            async def post(self, url, data=None, files=None, json=None):
                 seen["url"] = url
+                seen["files"] = files
                 return _Resp()
 
         with patch("httpx.AsyncClient", _Client):
             result = await backup_service.send_backup_to_telegram("db_backup_a.sql.gz", chat_id="1", bot_token="t")
 
         assert result["parts_sent"] == 1
-        assert seen["url"] == "https://tg.local/bott/sendDocument"
+        # карточка «бэкап готов» с файлом внутри — rich-сообщением
+        assert seen["url"] == "https://tg.local/bott/sendRichMessage"
+        assert seen["files"]["document"][:2] == ("db_backup_a.sql.gz", b"dump")
         assert seen["kwargs"] == {"timeout": 120, "proxy": "socks5://1.2.3.4:1080"}

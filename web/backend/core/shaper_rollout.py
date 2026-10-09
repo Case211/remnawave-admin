@@ -15,6 +15,8 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from shared.db_schema import NODE_SHAPER_PENALTIES_TABLE, NODE_SHAPERS_TABLE, NODES_TABLE
+from shared.i18n import tr
+from shared.tg_card import Card, b, copy, join, when
 
 logger = logging.getLogger(__name__)
 
@@ -375,28 +377,12 @@ async def _notify_penalty(node_uuid, node_name, settings_row, row_id, ev, user_l
             f"UPDATE {NODE_SHAPER_PENALTIES_TABLE} SET notified = TRUE WHERE id = $1", row_id,
         )
 
-    from html import escape
-    from shared import timefmt
     from web.backend.core.notification_service import create_notification
 
-    names = ", ".join(escape(u["username"] or u["uuid"][:8]) for u in fresh)
-    rate = settings_row["penalty_kbit"] / 1000 if settings_row else None
-    window = settings_row["penalty_window_sec"] if settings_row else None
-    until_local = timefmt.fmt(ev["until"], "%H:%M")
-    lines = [
-        f"👤 {names}",
-        f"🖥 Нода: <b>{escape(node_name)}</b>",
-        f"📦 Прокачал: <b>{_format_bytes(ev['bytes'])}</b>" + (f" за {window} с" if window else ""),
-    ]
-    if rate:
-        lines.append(f"🔻 Скорость урезана до <b>{rate:g} Мбит/с</b> до {until_local}")
-    lines.append(f"🌐 IP: <code>{escape(ev['ip'])}</code>")
-    body = "\n".join(lines)
-
-    import re
+    card = build_penalty_card(node_name, settings_row, ev, fresh)
     await create_notification(
-        title="🐌 Шейпер: штраф качальщику",
-        body=re.sub(r"<[^>]+>", "", body),
+        title=card.title_text(),
+        body=card.body_text(),
         type="shaper",
         severity="info",
         source="shaper",
@@ -404,9 +390,28 @@ async def _notify_penalty(node_uuid, node_name, settings_row, row_id, ev, user_l
         group_key=f"shaper:{fresh[0]['uuid']}",
         channels=["telegram", "in_app"],
         topic_type="violations",
-        telegram_body=body,
+        telegram_card=card,
         link=f"/servers?tab=nodes&node={node_uuid}",
     )
+
+
+def build_penalty_card(node_name: str, settings_row, ev: Dict[str, Any], users: List[Dict[str, Any]]) -> Card:
+    """Кто прокачал, где, сколько и до какого времени урезан — время в поясе читателя."""
+    rate = settings_row["penalty_kbit"] / 1000 if settings_row else None
+    window = settings_row["penalty_window_sec"] if settings_row else None
+    volume = _format_bytes(ev["bytes"])
+    card = Card(tr("notify.shaper.title"), emoji="🐌")
+    card.lead(join(*(b(copy(u["username"]) if u["username"] else copy(u["uuid"], u["uuid"][:8]))
+                     for u in users), sep=", "), node_name)
+    card.fields([
+        (tr("notify.shaper.field.node"), b(node_name)),
+        (tr("notify.shaper.field.volume"),
+         tr("notify.shaper.volume_window", volume=volume, seconds=window) if window else volume),
+        (tr("notify.shaper.field.speed"), b(tr("notify.shaper.speed_value", rate=f"{rate:g}")) if rate else None),
+        (tr("notify.shaper.field.until"), when(ev["until"], "t") if rate else None),
+        (tr("notify.shaper.field.ip"), copy(ev["ip"])),
+    ])
+    return card.stamp()
 
 
 async def recent_penalties(node_uuid: str, limit: int = 20) -> List[Dict[str, Any]]:

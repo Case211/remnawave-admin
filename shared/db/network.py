@@ -121,7 +121,7 @@ class NetworkMixin:
             user_uuid: UUID пользователя
         
         Returns:
-            Количество устройств пользователя
+            Лимит устройств пользователя (0 — безлимит)
         """
         if not self.is_connected:
             return 1  # По умолчанию 1 устройство
@@ -146,14 +146,13 @@ class NetworkMixin:
                         # Проверяем различные возможные поля с данными об устройствах
                         response = raw_data.get("response", raw_data)
 
-                        # Основное поле - hwidDeviceLimit (лимит HWID устройств)
+                        # Основное поле - hwidDeviceLimit (лимит HWID устройств).
+                        # 0 — безлимит, отдаём как есть: базу не меньше 1 детектор
+                        # берёт сам, а превышению лимита нужен настоящий
                         hwid_device_limit = response.get("hwidDeviceLimit")
                         if hwid_device_limit is not None:
-                            # 0 означает безлимит, но для расчёта используем 1
                             limit = int(hwid_device_limit)
-                            if limit == 0:
-                                return 1  # Безлимит - используем 1 как базу
-                            return max(1, limit)
+                            return 0 if limit == 0 else max(1, limit)
 
                         # Fallback: devicesCount (старый формат)
                         devices_count = response.get("devicesCount")
@@ -717,6 +716,35 @@ class NetworkMixin:
 
         except Exception as e:
             logger.error("Error removing all HWID devices for user %s: %s", user_uuid, e, exc_info=True)
+            return 0
+
+    async def purge_removed_hwid_devices(self, user_uuid: str, hwid: Optional[str] = None) -> int:
+        """Стереть отвязанные устройства юзера совсем, а не пометкой.
+
+        Отвязанные строки живут ради детекта абуза триалов, и по ним же детектор
+        связывает аккаунты дальше, когда с клиентом уже разобрались и он удалил
+        лишние устройства: нарушения приходят снова. Стереть их — решение админа
+        из карточки юзера. ``hwid`` — одно устройство, без него — все отвязанные;
+        активные не трогаются. Ошибку БД не глотаем: админ должен узнать, что
+        ничего не стёрлось.
+
+        Returns:
+            Количество стёртых записей
+        """
+        if not self.is_connected:
+            return 0
+
+        query = (f"DELETE FROM {USER_HWID_DEVICES_TABLE} "
+                 "WHERE user_uuid = $1 AND removed_at IS NOT NULL")
+        args: List[Any] = [user_uuid]
+        if hwid:
+            query += " AND hwid = $2"
+            args.append(hwid)
+        async with self.acquire() as conn:
+            result = await conn.execute(query, *args)
+        try:
+            return int(result.split()[-1])
+        except (AttributeError, IndexError, ValueError):
             return 0
 
     async def get_user_hwid_devices(self, user_uuid: str,

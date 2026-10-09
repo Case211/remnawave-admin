@@ -21,13 +21,12 @@ The basics: language, logs, access to the Remnawave panel, third-party service k
 | **📝 Log level** | `log_level` | `INFO` | Log detail level (requires restart) (`LOG_LEVEL`) |
 | **📦 Max log file size (MB)** | `log_max_size_mb` | `10` | Maximum size of a single log file before rotation |
 | **🗂️ Log backup count** | `log_backup_count` | `5` | Number of compressed backup files kept after rotation |
-| **🌍 MaxMind GeoIP source** | `maxmind_source` | `auto` | auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required) (`MAXMIND_SOURCE`) |
+| **🌍 MaxMind GeoIP source** | `maxmind_source` | `auto` | auto — GitHub mirrors (P3TERX, GitSquared), then MaxMind; github — mirrors only (no key); maxmind — official only (key required). Own mirror — MAXMIND_MIRROR_URL variable (`MAXMIND_SOURCE`) |
 | **🏷️ Panel name** | `panel_name` | empty | Project name displayed in the sidebar (next to the logo) |
 | **🕒 Time zone** | `display_timezone` | `Europe/Moscow` | IANA zone. All times are shown in it: web panel, bot, notifications, exports, report and backup times. The database and the API keep time in UTC |
 | **🔗 Public panel URL** | `web_panel_public_url` | empty | https address of the web panel. Used by the bot's "Open panel" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL (`APP_PUBLIC_URL`) |
 | **Access token lifetime (minutes)** | `web_session_access_minutes` | `30` | Lifetime of the web panel access token. Applies to new logins and refreshes. Recommended: 30-120 min (`WEB_JWT_EXPIRE_MINUTES`) |
 | **Session lifetime (hours)** | `web_session_refresh_hours` | `6` | Total session lifetime (refresh token). While it is valid the user stays signed in; after that a new login with 2FA is required. Recommended: 12-24h (`WEB_JWT_REFRESH_HOURS`) |
-| **🗺️ CARTO maps key** | `map_tiles_api_key` | empty | CARTO Basemaps key for the analytics map. Without it tiles carry an “API key required” watermark. Free key (5M tiles/month): carto.com/basemaps/apikey (`MAP_TILES_API_KEY`) |
 | **DNS: Cloudflare (encrypted)** | `dns_creds_cloudflare` | empty | Managed on the DNS page, not here (read-only) |
 | **DNS: Timeweb Cloud (encrypted)** | `dns_creds_timeweb` | empty | Managed on the DNS page, not here (read-only) |
 | **DNS: reg.ru (encrypted)** | `dns_creds_regru` | empty | Managed on the DNS page, not here (read-only) |
@@ -57,7 +56,7 @@ Where and what to write in Telegram. Topics spread events across forum threads, 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | **💬 Notifications chat ID** | `notifications_chat_id` | empty | Telegram chat/group ID for notifications (`NOTIFICATIONS_CHAT_ID`) |
-| **✨ Rich notification styling** | `notifications_rich_enabled` | `true` | Send Telegram notifications as Bot API 10.1 rich messages: real headings, field lists, collapsible sections. Falls back to plain HTML automatically if Telegram rejects it |
+| **✨ Rich notification styling** | `notifications_rich_enabled` | `true` | Send Telegram notifications as rich cards (Bot API 10.1+): tables, collapsible sections, quotes, buttons right in the card, fields copied with a tap. Falls back to plain HTML automatically if Telegram rejects it |
 
 
 ### 🔔 Telegram notification types
@@ -114,7 +113,7 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| **🌐 Max simultaneous IPs** | `violations_max_simultaneous_ips` | `0` | Max simultaneous IPs above the device limit to trigger a violation (0 = auto from device count) |
+| **🌐 Shared simultaneous IP limit** | `violations_max_simultaneous_ips` | `0` | One simultaneous-source limit for all users instead of their device limit; network-switch and CGNAT buffers are added on top. 0 = each user's own device limit from the panel |
 | **📏 Max inter-city distance (km)** | `violations_geo_max_city_distance_km` | `50` | Distance between cities below which movement is not considered suspicious |
 | **👥 Max accounts per HWID** | `violations_hwid_max_accounts` | `2` | How many distinct accounts may share one HWID WITHOUT triggering — a violation starts at the next account (value 2 → fires on the third). Subscriptions of the same person count as one account: grouped by telegram_id, or by email when the user signed up without Telegram |
 | **Max subscriptions per account on one HWID** | `violations_hwid_max_per_account` | `10` | How many panel UUIDs (subscriptions) of a single telegram_id are allowed on one HWID. Guards against multi-plan abuse. 0 = unlimited |
@@ -151,6 +150,7 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **🚫 Hard block: max devices** | `violations_hard_block_devices` | `80` | Number of unique device fingerprints to trigger a hard block |
 | **🚫 Hard block: max HWID matches** | `violations_hard_block_hwid_matches` | `10` | Number of matching HWIDs (same model) to trigger a hard block |
 | **🚫 Hard block: accounts on one HWID** | `violations_hard_block_hwid_accounts` | `5` | How many distinct accounts on a single device (HWID) counts as mass trial abuse and triggers a hard block. Subscriptions of the same telegram_id count as one account. 0 = disabled |
+| **🚫 Hard block: sources above the device limit** | `violations_hard_block_simultaneous_excess` | `0` | Hard block when simultaneous sources exceed the user's device limit by more than this number: with 5 and a limit of 1 — from 7 sources, with a limit of 3 — from 9. The sources must also exceed the threshold with network-switch and CGNAT buffers. Does not apply to unlimited users (limit 0). 0 = disabled |
 
 
 ### 🆓 Trial user detection
@@ -170,6 +170,7 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **🔕 Torrent notification cooldown (min)** | `torrent_notification_cooldown_minutes` | `30` | Minimum interval between torrent notifications for the same user |
 | **Event threshold for a violation** | `torrent_min_events` | `5` | How many torrent events must pile up for one user within half an hour before a violation is raised. Real exchange produces hundreds of events in minutes — single hits are nDPI noise. 1 raises a violation on the very first event |
 | **Distinct peers threshold (swarm)** | `torrent_min_peers` | `3` | How many DIFFERENT addresses the exchange must span within half an hour. Torrent means a swarm of dozens of peers; events against one and the same address are what a long ordinary connection produces — antivirus traffic and game launchers were caught exactly this way. 1 disables the swarm check |
+| **Events per address (exchange depth)** | `torrent_min_events_per_peer` | `1.5` | How many events per address, on average, the exchange must show within half an hour. A torrent client keeps trading with the same peers for a long time, so it has several events per address; a game launcher or a DHT lookup touches each address once. 1 disables the check |
 | **Not torrent, by address owner** | `torrent_asn_whitelist` | `kaspersky,gaijin,blizzard,valve,wargaming,microsoft,epic games,riot games,steam` | Comma-separated fragments of organisation names whose addresses are never treated as a violation. Game launchers ship updates over real BitTorrent (War Thunder among them), so the verdict on them is correct — only the counterpart differs. Leave empty to use the built-in list |
 
 
@@ -225,6 +226,8 @@ Protection of the panel itself plus node attack detection: login methods, brute-
 | **✈️ Telegram Authentication** | `auth_telegram_enabled` | `true` | Allow login via Telegram Login Widget |
 | **🔒 Password Authentication** | `auth_password_enabled` | `true` | Allow login with username and password |
 | **🔐 Mandatory 2FA (TOTP)** | `auth_totp_required` | `false` | Require TOTP setup for all accounts |
+| **🔑 Passkey domain (RP ID)** | `webauthn_rp_id` | empty | Domain passkeys are bound to, e.g. panel.example.com. Empty — the domain the panel is opened on. After a change, passkeys added under the previous domain stop working |
+| **🔑 Passkey origin** | `webauthn_origin` | empty | Panel address with the scheme, e.g. https://panel.example.com. Empty — built from the request headers (Host and X-Forwarded-Proto). Set it if the proxy in front of the panel does not pass X-Forwarded-Proto |
 | **✈️ Telegram Mini App auto-login** | `auth_telegram_webapp_enabled` | `true` | Sign in automatically when the panel is opened inside Telegram (Mini App). Requires Telegram authentication to be enabled |
 
 
@@ -359,6 +362,7 @@ Infrastructure spending and income: reporting currency, exchange rates, payment 
 | **Auto-update exchange rates** | `finance_rates_auto_update` | `true` | Refresh rates once a day (CBR, falling back to open.er-api.com). Manually edited rates are left alone |
 | **Payment reminders** | `finance_reminders_enabled` | `true` | Send notifications about upcoming and overdue payments to Telegram and the panel |
 | **Remind this many days ahead** | `finance_reminder_days` | `7,3,1` | Comma-separated list of days before the charge (for example 7,3,1). Overdue payments are always reminded about |
+| **Reminder hour** | `finance_reminder_hour` | `10` | Hour of the day (0–23) from which the daily reminders are sent. Both the hour and the day itself follow the panel time zone, not UTC |
 | **Auto-sync hosting provider APIs** | `finance_autosync_enabled` | `true` | Periodically pull balance and services from connected hosting provider APIs |
 | **Auto-sync interval (hours)** | `finance_autosync_interval_hours` | `6` | How often to poll provider APIs for balance, services and charge dates |
 | **Pull charge dates** | `finance_autosync_update_due_dates` | `true` | Update next_due_at from provider data, matching services by name within a provider |

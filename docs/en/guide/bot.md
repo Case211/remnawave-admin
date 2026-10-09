@@ -38,6 +38,8 @@ NOTIFICATIONS_CHAT_ID=-1001234567890
 
 For events from the Remnawave panel itself (renewals, user changes) you also need the [panel webhook](/en/guide/webhook-setup).
 
+A notification arrives as a card: the main fields in a table, secondary details in collapsible sections, the customer's words and reasons as quotes, times in the reader's time zone. Username, UUID, email, Telegram ID, IP addresses and HWID are copied with a tap. If Telegram rejects a card, a regular message with the same data goes out instead; cards can be turned off with the “Rich notification styling” setting.
+
 ### Routing by topic
 
 If the chat is a forum group, notifications are split by topic:
@@ -58,11 +60,11 @@ Anything without its own topic goes to `NOTIFICATIONS_TOPIC_ID`.
 
 ### Buttons under notifications
 
-A violation notification carries actions: block, drop connections, whitelist. The tap is checked against the permissions of whoever tapped it — a button never grants more than the role does.
+A violation notification carries actions: block, drop connections, whitelist. The buttons sit right in the card and are colored by meaning: red ones punish, green ones clear suspicion. After a tap the card changes in place — the buttons go away and a note about the action appears inside. The tap is checked against the permissions of whoever tapped it — a button never grants more than the role does.
 
 There are two whitelists, and they are not the same thing. **"Whitelist"** lifts every check off that user at once. **"Skip: HWID"** (or geo, ASN — whichever fired) excludes only the angle this notification came from, while the other analyzers keep working. The second button shows up once it is clear which analyzer contributed most; existing partial exclusions are kept — a new one is added to them rather than replacing them.
 
-[Plugins](/en/guide/plugins) add their own buttons: a plugin describes an action as text, action and object, and knows nothing about Telegram — the panel assembles the button itself.
+[Plugins](/en/guide/plugins) add their own buttons: a plugin describes an action as text, action and object (a button color is optional) and knows nothing about Telegram — the panel assembles the button itself.
 
 ## Bot on a restricted server
 

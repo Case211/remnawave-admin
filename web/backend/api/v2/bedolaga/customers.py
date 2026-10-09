@@ -178,8 +178,24 @@ async def list_transactions(
     """История транзакций."""
     return await proxy_request(lambda: bedolaga_client.list_transactions(
         limit=limit, offset=offset, user_id=user_id,
-        transaction_type=transaction_type, payment_method=payment_method,
+        # в webapi Bedolaga фильтр зовётся type — transaction_type молча игнорировался
+        type=transaction_type, payment_method=payment_method,
         is_completed=is_completed, date_from=date_from, date_to=date_to,
+    ))
+
+
+# ── Events feed (static path — before /{user_id}) ──
+
+@router.get("/events")
+async def list_events(
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    event_type: Optional[list[str]] = Query(None),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
+):
+    """Лента событий подписок по всем клиентам: кто купил, продлил, пополнил."""
+    return await proxy_request(lambda: bedolaga_client.list_subscription_events(
+        limit=limit, offset=offset, event_types=event_type,
     ))
 
 

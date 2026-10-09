@@ -15,8 +15,31 @@ from shared.db_schema import DOMAIN_CONFIG_TABLE, EMAIL_QUEUE_TABLE, EMAIL_SUPPR
 logger = logging.getLogger(__name__)
 
 
-async def is_suppressed(email_addr: str) -> bool:
-    """Стоит ли адрес в списке подавленных прямо сейчас.
+# Письма, которые адресованы лично человеку, а не приходят рассылкой: коды и
+# ссылки, ретранслированные через submission (рассылки оттуда же идут под
+# категорией smtp_submission_bulk и сюда не входят), ответы на его же обращения,
+# письмо администратора конкретному адресату (manual), предупреждение перед
+# мерой (violation_notice — отписавшийся иначе не узнает, что к нему применят
+# ограничение), проверка настроек, уведомления (в т.ч. сброс пароля).
+# Отписка (List-Unsubscribe) относится к рассылкам и такие письма не
+# блокирует; жёсткий отказ доставки (bounce) блокирует всё — туда писать
+# бесполезно в любом случае.
+TRANSACTIONAL_CATEGORIES = frozenset({
+    "smtp_submission", "reply", "manual", "violation_notice", "test", "notification",
+})
+
+
+def suppression_applies(reason: Optional[str], category: Optional[str]) -> bool:
+    """Мешает ли запись в подавленных письму этой категории."""
+    if reason is None:
+        return False
+    if reason == "unsubscribe" and category in TRANSACTIONAL_CATEGORIES:
+        return False
+    return True
+
+
+async def suppression_reason(email_addr: str) -> Optional[str]:
+    """Причина, по которой адрес сейчас в подавленных, или None.
 
     Истёкшие мягкие отказы не считаются: строка остаётся ради истории, но
     писать по адресу снова можно.
@@ -24,15 +47,23 @@ async def is_suppressed(email_addr: str) -> bool:
     from shared.database import db_service
     try:
         async with db_service.acquire() as conn:
-            return bool(await conn.fetchval(
-                select_sql(EMAIL_SUPPRESSION_TABLE, "1",
+            reason = await conn.fetchval(
+                select_sql(EMAIL_SUPPRESSION_TABLE, "reason",
                     "WHERE lower(email) = lower($1) "
                     "AND (expires_at IS NULL OR expires_at > NOW())"),
                 email_addr,
-            ))
+            )
     except Exception:
         # Недоступная база не повод молча проглотить письмо.
-        return False
+        return None
+    if reason is None:
+        return None
+    return str(reason) or "unknown"
+
+
+async def is_suppressed(email_addr: str) -> bool:
+    """Стоит ли адрес в списке подавленных прямо сейчас (любая причина)."""
+    return await suppression_reason(email_addr) is not None
 
 
 def effective_hourly_limit(domain_limit: Optional[int]) -> int:
@@ -89,9 +120,11 @@ async def enqueue(
         # не получит. Повторные попытки не просто бесполезны: почтовые
         # системы считают настойчивую отправку в мёртвые ящики признаком
         # спамера и портят репутацию домена целиком.
-        if not ignore_suppression and await is_suppressed(to_email):
-            logger.info("Skipped suppressed address: %s", to_email)
-            return None
+        if not ignore_suppression:
+            reason = await suppression_reason(to_email)
+            if suppression_applies(reason, category):
+                logger.info("Skipped suppressed address: %s (%s)", to_email, reason)
+                return None
 
         from shared.database import db_service
         async with db_service.acquire() as conn:

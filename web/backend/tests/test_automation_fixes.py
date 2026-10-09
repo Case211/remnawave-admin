@@ -145,7 +145,9 @@ async def test_telegram_values_are_escaped():
         await AutomationEngine()._action_notify(
             {"channel": "telegram", "message": "Юзер {user}"}, "user", "u", {"username": "<script>"},
         )
-    assert notify.await_args.kwargs["telegram_body"] == "Юзер &lt;script&gt;"
+    card = notify.await_args.kwargs["telegram_card"]
+    assert "Юзер &lt;script&gt;" in card.to_html()
+    assert {"type": "paragraph", "text": "Юзер <script>"} in card.to_blocks()  # в rich — как есть, без разметки
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,8 @@ import {
   resultLabel,
   formatDate,
   formatDateTime,
+  conditionFieldsFor,
+  conditionValueOptions,
 } from '@/pages/automations/helpers'
 
 // ── cronToHuman ──────────────────────────────────────────────
@@ -247,6 +249,40 @@ describe('describeAction with accomplices', () => {
   it('marks a measure that also hits HWID accomplices', () => {
     expect(describeAction({ action_type: 'block_user', action_config: { with_accomplices: true } }))
       .toBe(`${describeAction({ action_type: 'block_user', action_config: {} })} + соучастники по HWID`)
+  })
+})
+
+describe('describeAction with payment checks', () => {
+  it('marks a rule that spares paying customers', () => {
+    expect(describeAction({ action_type: 'block_user', action_config: { unless_paid_after: true } }))
+      .toBe(`${describeAction({ action_type: 'block_user', action_config: {} })} · кроме платящих`)
+  })
+})
+
+describe('trial abuse conditions (#308)', () => {
+  it('offers machine signals for violation rules', () => {
+    const fields = conditionFieldsFor('event', 'violation.detected', '').map((f) => f.value)
+    expect(fields).toEqual(expect.arrayContaining(['trial_abuse', 'trial_abuse_type', 'signals', 'violation_kind', 'reasons']))
+  })
+
+  it('lets you pick known values instead of typing them', () => {
+    expect(conditionValueOptions('trial_abuse')?.map((o) => o.label)).toEqual(['да', 'нет'])
+    expect(conditionValueOptions('signals')?.find((o) => o.value === 'trial_abuse.repeated_trial')?.label)
+      .toBe('Абуз триалов: повторный на устройстве')
+    // Виды нарушений подписаны так же, как в «Предупреждениях»
+    expect(conditionValueOptions('violation_kind')?.find((o) => o.value === 'hwid')?.label).toBe('HWID (кросс-аккаунт)')
+    expect(conditionValueOptions('score')).toBeNull()
+  })
+})
+
+describe('sharing above the device limit (#309)', () => {
+  it('offers the threshold breakdown as condition fields', () => {
+    const fields = conditionFieldsFor('event', 'violation.detected', '').map((f) => f.value)
+    expect(fields).toEqual(expect.arrayContaining([
+      'device_limit', 'simultaneous_sources', 'simultaneous_excess', 'effective_threshold', 'effective_excess',
+    ]))
+    expect(conditionValueOptions('signals')?.find((o) => o.value === 'sharing.excess')?.label)
+      .toBe('Шаринг сверх лимита устройств')
   })
 })
 

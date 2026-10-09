@@ -1,6 +1,7 @@
 """Passkeys / WebAuthn — церемонии регистрации и входа (py_webauthn 3.x).
 
-RP ID / origin берутся из запроса (за trust-proxy — X-Forwarded-Host/Proto).
+RP ID / origin берутся из настроек webauthn_rp_id / webauthn_origin, а если они
+пусты — из запроса (за trust-proxy — X-Forwarded-Host/Proto).
 Challenge между begin/finish хранится в подписанном коротком JWT (stateless).
 credential_id / public_key в БД — base64url.
 """
@@ -25,6 +26,7 @@ from webauthn.helpers.structs import (
 )
 
 from shared.db_schema import WEBAUTHN_CREDENTIALS_TABLE as TBL
+from web.backend.core.errors import E
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,16 @@ _RP_NAME = "Remnawave Admin"
 
 
 class WebAuthnError(Exception):
-    """Ошибка WebAuthn с человекочитаемым сообщением."""
+    """Ошибка WebAuthn: код для фронта и человекочитаемое сообщение.
+
+    Код свой у каждой причины: под общим FORBIDDEN фронт показывал «Доступ
+    запрещён», и понять, что не сошёлся origin или истёк challenge, было
+    нельзя без DevTools.
+    """
+
+    def __init__(self, code: E, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 # ── RP / origin из запроса ───────────────────────────────────────
@@ -46,7 +57,7 @@ def _rp_origin(request) -> tuple:
     rp_id = cfg_rp or host.split(":")[0]
     origin = cfg_origin or (f"{proto}://{host}" if host else "")
     if not rp_id or not origin:
-        raise WebAuthnError("не удалось определить домен для passkey")
+        raise WebAuthnError(E.PASSKEY_DOMAIN_UNKNOWN, "не удалось определить домен для passkey")
     return rp_id, origin
 
 
@@ -71,9 +82,9 @@ def _read_token(token: str, purpose: str) -> Dict[str, Any]:
     try:
         p = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
     except JWTError:
-        raise WebAuthnError("challenge истёк или недействителен — начни заново")
+        raise WebAuthnError(E.PASSKEY_CHALLENGE_EXPIRED, "challenge истёк или недействителен — начни заново")
     if p.get("type") != purpose:
-        raise WebAuthnError("неверный тип challenge")
+        raise WebAuthnError(E.PASSKEY_CHALLENGE_EXPIRED, "неверный тип challenge")
     return p
 
 
@@ -110,7 +121,7 @@ async def _save_credential(account_id: int, credential_id: str, public_key: str,
                            sign_count: int, transports: Optional[str], name: Optional[str]) -> None:
     from shared.database import db_service
     if not db_service.is_connected:
-        raise WebAuthnError("База данных недоступна")
+        raise WebAuthnError(E.DB_UNAVAILABLE, "База данных недоступна")
     async with db_service.acquire() as conn:
         await conn.execute(
             f"""INSERT INTO {TBL} (account_id, credential_id, public_key, sign_count, transports, name)
@@ -164,7 +175,8 @@ async def finish_registration(request, token: str, credential: Any, name: Option
             credential=credential, expected_challenge=base64url_to_bytes(p["chal"]),
             expected_rp_id=rp_id, expected_origin=origin, require_user_verification=False)
     except Exception as e:  # noqa: BLE001
-        raise WebAuthnError(f"проверка регистрации не прошла: {e}")
+        # Текст библиотеки и есть диагноз: «Unexpected client data origin …»
+        raise WebAuthnError(E.PASSKEY_VERIFICATION_FAILED, str(e))
     transports = None
     if isinstance(credential, dict):
         tr = (credential.get("response") or {}).get("transports")
@@ -199,10 +211,10 @@ async def finish_authentication(request, token: str, credential: Any) -> Dict[st
     p = _read_token(token, "wa_auth")
     cid = credential.get("id") or credential.get("rawId") if isinstance(credential, dict) else None
     if not cid:
-        raise WebAuthnError("нет id credential")
+        raise WebAuthnError(E.PASSKEY_NOT_FOUND, "нет id credential")
     stored = await get_credential(cid)
     if not stored:
-        raise WebAuthnError("passkey не найден — зарегистрируй его в настройках")
+        raise WebAuthnError(E.PASSKEY_NOT_FOUND, "passkey не найден — зарегистрируй его в настройках")
     try:
         v = verify_authentication_response(
             credential=credential, expected_challenge=base64url_to_bytes(p["chal"]),
@@ -211,10 +223,10 @@ async def finish_authentication(request, token: str, credential: Any) -> Dict[st
             credential_current_sign_count=int(stored["sign_count"]),
             require_user_verification=False)
     except Exception as e:  # noqa: BLE001
-        raise WebAuthnError(f"проверка входа не прошла: {e}")
+        raise WebAuthnError(E.PASSKEY_VERIFICATION_FAILED, str(e))
     await _update_sign_count(int(stored["id"]), v.new_sign_count)
     from web.backend.core.admin_accounts import get_admin_account_by_id
     acc = await get_admin_account_by_id(int(stored["account_id"]))
     if not acc:
-        raise WebAuthnError("аккаунт не найден")
+        raise WebAuthnError(E.ADMIN_NOT_FOUND, "аккаунт не найден")
     return acc

@@ -130,5 +130,29 @@ describe('API client', () => {
       const interceptors = (client.interceptors.response as any).handlers
       expect(interceptors.length).toBeGreaterThan(0)
     })
+
+    it('puts the server reason into a translation with {{detail}}', async () => {
+      const client = (await import('@/api/client')).default
+      const { rejected } = (client.interceptors.response as any).handlers[0]
+      const reason = 'Unexpected client data origin "https://panel.example.com"'
+      const error = {
+        config: {},
+        response: { status: 400, data: { detail: { code: 'PASSKEY_VERIFICATION_FAILED', detail: reason } } },
+      }
+      await expect(rejected(error)).rejects.toBe(error)
+      expect(error.response.data.detail).toContain(reason)
+      expect(error.response.data.detail).not.toContain('{{detail}}')
+    })
+
+    it('keeps plain translations for codes without {{detail}}', async () => {
+      const client = (await import('@/api/client')).default
+      const { rejected } = (client.interceptors.response as any).handlers[0]
+      const error = {
+        config: {},
+        response: { status: 403, data: { detail: { code: 'FORBIDDEN', detail: 'server text' } } },
+      }
+      await expect(rejected(error)).rejects.toBe(error)
+      expect(error.response.data.detail).toBe('Доступ запрещён')
+    })
   })
 })

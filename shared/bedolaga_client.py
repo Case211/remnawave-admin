@@ -118,13 +118,23 @@ class BedolagaClient:
     async def get_user_by_email(self, email: str, page_size: int = 200, max_pages: int = 50) -> Optional[dict]:
         """Find an email-only user using the paginated public users contract.
 
-        Bedolaga currently has no dedicated lookup endpoint for email addresses.
-        Compare exact normalized values locally instead of treating a partial search
-        result as an identity match.
+        Bedolaga has no dedicated lookup endpoint for email addresses. Newer
+        versions match email in ``/users?search=`` — one request; older ones
+        don't, so a miss falls back to scanning pages. Either way the exact
+        normalized value is compared locally: a partial search hit is not an
+        identity match.
         """
         target = email.strip().casefold()
         if not target:
             return None
+
+        try:
+            found = await self.list_users(limit=50, search=email.strip())
+            for user in (found.get("items", []) if isinstance(found, dict) else []):
+                if str((user or {}).get("email") or "").strip().casefold() == target:
+                    return user
+        except Exception as e:  # noqa: BLE001
+            logger.debug("Bedolaga email search failed, scanning pages: %s", e)
 
         offset = 0
         # Предохранитель: бот без учёта offset отдавал бы одну и ту же полную страницу вечно
@@ -197,9 +207,6 @@ class BedolagaClient:
 
     async def add_devices(self, sub_id: int, data: dict) -> dict:
         return await self._post(f"/subscriptions/{sub_id}/devices", json=data)
-
-    async def reset_devices(self, sub_id: int) -> dict:
-        return await self._post(f"/subscriptions/{sub_id}/reset-devices")
 
     # ── Referrals ──
 
@@ -282,10 +289,18 @@ class BedolagaClient:
 
     # ── Subscription Events ──
 
-    async def list_subscription_events(self, limit: int = 20, offset: int = 0, **filters) -> dict:
-        params = {"limit": limit, "offset": offset}
-        params.update({k: v for k, v in filters.items() if v is not None})
-        return await self._get("/subscription-events", params=params)
+    async def list_subscription_events(
+        self, limit: int = 20, offset: int = 0, event_types: Optional[list] = None,
+    ) -> dict:
+        """Лента событий подписок по всем клиентам — свежие первыми.
+
+        Бот пишет их сам: покупки, продления, пополнения, триалы, промокоды,
+        кампании. Несколько типов — повтором параметра event_type.
+        """
+        params: dict = {"limit": limit, "offset": offset}
+        if event_types:
+            params["event_type"] = list(event_types)
+        return await self._get("/notifications/subscriptions", params=params)
 
     # ── Promo codes ──
 

@@ -4,6 +4,7 @@ Detailed notes for Remnawave Admin versions: what is new, what is fixed and what
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [5.2.0](/en/releases/5.2.0) | 2026-10-09 | Notification cards with copyable fields and buttons, evidence in the violation card, actions spare paying customers, hard action for sharing from the device limit, Bedolaga event feed |
 | [5.1.0](/en/releases/5.1.0) | 2026-09-26 | Delayed action in automations (“warn, limit after N h”), HWID accomplices, external support events, channels and editors in warning templates |
 | [5.0.0](/en/releases/5.0.0) | 2026-09-24 | Tickets, node speed shaper, violation warnings, S3 backups, alerts in automations |
 

@@ -104,3 +104,47 @@ async def test_export_ips_rejects_bad_dates(client):
         params={"date_from": "2026-09-07", "date_to": "2026-09-01"},
     )
     assert resp.status_code == 400
+
+
+# ── Дни статистики панели: «по» у неё включительно ────────────────────
+
+@pytest.mark.asyncio
+async def test_traffic_chart_ends_today(client):
+    # #302: конец диапазона «завтра» давал пустую точку в конце графика
+    fetch = AsyncMock(return_value={"categories": [], "series": [], "topNodes": []})
+    with patch("web.backend.api.v2.analytics.fetch_nodes_usage_by_range", fetch):
+        resp = await client.get("/api/v2/analytics/timeseries",
+                                params={"period": "7d", "metric": "traffic"})
+    assert resp.status_code == 200, resp.text
+    assert fetch.await_args.kwargs["end"] <= datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+@pytest.mark.asyncio
+async def test_daily_fallback_asks_one_day_at_a_time(client):
+    # Ряда нет, а ноды есть — точки собираются по дням, и каждый день ровно один
+    fetch = AsyncMock(return_value={"categories": [], "series": [],
+                                    "topNodes": [{"uuid": "n1", "total": 5}]})
+    with patch("web.backend.api.v2.analytics.fetch_nodes_usage_by_range", fetch):
+        resp = await client.get("/api/v2/analytics/timeseries",
+                                params={"period": "7d", "metric": "traffic"})
+    assert resp.status_code == 200, resp.text
+    per_day = fetch.await_args_list[1:]
+    assert len(per_day) == 7
+    assert all(c.kwargs["start"] == c.kwargs["end"] for c in per_day)
+
+
+@pytest.mark.asyncio
+async def test_traffic_delta_compares_whole_days():
+    from datetime import date
+
+    from web.backend.api.v2 import analytics
+
+    fetch = AsyncMock(return_value=None)
+    with patch.object(analytics, "fetch_nodes_usage_by_range", fetch):
+        await analytics._compute_deltas.__wrapped__()
+    (t_start, t_end), (y_start, y_end) = [
+        (c.kwargs["start"], c.kwargs["end"]) for c in fetch.await_args_list
+    ]
+    # «вчера» больше не захватывает сегодняшний трафик
+    assert t_start == t_end and y_start == y_end
+    assert date.fromisoformat(t_start) - date.fromisoformat(y_start) == timedelta(days=1)

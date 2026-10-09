@@ -662,11 +662,13 @@ const DEVICES_PER_PAGE = 4
 function PaginatedDeviceList({
   devices,
   onDeleteDevice,
-  onDeleteAll
+  onDeleteAll,
+  deleteAllLabel,
 }: {
   devices: HwidDevice[]
   onDeleteDevice?: (deviceId: string) => void
   onDeleteAll?: () => void
+  deleteAllLabel?: string
 }) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
@@ -800,7 +802,7 @@ function PaginatedDeviceList({
             className="text-xs"
           >
             <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-            {t('userDetail.devices.deleteAll', 'Удалить все устройства')}
+            {deleteAllLabel ?? t('userDetail.devices.deleteAll', 'Удалить все устройства')}
           </Button>
         </div>
       )}
@@ -1736,6 +1738,30 @@ export default function UserDetail() {
       queryClient.invalidateQueries({ queryKey: ['user', uuid] })
       toast.success(t('userDetail.toasts.allDevicesDeleted', 'Все HWID устройства удалены'))
       setShowDeleteAllDevices(false)
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.deleteError'))
+    },
+  })
+
+  // Стереть отвязанные устройства из истории: по ним детектор связывает
+  // аккаунты дальше, и нарушения приходят, даже когда с клиентом разобрались.
+  // hwid = null — все отвязанные разом.
+  const [removedToPurge, setRemovedToPurge] = useState<string | null>(null)
+  const [showPurgeRemoved, setShowPurgeRemoved] = useState(false)
+  const purgeRemovedMutation = useMutation({
+    mutationFn: async (hwid: string | null) => {
+      const response = await client.delete(`/users/${uuid}/hwid-devices/removed`, {
+        params: hwid ? { hwid } : undefined,
+      })
+      return response.data as { deleted: number }
+    },
+    onSuccess: (data, hwid) => {
+      queryClient.invalidateQueries({ queryKey: ['user-hwid-devices-removed', uuid] })
+      toast.success(t('userDetail.toasts.removedDevicesPurged', { count: data.deleted }))
+      setRemovedToPurge(null)
+      setShowPurgeRemoved(false)
+      if (!hwid) setDevicesTab('active')
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.deleteError'))
@@ -2779,13 +2805,18 @@ export default function UserDetail() {
                 <p className="text-xs text-amber-300/80 mb-3">
                   {t('userDetail.devices.removedHint')}
                 </p>
-                <PaginatedDeviceList devices={removedDevices || []} />
+                <PaginatedDeviceList
+                  devices={removedDevices || []}
+                  onDeleteDevice={canEdit ? setRemovedToPurge : undefined}
+                  onDeleteAll={canEdit ? () => setShowPurgeRemoved(true) : undefined}
+                  deleteAllLabel={t('userDetail.devices.purgeRemoved')}
+                />
               </>
             ) : hwidDevices && hwidDevices.length > 0 ? (
               <PaginatedDeviceList
                 devices={hwidDevices}
-                onDeleteDevice={setDeviceToDelete}
-                onDeleteAll={() => setShowDeleteAllDevices(true)}
+                onDeleteDevice={canEdit ? setDeviceToDelete : undefined}
+                onDeleteAll={canEdit ? () => setShowDeleteAllDevices(true) : undefined}
               />
             ) : (
               <div className="text-center py-6 text-dark-300 text-sm">
@@ -3183,6 +3214,28 @@ export default function UserDetail() {
         confirmLabel={t('userDetail.devices.deleteAllConfirm.confirm', 'Удалить все')}
         variant="destructive"
         onConfirm={() => deleteAllDevicesMutation.mutate()}
+      />
+
+      {/* Delete one removed HWID device from history */}
+      <ConfirmDialog
+        open={!!removedToPurge}
+        onOpenChange={(open) => !open && setRemovedToPurge(null)}
+        title={t('userDetail.devices.purgeConfirm.title')}
+        description={t('userDetail.devices.purgeConfirm.description')}
+        confirmLabel={t('userDetail.devices.purgeConfirm.confirm')}
+        variant="destructive"
+        onConfirm={() => removedToPurge && purgeRemovedMutation.mutate(removedToPurge)}
+      />
+
+      {/* Clear all removed HWID devices */}
+      <ConfirmDialog
+        open={showPurgeRemoved}
+        onOpenChange={setShowPurgeRemoved}
+        title={t('userDetail.devices.purgeAllConfirm.title')}
+        description={t('userDetail.devices.purgeAllConfirm.description')}
+        confirmLabel={t('userDetail.devices.purgeAllConfirm.confirm')}
+        variant="destructive"
+        onConfirm={() => purgeRemovedMutation.mutate(null)}
       />
 
       {/* QR Code Dialog */}

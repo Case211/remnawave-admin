@@ -23,6 +23,7 @@ from shared.db_schema import (
 )
 from shared.db_query import select_sql, insert_sql
 from shared import timefmt
+from shared.tg_card import Card
 from shared.notification_config import (
     is_notification_type_enabled,
     resolve_notification_topic,
@@ -310,6 +311,8 @@ async def _send_telegram_via_bot_callback(
     body: str,
     topic_id: Optional[str] = None,
     reply_markup: Optional[Dict[str, Any]] = None,
+    blocks: Optional[List[Dict[str, Any]]] = None,
+    fallback_markup: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Send Telegram notification via bot callback endpoint.
 
@@ -331,6 +334,10 @@ async def _send_telegram_via_bot_callback(
         payload["topic_id"] = str(topic_id)
     if reply_markup:
         payload["reply_markup"] = reply_markup
+    if blocks:
+        payload["blocks"] = blocks
+    if fallback_markup:
+        payload["fallback_markup"] = fallback_markup
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -356,15 +363,23 @@ async def send_telegram(
     topic_id: Optional[str] = None,
     bot_token: Optional[str] = None,
     reply_markup: Optional[Dict[str, Any]] = None,
+    blocks: Optional[List[Dict[str, Any]]] = None,
+    fallback_markup: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Send notification to Telegram chat/group.
 
     Tries bot callback first (if INTERNAL_API_SECRET is configured), then
     falls back to direct Telegram Bot API with the provided or global bot_token.
     ``reply_markup`` is an optional InlineKeyboardMarkup dict for quick action buttons.
+    ``blocks`` — готовые rich-блоки карточки (shared.tg_card); тогда ``body`` —
+    её полный HTML-фолбэк с заголовком, и заголовок второй раз не добавляется.
+    ``fallback_markup`` — клавиатура для HTML-фолбэка: кнопки карточки
+    встроены в rich-сообщение и в обычном HTML существуют только так.
     """
     # Try bot callback first (preferred)
-    callback_ok = await _send_telegram_via_bot_callback(chat_id, title, body, topic_id, reply_markup)
+    callback_ok = await _send_telegram_via_bot_callback(
+        chat_id, "" if blocks else title, body, topic_id, reply_markup, blocks, fallback_markup,
+    )
     if callback_ok:
         NOTIFICATIONS_SENT.labels(channel="telegram").inc()
         return True
@@ -378,7 +393,7 @@ async def send_telegram(
             logger.warning("No Telegram bot token configured, skipping send to %s", chat_id)
             return False
 
-        text = f"<b>{title}</b>\n\n{body}"
+        text = body if blocks else f"<b>{title}</b>\n\n{body}"
 
         # Rich-уведомление (Bot API 10.1) с фолбэком на HTML внутри
         from shared import tg_rich
@@ -387,8 +402,10 @@ async def send_telegram(
             bot_token,
             chat_id,
             text,
+            blocks=blocks,
             message_thread_id=int(topic_id) if topic_id and str(topic_id) != "0" else None,
             reply_markup=reply_markup,
+            fallback_markup=fallback_markup,
         )
         if ok:
             logger.debug("Telegram notification sent to chat_id=%s", chat_id)
@@ -487,6 +504,7 @@ async def create_notification(
     reply_markup: Optional[Dict[str, Any]] = None,
     event: Optional[str] = None,
     user_uuid: Optional[str] = None,
+    telegram_card: Optional[Card] = None,
     **kwargs,
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
@@ -496,9 +514,13 @@ async def create_notification(
     message is sent to ("nodes", "service", "users", "errors", …).
     ``telegram_body`` if set, will be used for Telegram messages instead of ``body``
     (useful for sending HTML-formatted messages to Telegram while storing plain text in DB).
+    ``telegram_card`` — карточка shared.tg_card: в Telegram уходят её rich-блоки
+    (таблицы, секции, подвал) и HTML-фолбэк, в почту и вебхуки — её текст.
     Returns the notification ID.
     """
     channels = channels or ["in_app"]
+    if telegram_card is not None:
+        telegram_body = telegram_card.to_html()
     body, telegram_body = _split_body(body, telegram_body)
     notification_id = None
     # Про какого юзера уведомление — чтобы не показать его тем, кому он не виден
@@ -592,6 +614,9 @@ async def create_notification(
 
         # Use telegram_body for Telegram channels if provided, otherwise fall back to body
         tg_body = telegram_body or body
+        # Почте и вебхукам — текст карточки: её HTML начинается с заголовка,
+        # который у них и так в теме письма или в title
+        ext_body = telegram_card.body_text() if telegram_card is not None else tg_body
 
         # Collect per-admin Telegram chat_ids to avoid duplicate global send
         per_admin_tg_chat_ids: set = set()
@@ -599,7 +624,10 @@ async def create_notification(
         # Dispatch to external channels (per-admin configured channels)
         if admin_id is not None:
             per_admin_tg_chat_ids = await _collect_telegram_chat_ids(admin_id)
-            asyncio.create_task(_dispatch_external(admin_id, title, tg_body, severity, link, channels, reply_markup=reply_markup))
+            asyncio.create_task(_dispatch_external(
+                admin_id, title, ext_body, severity, link, channels,
+                reply_markup=reply_markup, card=telegram_card,
+            ))
         else:
             # For broadcasts, dispatch to all admins' external channels
             try:
@@ -608,9 +636,10 @@ async def create_notification(
                     for recipient_id in recipient_ids:
                         aid_chat_ids = await _collect_telegram_chat_ids(recipient_id)
                         per_admin_tg_chat_ids.update(aid_chat_ids)
-                        asyncio.create_task(
-                            _dispatch_external(recipient_id, title, tg_body, severity, link, channels, reply_markup=reply_markup)
-                        )
+                        asyncio.create_task(_dispatch_external(
+                            recipient_id, title, ext_body, severity, link, channels,
+                            reply_markup=reply_markup, card=telegram_card,
+                        ))
                 else:
                     logger.debug("No admin_accounts found for external dispatch")
             except Exception as e:
@@ -622,9 +651,9 @@ async def create_notification(
         if "telegram" in channels or "all" in channels:
             _, global_chat_id, _ = _get_global_telegram_config(topic_type)
             if global_chat_id and global_chat_id not in per_admin_tg_chat_ids:
-                asyncio.create_task(
-                    _send_to_global_telegram(title, tg_body, severity, topic_type, reply_markup=reply_markup)
-                )
+                asyncio.create_task(_send_to_global_telegram(
+                    title, tg_body, severity, topic_type, reply_markup=reply_markup, card=telegram_card,
+                ))
             elif not global_chat_id:
                 global _warned_no_global_chat
                 if not _warned_no_global_chat:
@@ -713,6 +742,7 @@ async def _collect_telegram_chat_ids(admin_id: int) -> set:
 async def _send_to_global_telegram(
     title: str, body: str, severity: str, topic_type: str = "service",
     reply_markup: Optional[Dict[str, Any]] = None,
+    card: Optional[Card] = None,
 ):
     """Send notification to the global NOTIFICATIONS_CHAT_ID.
 
@@ -728,10 +758,15 @@ async def _send_to_global_telegram(
             logger.debug("No global NOTIFICATIONS_CHAT_ID configured, skipping global Telegram dispatch")
             return
 
-        severity_emoji = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udea8", "success": "\u2705"}.get(severity, "")
-        full_title = f"{severity_emoji} {title}" if severity_emoji else title
-
-        ok = await send_telegram(chat_id, full_title, body, topic_id, bot_token, reply_markup=reply_markup)
+        if card is not None:
+            # \u0443 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u0441\u0432\u043e\u0439 \u0437\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a \u0441 \u044d\u043c\u043e\u0434\u0437\u0438 \u2014 \u0437\u043d\u0430\u0447\u043e\u043a \u0432\u0430\u0436\u043d\u043e\u0441\u0442\u0438 \u0435\u0439 \u043d\u0435 \u043d\u0443\u0436\u0435\u043d
+            ok = await send_telegram(chat_id, title, card.to_html(), topic_id, bot_token,
+                                     reply_markup=reply_markup, blocks=card.to_blocks(),
+                                     fallback_markup=card.keyboard())
+        else:
+            severity_emoji = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udea8", "success": "\u2705"}.get(severity, "")
+            full_title = f"{severity_emoji} {title}" if severity_emoji else title
+            ok = await send_telegram(chat_id, full_title, body, topic_id, bot_token, reply_markup=reply_markup)
         if ok:
             logger.info("Global Telegram notification sent to chat_id=%s", chat_id)
         else:
@@ -748,6 +783,7 @@ async def _dispatch_external(
     link: Optional[str],
     requested_channels: List[str],
     reply_markup: Optional[Dict[str, Any]] = None,
+    card: Optional[Card] = None,
 ):
     """Dispatch notification to external channels based on admin's channel config."""
     try:
@@ -784,7 +820,12 @@ async def _dispatch_external(
                     bot_token_override = config.get("bot_token")
                     if chat_id:
                         logger.debug("Dispatching Telegram to chat_id=%s for admin_id=%s", chat_id, admin_id)
-                        await send_telegram(chat_id, title, body, topic_id, bot_token_override, reply_markup=reply_markup)
+                        if card is not None:
+                            await send_telegram(chat_id, title, card.to_html(), topic_id, bot_token_override,
+                                                reply_markup=reply_markup, blocks=card.to_blocks(),
+                                                fallback_markup=card.keyboard())
+                        else:
+                            await send_telegram(chat_id, title, body, topic_id, bot_token_override, reply_markup=reply_markup)
                     else:
                         logger.warning("Telegram channel for admin %s has no chat_id in config: %s", admin_id, config)
 

@@ -10,13 +10,7 @@ from aiogram import F, Router
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Message
 from aiogram.utils.i18n import gettext as _
 
-from src.config import get_settings
 from src.utils.auth import BotAdmin
-from shared.notification_config import (
-    is_notification_type_enabled,
-    resolve_notification_topic,
-    resolve_notifications_chat_id,
-)
 from shared.rbac import filter_by_scope
 
 from src.handlers.common import _cleanup_message, _edit_text_safe, _get_target_user_id, _not_admin, _send_clean_message, require_permission
@@ -724,66 +718,16 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
 
     BOT_CREATING_USERS.discard(username)
 
-    # Отправляем уведомление в чат нотификаций (лог для менеджера)
+    # Карточка в чат нотификаций (лог для менеджера) — та же, что по вебхуку
+    # панели: QR, лимиты, ссылка под спойлером, — плюс кто создал. Сам вебхук
+    # на юзеров, созданных ботом, подавлен BOT_CREATING_USERS.
     try:
-        settings = get_settings()
-        notif_chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
-        if notif_chat_id is not None and is_notification_type_enabled("users"):
-            bot = target.bot if isinstance(target, Message) else target.message.bot
-            topic_id = resolve_notification_topic(
-                "users",
-                type_fallback=settings.notifications_topic_users,
-                general_fallback=settings.notifications_topic_id,
-            )
-            notification_lines = [
-                _("notification.user_created_title"),
-                "",
-                f"👤 Username: <code>{_esc(info.get('username', 'n/a'))}</code>",
-                f"🆔 Short UUID: <code>{info.get('shortUuid', '') or info.get('uuid', '')[:8]}</code>",
-                "",
-                f"<b>{_('user.edit_section_traffic')}</b>",
-                f"   {_('user.edit_traffic_limit')}: <code>{format_bytes(traffic_limit_bytes) if traffic_limit_bytes else _('user.unlimited')}</code>",
-                f"   {_('user.edit_expire')}: <code>{format_datetime(info.get('expireAt')) if info.get('expireAt') else '—'}</code>",
-                f"   {_('user.edit_strategy')}: <code>{info.get('trafficLimitStrategy') or 'NO_RESET'}</code>",
-            ]
-            hwid = info.get("hwidDeviceLimit")
-            if hwid is not None:
-                notification_lines.append(f"   {_('user.edit_hwid')}: <code>{'∞' if hwid == 0 else hwid}</code>")
-            notification_lines.append("")
-            sub_url = info.get("subscriptionUrl")
-            if sub_url:
-                url_display = _esc(sub_url[:80]) + ("..." if len(sub_url) > 80 else "")
-                notification_lines.append(f"🔗 Subscription: <code>{url_display}</code>")
-            active_squads = info.get("activeInternalSquads", [])
-            if active_squads:
-                squad_names = []
-                for sq in active_squads:
-                    if isinstance(sq, dict):
-                        squad_names.append(sq.get("name", sq.get("uuid", "?")))
-                    else:
-                        squad_names.append(str(sq))
-                notification_lines.append(f"{_('user.edit_section_squad')}: <code>{_esc(', '.join(squad_names))}</code>")
-            telegram_id = info.get("telegramId")
-            if telegram_id is not None:
-                notification_lines.append(f"{_('user.edit_telegram')}: <code>{telegram_id}</code>")
-            email = info.get("email")
-            if email:
-                notification_lines.append(f"{_('user.edit_email')}: <code>{_esc(email)}</code>")
-            desc = info.get("description")
-            if desc:
-                notification_lines.append(f"{_('user.edit_description')}: <code>{_esc(desc[:100])}</code>")
-            if admin:
-                notification_lines.append("")
-                notification_lines.append(_("notification.user_created_created_by").format(created_by=_esc(admin.username)))
-            notif_text = "\n".join(notification_lines)
-            kwargs = {
-                "chat_id": notif_chat_id,
-                "text": notif_text,
-                "parse_mode": "HTML",
-            }
-            if topic_id is not None:
-                kwargs["message_thread_id"] = topic_id
-            await bot.send_message(**kwargs)
+        bot = target.bot if isinstance(target, Message) else target.message.bot
+        await send_user_notification(
+            bot, "created", info,
+            subscription_url=info.get("subscriptionUrl"),
+            created_by=admin.username if admin else None,
+        )
     except Exception:
         logger.exception("Failed to send user creation notification")
 

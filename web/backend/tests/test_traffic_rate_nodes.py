@@ -48,12 +48,20 @@ async def _card(fetch_results):
     return notify.call_args.kwargs, conn, db
 
 
+def _nodes(kwargs) -> list:
+    """Строки таблицы нод карточки: [имя, объём]."""
+    tables = [blk for blk in kwargs["telegram_card"].to_blocks() if blk["type"] == "table"]
+    nodes = [t for t in tables if t["cells"][0][0]["text"] == "Нода"]
+    return [[cell["text"] for cell in row] for row in nodes[0]["cells"][1:]] if nodes else []
+
+
 @pytest.mark.asyncio
 async def test_nodes_with_traffic_share_come_first():
     kwargs, conn, db = await _card([
         [{"name": "Germany W", "bytes": 9 * GB}, {"name": "Finland", "bytes": int(0.3 * GB)}],
     ])
-    assert "🖥 Ноды: <code>Germany W</code> 9.00 GB, <code>Finland</code> 0.30 GB" in kwargs["telegram_body"]
+    assert _nodes(kwargs) == [[{"type": "code", "text": "Germany W"}, "9.00 GB"],
+                              [{"type": "code", "text": "Finland"}, "0.30 GB"]]
     # Дельта синка пишется с опозданием на интервал синка — смотрим глубже окна.
     assert conn.fetch.await_args_list[0].args[-1] == 15
     # Те же ноды попадают в причину нарушения на странице нарушений.
@@ -63,7 +71,7 @@ async def test_nodes_with_traffic_share_come_first():
 @pytest.mark.asyncio
 async def test_falls_back_to_connections_when_sync_has_no_deltas():
     kwargs, conn, _ = await _card([[], [{"name": "Finland"}]])
-    assert "🖥 Ноды: <code>Finland</code>" in kwargs["telegram_body"]
+    assert _nodes(kwargs) == [[{"type": "code", "text": "Finland"}, "—"]]
     assert conn.fetch.await_count == 2
     # Открытое соединение считается, даже если началось задолго до окна.
     assert "disconnected_at IS NULL" in conn.fetch.await_args_list[1].args[0]
@@ -72,8 +80,17 @@ async def test_falls_back_to_connections_when_sync_has_no_deltas():
 @pytest.mark.asyncio
 async def test_no_nodes_line_without_data():
     kwargs, _, _ = await _card([[], []])
-    assert "Ноды:" not in kwargs["telegram_body"]
+    assert _nodes(kwargs) == []
+    assert "Ноды" not in kwargs["telegram_card"].to_html()
 
 
-def test_format_nodes_tiny_share_is_not_zero():
-    assert trm._format_nodes([{"name": "A", "bytes": 1024}]) == "<code>A</code> 0.01 GB"
+@pytest.mark.asyncio
+async def test_card_leads_with_volume_and_rate():
+    kwargs, _, _ = await _card([[], []])
+    html = kwargs["telegram_card"].to_html()
+    assert "<b><code>alice</code></b> · <b>9.21 GB за 5 мин</b> · ~110.45 GB/ч" in html
+    assert "Порог: 5.0 GB / 10 мин" in html
+
+
+def test_tiny_share_is_not_zero():
+    assert trm._node_rows([{"name": "A", "bytes": 1024}])[0][1] == "0.01 GB"

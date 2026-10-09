@@ -8,11 +8,19 @@ from typing import Any, Dict, List, Optional
 
 from shared import timefmt
 from shared.logger import logger
-from shared.db_schema import USER_CONNECTIONS_TABLE, VIOLATIONS_TABLE, USERS_TABLE, NODES_TABLE
+from shared.db_schema import (
+    IP_METADATA_TABLE, NODES_TABLE, USER_CONNECTIONS_TABLE, USERS_TABLE, VIOLATIONS_TABLE,
+)
 from shared.db_query import select_sql, insert_sql, update_sql
 
 # Запас на странице под HOT-апдейты активных соединений (миграция 0105)
 CONNECTIONS_FILLFACTOR = 90
+
+# Торрент-нарушение узнаётся по первой причине. В ней всегда есть счётчики,
+# поэтому сравнение по префиксу: точное не совпадало ни разу.
+_TORRENT_REASON_MATCH = (
+    "EXISTS (SELECT 1 FROM unnest(reasons) AS r WHERE r LIKE 'Torrent traffic detected%')"
+)
 
 
 def _uuid_list(uuids: Optional[list]) -> Optional[list]:
@@ -26,16 +34,21 @@ class ConnectionsMixin:
     async def get_user_connection_history(
         self, user_uuid: str, days: int = 30, limit: int = 200,
     ) -> List[Dict[str, Any]]:
-        """История подключений юзера (сессии) — для таймлайна."""
+        """История подключений юзера (сессии) — для таймлайна.
+
+        Страна и тип сети берутся из ip_metadata: детектор кладёт туда каждый
+        адрес, и без них в ленте не понять, какой из пяти адресов казахстанский.
+        """
         if not self.is_connected:
             return []
         async with self.acquire() as conn:
             rows = await conn.fetch(
                 f"""SELECT uc.id, uc.ip_address, uc.node_uuid::text AS node_uuid,
                            uc.connected_at, uc.disconnected_at, uc.device_info,
-                           n.name AS node_name
+                           n.name AS node_name, im.country_code, im.connection_type
                     FROM {USER_CONNECTIONS_TABLE} uc
                     LEFT JOIN {NODES_TABLE} n ON n.uuid = uc.node_uuid
+                    LEFT JOIN {IP_METADATA_TABLE} im ON im.ip_address = uc.ip_address
                     WHERE uc.user_uuid = $1::uuid
                       AND uc.connected_at >= NOW() - INTERVAL '1 day' * $2
                     ORDER BY uc.connected_at DESC
@@ -53,6 +66,49 @@ class ConnectionsMixin:
                     d["device_info"] = json.loads(d["device_info"])
                 except (ValueError, TypeError):
                     d["device_info"] = None
+            out.append(d)
+        return out
+
+    async def get_user_address_summary(
+        self, user_uuid: str, start: datetime, end: datetime, limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Адреса юзера за окно: страна, тип сети, первое и последнее появление,
+        число подключений и узлы — сводка для карточки нарушения вместо ленты.
+
+        Сессия попадает в окно, если пересекается с ним. Нижняя граница по
+        connected_at сдвинута на сутки: длинные сессии не теряются, а прошлые
+        партиции не читаются.
+        """
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                f"""SELECT uc.ip_address AS ip,
+                           MIN(uc.connected_at) AS first_seen,
+                           MAX(COALESCE(uc.disconnected_at, NOW())) AS last_seen,
+                           COUNT(*) AS connections,
+                           ARRAY_REMOVE(ARRAY_AGG(DISTINCT n.name), NULL) AS nodes,
+                           MAX(im.country_code) AS country_code, MAX(im.city) AS city,
+                           MAX(im.connection_type) AS connection_type, MAX(im.asn_org) AS asn_org
+                    FROM {USER_CONNECTIONS_TABLE} uc
+                    LEFT JOIN {NODES_TABLE} n ON n.uuid = uc.node_uuid
+                    LEFT JOIN {IP_METADATA_TABLE} im ON im.ip_address = uc.ip_address
+                    WHERE uc.user_uuid = $1::uuid
+                      AND uc.connected_at >= $2::timestamptz - INTERVAL '1 day'
+                      AND uc.connected_at <= $3
+                      AND COALESCE(uc.disconnected_at, NOW()) >= $2
+                    GROUP BY uc.ip_address
+                    ORDER BY COUNT(*) DESC, MIN(uc.connected_at)
+                    LIMIT $4""",
+                user_uuid, start, end, limit,
+            )
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            d = dict(r)
+            for k in ("first_seen", "last_seen"):
+                if d.get(k) is not None:
+                    d[k] = d[k].isoformat()
+            d["nodes"] = list(d.get("nodes") or [])
             out.append(d)
         return out
 
@@ -778,11 +834,15 @@ class ConnectionsMixin:
             logger.error("batch_save_torrent_events failed: %s", e)
             return 0
 
-    async def count_recent_torrent_events(self, user_uuid: str, minutes: int = 30) -> int:
+    async def count_recent_torrent_events(
+        self, user_uuid: str, minutes: int = 30, since: Optional[datetime] = None,
+    ) -> int:
         """Сколько торрент-событий набралось у пользователя за окно.
 
         По этому числу отделяют обмен от шума: у настоящего роя счёт идёт на
         сотни за минуты, у ложного срабатывания событие ровно одно.
+        ``since`` — когда оператор разобрал прошлое нарушение: события до
+        этого момента уже в нём, повторно их не считаем.
         """
         if not self.is_connected:
             return 0
@@ -791,21 +851,26 @@ class ConnectionsMixin:
                 value = await conn.fetchval(
                     "SELECT count(*) FROM torrent_events "
                     "WHERE user_uuid = $1::uuid "
-                    "AND detected_at > NOW() - make_interval(mins => $2)",
-                    user_uuid, minutes,
+                    "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "AND ($3::timestamptz IS NULL OR detected_at > $3)",
+                    user_uuid, minutes, since,
                 )
             return int(value or 0)
         except Exception as e:
             logger.warning("count_recent_torrent_events failed: %s", e)
             return 0
 
-    async def count_recent_torrent_peers(self, user_uuid: str, minutes: int = 30) -> int:
+    async def count_recent_torrent_peers(
+        self, user_uuid: str, minutes: int = 30, since: Optional[datetime] = None,
+        ports: Optional[List[int]] = None,
+    ) -> int:
         """Со сколькими РАЗНЫМИ адресами шёл обмен за окно.
 
         Числа событий мало: их набивает и одно долгое соединение. Торрент
         отличается роем — клиент разговаривает с десятками пиров сразу.
         Пойманный случай: антивирус, восемь событий и ровно один адрес, —
         по счётчику событий это нарушение, по числу пиров очевидно нет.
+        ``ports`` — считать только пиров на этих портах (рой игрового лаунчера).
         """
         if not self.is_connected:
             return 0
@@ -814,15 +879,20 @@ class ConnectionsMixin:
                 value = await conn.fetchval(
                     "SELECT count(DISTINCT destination) FROM torrent_events "
                     "WHERE user_uuid = $1::uuid "
-                    "AND detected_at > NOW() - make_interval(mins => $2)",
-                    user_uuid, minutes,
+                    "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "AND ($3::timestamptz IS NULL OR detected_at > $3) "
+                    "AND ($4::int[] IS NULL "
+                    "OR substring(destination FROM ':([0-9]+)$')::int = ANY($4::int[]))",
+                    user_uuid, minutes, since, ports,
                 )
             return int(value or 0)
         except Exception as e:
             logger.warning("count_recent_torrent_peers failed: %s", e)
             return 0
 
-    async def recent_torrent_destinations(self, user_uuid: str, minutes: int = 30, limit: int = 10) -> list:
+    async def recent_torrent_destinations(
+        self, user_uuid: str, minutes: int = 30, limit: int = 10, since: Optional[datetime] = None,
+    ) -> list:
         """Адреса, с которыми шёл обмен за окно, — самые частые первыми."""
         if not self.is_connected:
             return []
@@ -832,8 +902,9 @@ class ConnectionsMixin:
                     "SELECT destination FROM torrent_events "
                     "WHERE user_uuid = $1::uuid "
                     "AND detected_at > NOW() - make_interval(mins => $2) "
+                    "AND ($4::timestamptz IS NULL OR detected_at > $4) "
                     "GROUP BY destination ORDER BY count(*) DESC, destination LIMIT $3",
-                    user_uuid, minutes, limit,
+                    user_uuid, minutes, limit, since,
                 )
             return [r["destination"] for r in rows]
         except Exception as e:
@@ -879,12 +950,38 @@ class ConnectionsMixin:
                     select_sql(
                         VIOLATIONS_TABLE,
                         "id",
-                        "WHERE user_uuid = $1 AND detected_at > NOW() - make_interval(mins => $2) AND 'Torrent traffic detected' = ANY(reasons)",
+                        "WHERE user_uuid = $1 AND detected_at > NOW() - make_interval(mins => $2) "
+                        f"AND {_TORRENT_REASON_MATCH}",
                     ),
                     user_uuid, minutes,
                 )
         except Exception as e:
             logger.error("get_recent_torrent_violation failed: %s", e)
+            return None
+
+    async def last_torrent_review_at(self, user_uuid: str, minutes: int = 30) -> Optional[datetime]:
+        """Когда оператор последний раз разобрал торрент-нарушение клиента внутри окна.
+
+        Без этой отсечки «Аннулировать» не работало: окно за полчаса тут же
+        снова набирало те же события, и через минуты рождалось новое
+        нарушение с уведомлением — по уже разобранному обмену.
+        """
+        if not self.is_connected:
+            return None
+        try:
+            async with self.acquire() as conn:
+                return await conn.fetchval(
+                    select_sql(
+                        VIOLATIONS_TABLE,
+                        "MAX(action_taken_at)",
+                        "WHERE user_uuid = $1 AND action_taken IS NOT NULL "
+                        "AND action_taken_at > NOW() - make_interval(mins => $2) "
+                        f"AND {_TORRENT_REASON_MATCH}",
+                    ),
+                    user_uuid, minutes,
+                )
+        except Exception as e:
+            logger.warning("last_torrent_review_at failed: %s", e)
             return None
 
     async def get_torrent_stats(self, days: int = 7, user_uuids: Optional[list] = None) -> dict:

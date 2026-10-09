@@ -907,7 +907,7 @@
       "removedAt": "Unlinked",
       "tabActive": "Current",
       "tabRemoved": "Removed",
-      "removedHint": "Previously present on this account but were removed. The records are kept so that re-linking the same device to another account stays visible.",
+      "removedHint": "Previously present on this account but were removed. The records are kept so that re-linking the same device to another account stays visible. Once the case is settled, clear them — otherwise they keep raising violations.",
       "uaBadge": {
         "linkInUa": "Double tunnel",
         "botLibrary": "Bot/script",
@@ -917,6 +917,17 @@
         "tooltip": "User-Agent does not match a known VPN client. Inspect this device"
       },
       "deleteAll": "Delete all devices",
+      "purgeRemoved": "Clear removed",
+      "purgeConfirm": {
+        "title": "Delete device from history?",
+        "description": "The record will be gone for good, and the detector will stop linking this account to others through this device. Do it once the case is settled, otherwise the old record keeps raising violations.",
+        "confirm": "Delete"
+      },
+      "purgeAllConfirm": {
+        "title": "Clear removed devices?",
+        "description": "All records of devices removed from this user will be gone for good, and the detector will stop linking accounts through them. Re-linking the same devices to other accounts will no longer be visible either. Active devices are not affected.",
+        "confirm": "Clear"
+      },
       "deleteAllConfirm": {
         "title": "Delete all devices?",
         "description": "All HWID-bound devices for this user will be removed. They will need to re-link on next connect.",
@@ -1045,6 +1056,7 @@
       "reassigned": "User reassigned",
       "adminUnassigned": "Admin unassigned",
       "allDevicesDeleted": "All devices deleted",
+      "removedDevicesPurged": "Deleted from history: {{count}}",
       "deviceDeleted": "Device deleted"
     },
     "toast": {
@@ -2002,7 +2014,8 @@
       "model": "Model",
       "os": "OS",
       "addedAt": "Added",
-      "hwidMatch": "HWID match"
+      "hwidMatch": "HWID match",
+      "updatedAt": "Updated"
     },
     "connectionTypes": {
       "residential": "Residential",
@@ -2035,6 +2048,7 @@
       "user_not_found": "The customer is not found in the Bedolaga bot, and there will be no email: no email address or Email is off in the template",
       "delivery_failed": "The Bedolaga bot rejected the warning, and there will be no email: no email address or Email is off in the template",
       "mail_failed": "The bot did not deliver and our mail server could not send the email — check its settings",
+      "email_not_verified": "The customer's email is not confirmed and Telegram is unavailable. We don't write to unconfirmed addresses: one may belong to someone else",
       "not_delivered": "Neither Telegram nor email delivered the warning",
       "unknown": "The warning was not sent",
       "no_channel": "Nothing to deliver with: the customer has no Telegram or email for the channels enabled in the template"
@@ -2267,6 +2281,23 @@
         "nested_link": "a link inside a link does not work",
         "nested_quote": "a quote inside a quote does not work"
       }
+    },
+    "evidence": {
+      "title": "Connections behind the violation",
+      "groups": {
+        "geoSimultaneous": "From different countries at the same time",
+        "geoTravel": "Impossible travel",
+        "temporal": "Online at the same time",
+        "asn": "Suspicious networks"
+      },
+      "pool": "carrier pool",
+      "since": "since {{time}}"
+    },
+    "addresses": {
+      "title": "Addresses around the violation (±{{minutes}} min)",
+      "online": "online {{from}} — {{to}}",
+      "connections": "connections: {{count}}",
+      "nodes": "nodes: {{nodes}}"
     }
   },
   "admins": {
@@ -2757,6 +2788,7 @@
       "sync_hwid": "HWID sync",
       "delete_user_hwid_device": "Delete device",
       "delete_all_user_hwid_devices": "Delete all devices",
+      "purge_removed_hwid_devices": "Clear removed devices",
       "create_preset": "Create preset",
       "update_preset": "Update preset",
       "delete_preset": "Delete preset",
@@ -3559,6 +3591,9 @@
       "delete_all_user_hwid_devices": {
         "user": "All user HWID devices deleted"
       },
+      "purge_removed_hwid_devices": {
+        "user": "Removed HWID devices of the user deleted from history"
+      },
       "create_preset": {
         "user_preset": "User preset created"
       },
@@ -3750,14 +3785,14 @@
     },
     "geo": {
       "title": "Connection Geography",
-      "tooltip": "Where connections came from in the period: unique users and addresses by country and city. Each city lists its 100 most active users.",
+      "tooltip": "Where connections came from in the period: unique users and addresses by country, region and city. The region comes from the GeoIP region name. Each city lists its 100 most active users.",
       "noData": "No geolocation data",
       "noDataHint": "Data will appear after first connections",
-      "noMapKey": "Without a CARTO key the map shows an “API key required” watermark. Get a free key at carto.com/basemaps/apikey and paste it in Settings → General → “CARTO maps key”.",
       "connections": "{{count}} connections",
       "users": "Users",
       "more": "more",
-      "uniqueUsers": "{{count}} users",
+      "uniqueUsers_one": "{{count}} user",
+      "uniqueUsers_other": "{{count}} users",
       "andMore": "+{{count}} more",
       "showAll": "Show all ({{count}})",
       "usersByCity": "Users by city",
@@ -3766,7 +3801,8 @@
       "connectionsColumn": "Connections",
       "uniqueUsersColumn": "Users",
       "searchPlaceholder": "Search by city or user...",
-      "citiesCount": "{{count}} cities",
+      "citiesCount_one": "{{count}} city",
+      "citiesCount_other": "{{count}} cities",
       "allCountries": "All countries",
       "sort": {
         "countDesc": "Connections (desc)",
@@ -3776,7 +3812,44 @@
         "cityAsc": "City (A-Z)",
         "cityDesc": "City (Z-A)"
       },
-      "ipsCount": "{{formatted}} IP"
+      "ipsCount": "{{formatted}} IP",
+      "map": {
+        "aria": "Connections map",
+        "world": "World",
+        "russia": "Russia",
+        "metricUsers": "Users",
+        "metricIps": "IP addresses",
+        "zoomIn": "Zoom in",
+        "zoomOut": "Zoom out",
+        "reset": "Reset zoom",
+        "noConnections": "no connections",
+        "legendUsers": "users",
+        "legendIps": "addresses",
+        "hint": "Ctrl + scroll to zoom, drag to pan, click for details",
+        "topCountries": "Countries",
+        "topRegions": "Regions",
+        "noAreaData": "No connections in this period",
+        "showAll": "Show all ({{count}})",
+        "showTop": "Top {{count}} only",
+        "unknownRegion_one": "{{count}} user ({{ips}} IP) has addresses without a region: GeoIP does not know the region or names it unusually, most often on mobile networks.",
+        "unknownRegion_other": "{{count}} users ({{ips}} IPs) have addresses without a region: GeoIP does not know the region or names it unusually, most often on mobile networks.",
+        "region": "Region",
+        "country": "Country",
+        "share": "Share",
+        "clearSelection": "Clear selection",
+        "emptyArea": "Nobody connected from here in this period — at least from addresses GeoIP places here.",
+        "openRegions": "Regions of the country",
+        "cities": "Cities",
+        "nodes": "Nodes they connect through",
+        "topUsersOnly_one": "Showing the {{count}} most active",
+        "topUsersOnly_other": "Showing the {{count}} most active",
+        "pickCountry": "Country…",
+        "withConnections": "With connections",
+        "topRegionsRu": "Russian regions",
+        "regionRu": "Federal subject",
+        "loadFailed": "Could not load the regions map",
+        "noKnownRegions": "No region is known for anyone who connected from here — see the line below."
+      }
     },
     "topUsers": {
       "title": "Top users by traffic",
@@ -4237,7 +4310,18 @@
       "violations_last_hour": "Violations in an hour",
       "users_new_today": "New users",
       "downtime_minutes": "Down for, min",
-      "created_by": "Created by"
+      "created_by": "Created by",
+      "violation_kind": "Main analyzer",
+      "trial_abuse": "Trial abuse",
+      "trial_abuse_type": "Trial abuse kind",
+      "signals": "Triggered hard-block rules",
+      "reasons": "Reasons (text)",
+      "device_limit": "Device limit",
+      "simultaneous_sources": "Simultaneous sources",
+      "simultaneous_addresses": "Simultaneous addresses",
+      "simultaneous_excess": "Sources above the device limit",
+      "effective_threshold": "Threshold with buffers",
+      "effective_excess": "Sources above the threshold with buffers"
     },
     "actionTypes": {
       "disable_user": "Disable user",
@@ -4677,7 +4761,9 @@
       },
       "forMinutes": "Holds for at least, min",
       "forMinutesHint": "A single spike is not worth waking anyone — fires only if the value holds this long.",
-      "conditionsAnyLabel": "WITH CONDITIONS (any one is enough)"
+      "conditionsAnyLabel": "WITH CONDITIONS (any one is enough)",
+      "selectValue": "Select value",
+      "reasonsHint": "Reason text in the detector's language, matched as a substring with contains or not contains. Wording changes between versions — for trial abuse the Trial abuse and Triggered hard-block rules fields are more reliable."
     },
     "testResult": {
       "title": "Test result",
@@ -4728,7 +4814,9 @@
         "whitelisted": "the customer is whitelisted",
         "support_contacted": "the customer wrote to support — an operator decides",
         "already_scheduled": "this step is already waiting",
-        "warning_not_delivered": "the warning did not reach the customer"
+        "warning_not_delivered": "the warning did not reach the customer",
+        "payment_received": "the customer paid after the trigger",
+        "active_paid_subscription": "the customer already has a paid subscription"
       },
       "notQueued": "Not queued: {{action}} — {{reason}}"
     },
@@ -4737,6 +4825,38 @@
       "hint": "Like the built-in auto-block: other subscriptions with a live trial on the same device. Without them the ring keeps working — after the measure hits one, the rest no longer match the rule. Already blocked, throttled and whitelisted customers are left alone.",
       "short": "+ HWID accomplices",
       "summary": "Accomplices: applied {{done}}, skipped {{skipped}}"
+    },
+    "conditionValues": {
+      "trial_abuse": {
+        "true": "yes",
+        "false": "no"
+      },
+      "trial_abuse_type": {
+        "multiple_active_trials": "Several accounts with a live trial on one device",
+        "repeated_trial": "Repeated trial of one account on one device"
+      },
+      "signals": {
+        "trial_abuse": {
+          "active_trials": "Trial abuse: several live trials on a device",
+          "repeated_trial": "Trial abuse: repeated trial on a device"
+        },
+        "hwid": {
+          "accounts": "Many accounts on one device",
+          "matches": "Mass HWID matches"
+        },
+        "sharing": {
+          "sources": "Abnormally many sources",
+          "simultaneous": "Many simultaneous connections",
+          "devices": "Many devices by fingerprint",
+          "excess": "Sharing above the device limit"
+        }
+      }
+    },
+    "payment": {
+      "unlessPaid": "Skip if the customer already has a paid subscription",
+      "unlessPaidAfter": "Skip if the customer paid after the trigger",
+      "hint": "Paid means a live subscription without a trial tag or squad (Settings → Violations). The customer's other accounts are found by Telegram ID, or by email without one. Payment after the trigger is checked against Bedolaga transactions, or by subscription status without it.",
+      "short": "· except paying"
     }
   },
   "settings": {
@@ -5070,7 +5190,7 @@
       },
       "notifications_rich_enabled": {
         "label": "✨ Rich notification styling",
-        "description": "Send Telegram notifications as Bot API 10.1 rich messages: real headings, field lists, collapsible sections. Falls back to plain HTML automatically if Telegram rejects it"
+        "description": "Send Telegram notifications as rich cards (Bot API 10.1+): tables, collapsible sections, quotes, buttons right in the card, fields copied with a tap. Falls back to plain HTML automatically if Telegram rejects it"
       },
       "notifications_users_enabled": {
         "label": "👤 Users",
@@ -5204,10 +5324,6 @@
         "label": "🕒 Time zone",
         "description": "IANA zone, e.g. Europe/Moscow. All times are shown in it: web panel, bot, notifications, exports and report times. The database keeps time in UTC"
       },
-      "map_tiles_api_key": {
-        "label": "🗺️ CARTO maps key",
-        "description": "CARTO Basemaps key for the analytics map. Without it tiles carry an “API key required” watermark. Free key (5M tiles/month): carto.com/basemaps/apikey"
-      },
       "web_panel_public_url": {
         "label": "🔗 Public panel URL",
         "description": "https address of the web panel. Used by the bot's \"Open panel\" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL"
@@ -5227,6 +5343,14 @@
       "auth_totp_required": {
         "label": "🔐 Mandatory 2FA (TOTP)",
         "description": "Require TOTP setup for all accounts"
+      },
+      "webauthn_rp_id": {
+        "label": "🔑 Passkey domain (RP ID)",
+        "description": "Domain passkeys are bound to, e.g. panel.example.com. Empty — the domain the panel is opened on. After a change, passkeys added under the previous domain stop working"
+      },
+      "webauthn_origin": {
+        "label": "🔑 Passkey origin",
+        "description": "Panel address with the scheme, e.g. https://panel.example.com. Empty — built from the request headers (Host and X-Forwarded-Proto). Set it if the proxy in front of the panel does not pass X-Forwarded-Proto"
       },
       "auth_max_attempts": {
         "label": "🚫 Max attempts before lockout",
@@ -5258,7 +5382,7 @@
       },
       "maxmind_source": {
         "label": "🌍 MaxMind GeoIP source",
-        "description": "auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required)"
+        "description": "auto — GitHub mirrors (P3TERX, GitSquared), then MaxMind; github — mirrors only (no key); maxmind — official only (key required). Own mirror — MAXMIND_MIRROR_URL variable"
       },
       "notifications_topic_id": {
         "label": "💬 Topic: Default (fallback)",
@@ -5325,8 +5449,8 @@
         "description": "Delete synced Subscription Request History records older than N days. 0 = keep forever"
       },
       "violations_max_simultaneous_ips": {
-        "label": "🌐 Max simultaneous IPs",
-        "description": "Max simultaneous IPs above the device limit to trigger a violation (0 = auto from device count)"
+        "label": "🌐 Shared simultaneous IP limit",
+        "description": "One simultaneous-source limit for all users instead of their device limit; network-switch and CGNAT buffers are added on top. 0 = each user's own device limit from the panel"
       },
       "violations_geo_max_city_distance_km": {
         "label": "📏 Max inter-city distance (km)",
@@ -5399,6 +5523,10 @@
       "torrent_min_peers": {
         "label": "Distinct peers threshold (swarm)",
         "description": "How many DIFFERENT addresses the exchange must span within half an hour. Torrent means a swarm of dozens of peers; events against one and the same address are what a long ordinary connection produces — antivirus traffic and game launchers were caught exactly this way. 1 disables the swarm check"
+      },
+      "torrent_min_events_per_peer": {
+        "label": "Events per address (exchange depth)",
+        "description": "How many events per address, on average, the exchange must show within half an hour. A torrent client keeps trading with the same peers for a long time, so it has several events per address; a game launcher or a DHT lookup touches each address once. 1 disables the check"
       },
       "violation_recap_days": {
         "label": "Violation history window (days)",
@@ -5599,6 +5727,10 @@
       "finance_reminder_days": {
         "label": "Remind this many days ahead",
         "description": "Comma-separated list of days before the charge (for example 7,3,1). Overdue payments are always reminded about"
+      },
+      "finance_reminder_hour": {
+        "label": "Reminder hour",
+        "description": "Hour of the day (0–23) from which the daily reminders are sent. Both the hour and the day itself follow the panel time zone, not UTC"
       },
       "finance_autosync_enabled": {
         "label": "Auto-sync hosting provider APIs",
@@ -5943,6 +6075,10 @@
       "notifications_retention_days": {
         "label": "Notification retention (days)",
         "description": "How many days notifications and the alert trigger log are kept"
+      },
+      "violations_hard_block_simultaneous_excess": {
+        "label": "🚫 Hard block: sources above the device limit",
+        "description": "Hard block when simultaneous sources exceed the user's device limit by more than this number: with 5 and a limit of 1 — from 7 sources, with a limit of 3 — from 9. The sources must also exceed the threshold with network-switch and CGNAT buffers. Does not apply to unlimited users (limit 0). 0 = disabled"
       }
     },
     "inDb": "In DB",
@@ -7083,6 +7219,10 @@
     "FORBIDDEN": "Access denied",
     "EMAIL_NOT_CONFIGURED": "Email sending is not configured",
     "RESET_TOKEN_INVALID": "Invalid or expired password reset link",
+    "PASSKEY_DOMAIN_UNKNOWN": "Could not determine the panel address for passkeys. You can set it in Settings → Security",
+    "PASSKEY_CHALLENGE_EXPIRED": "The passkey request has expired, start again",
+    "PASSKEY_NOT_FOUND": "Passkey not found. Add it in settings",
+    "PASSKEY_VERIFICATION_FAILED": "Passkey verification failed: {{detail}}",
     "USERNAME_EXISTS": "Username already exists",
     "CANNOT_MODIFY_SELF": "Cannot modify your own account",
     "ADMIN_CREATE_FAILED": "Failed to create administrator",
@@ -7585,7 +7725,8 @@
       "addDevices": "Add devices",
       "addAmount": "Amount to add",
       "trafficAdded": "Traffic added",
-      "devicesAdded": "Device limit increased"
+      "devicesAdded": "Device limit increased",
+      "balancePlaceholder": "+100 or -50"
     },
     "trial": "Trial",
     "conversions": "Conversions",
@@ -7769,6 +7910,38 @@
     "tg": "TG",
     "capabilities": {
       "noActivity": "Bot v{{version}} does not provide the customer activity feed, so that section is hidden in the customer card. It appears after the bot is updated."
+    },
+    "events": {
+      "title": "Event feed",
+      "tooltip": "Purchases, renewals, top-ups, trials, promo codes and campaign visits from the bot, cabinet and mini app, newest first. Purchases, trials and promo codes from the cabinet and mini app are recorded by the bot only when admin notifications are enabled in Bedolaga (ADMIN_NOTIFICATIONS_ENABLED).",
+      "empty": "No events yet",
+      "error": "Failed to load events",
+      "more": "Show more",
+      "filters": {
+        "all": "All",
+        "payments": "Payments",
+        "trials": "Trials",
+        "promo": "Promo",
+        "campaigns": "Campaigns"
+      },
+      "types": {
+        "activation": "Trial started",
+        "purchase": "Subscription purchase",
+        "renewal": "Renewal",
+        "balance_topup": "Balance top-up",
+        "promocode_activation": "Promo code",
+        "promo_group_change": "Promo group change",
+        "referral_link_visit": "Campaign link visit",
+        "campaign_registration": "Campaign sign-up"
+      },
+      "details": {
+        "days": "{{count}} d",
+        "devices": "{{count}} dev.",
+        "fromTrial": "after trial",
+        "balance": "balance {{amount}}",
+        "returning": "existing customer",
+        "automatic": "automatic"
+      }
     }
   },
   "notFound": {

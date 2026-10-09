@@ -50,6 +50,7 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Возможности',
           items: [
             { text: 'Анти-абуз', link: '/guide/anti-abuse' },
+            { text: 'Предупреждения через Bedolaga', link: '/guide/bedolaga-warnings' },
             { text: 'Почтовый сервер', link: '/guide/mail' },
             { text: 'Плагины', link: '/guide/plugins' },
             { text: 'Мониторинг', link: '/guide/monitoring' },
@@ -106,6 +107,7 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Релизы',
           items: [
             { text: 'Все релизы', link: '/releases/' },
+            { text: '5.2.0', link: '/releases/5.2.0' },
             { text: '5.1.0', link: '/releases/5.1.0' },
             { text: '5.0.0', link: '/releases/5.0.0' },
           ],

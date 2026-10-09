@@ -47,3 +47,28 @@ def test_ref_is_optional():
     """Кнопке может быть нечего уточнять — хвост тогда пустой, но формат тот же."""
     markup = plugin_actions_markup("block_radar", [_action(ref="")])
     assert markup["inline_keyboard"][0][0]["callback_data"] == "pact:block_radar:fb_yes:"
+
+
+def test_panel_notify_embeds_plugin_actions(monkeypatch):
+    """Действия плагина — кнопками прямо в сообщении, его HTML — внутри карточки."""
+    import asyncio
+
+    from web.backend.core.plugin_api import panel_notify
+
+    captured = {}
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("web.backend.core.notification_service.create_notification", fake_create)
+    asyncio.run(panel_notify(
+        title="Радар", body="Нода: <b>Germany</b>\n   первое поле\n   второе поле",
+        severity="warning", plugin_id="block_radar",
+        actions=[{"text": "Да", "action": "fb_yes", "ref": "1", "style": "success"}],
+    ))
+    blocks = captured["telegram_card"].to_blocks()
+    assert blocks[0] == {"type": "heading", "text": "⚠️ Радар", "size": 3}
+    assert any(blk["type"] == "list" for blk in blocks), "строки с отступом — список, как и раньше"
+    buttons = next(blk for blk in blocks if blk["type"] == "buttons")["buttons"]
+    assert buttons == [{"text": "Да", "callback_data": "pact:block_radar:fb_yes:1", "style": "success"}]
+    assert "reply_markup" not in captured

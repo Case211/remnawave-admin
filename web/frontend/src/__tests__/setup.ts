@@ -76,7 +76,7 @@ if (!globalThis.crypto?.randomUUID) {
   })
 }
 
-// ── Catch unhandled rejections from jsdom (e.g. Leaflet tile fetch) ──
+// ── Catch unhandled rejections from jsdom (e.g. aborted fetches) ──
 process.on('unhandledRejection', () => {
   // Suppress jsdom/undici unhandled rejections in test env
 })

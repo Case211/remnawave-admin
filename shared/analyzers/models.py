@@ -34,6 +34,19 @@ ACTION_LABELS = {
 # кнопка частичного исключения под уведомлением.
 VIOLATION_ANALYZERS = ("temporal", "geo", "asn", "profile", "device", "hwid", "user_agent")
 
+# Машинные признаки нарушения — какое правило жёсткой меры сработало. По ним
+# автоматизация выбирает нарушения, не завися от языка и формулировок причин.
+VIOLATION_SIGNALS = (
+    "sharing.sources",             # аномально много источников
+    "sharing.simultaneous",        # много одновременных подключений
+    "sharing.devices",             # много устройств по fingerprint
+    "sharing.excess",              # источников сверх лимита устройств больше порога
+    "hwid.matches",                # массовые совпадения HWID
+    "hwid.accounts",               # много разных аккаунтов на одном устройстве
+    "trial_abuse.active_trials",   # несколько аккаунтов с живым триалом на одном устройстве
+    "trial_abuse.repeated_trial",  # повторный триал одного аккаунта на одном устройстве
+)
+
 
 def _analyzer_score(entry: Any) -> float:
     """Вклад анализатора. Breakdown приходит и датаклассами, и словарями."""
@@ -45,6 +58,36 @@ def _analyzer_score(entry: Any) -> float:
         return float(value or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+# Сколько улик держать на анализатор: карточке хватит, raw_breakdown не раздувается
+MAX_EVIDENCE = 20
+
+
+def connection_evidence(conn: Any, meta: Any = None, **extra: Any) -> Dict[str, Any]:
+    """Улика нарушения — одно подключение: адрес, где он, через какой узел и когда.
+
+    Ложится в raw_breakdown: по ней карточка показывает, какие именно
+    подключения дали нарушение, а не одну строку причины. ``conn`` — активное
+    соединение или запись истории (словарь), ``meta`` — GeoIP адреса.
+    """
+    def get(key):
+        return conn.get(key) if isinstance(conn, dict) else getattr(conn, key, None)
+
+    ip, node = get("ip_address"), get("node_uuid")
+    entry: Dict[str, Any] = {
+        "ip": str(ip) if ip is not None else None,
+        "node_uuid": str(node) if node else None,
+        "connected_at": get("connected_at"),
+        "last_seen_at": get("last_seen_at"),
+    }
+    if meta is not None:
+        entry.update(
+            country=getattr(meta, "country_code", None), city=getattr(meta, "city", None),
+            asn_org=getattr(meta, "asn_org", None), connection_type=getattr(meta, "connection_type", None),
+        )
+    entry.update(extra)
+    return entry
 
 
 def dominant_analyzer(breakdown: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -75,6 +118,17 @@ class TemporalScore:
     # заложены буферы на смену сети и CGNAT. Детектор не гасит такой сигнал
     # мобильными объяснениями.
     strong_sharing: bool = False
+    # Разбор порога: из чего он сложился и насколько превышен. Источники —
+    # simultaneous_connections_count (адреса одного пула схлопнуты в один)
+    simultaneous_addresses: int = 0
+    device_limit: Optional[int] = None  # лимит устройств из панели; 0 — безлимит
+    network_buffer: int = 0
+    cgnat_buffer: int = 0
+    effective_threshold: int = 0  # лимит (или общий из настроек) + буферы
+    simultaneous_excess: Optional[int] = None  # источников сверх лимита; None — безлимит
+    effective_excess: int = 0  # источников сверх порога с буферами
+    # Улики: адреса, которые были в сети одновременно (connection_evidence)
+    evidence: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -84,6 +138,9 @@ class GeoScore:
     countries: Set[str]
     cities: Set[str]
     impossible_travel_detected: bool = False
+    # Улики: подключения из разных стран одновременно (kind=simultaneous) и
+    # концы нереалистичного перемещения (kind=travel)
+    evidence: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -94,6 +151,8 @@ class ASNScore:
     is_mobile_carrier: bool = False
     is_datacenter: bool = False
     is_vpn: bool = False
+    # Улики: активные адреса через хостинг, VPN, корпоративные и магистральные сети
+    evidence: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -169,3 +228,4 @@ class ViolationScore:
     recommended_action: ViolationAction
     confidence: float
     reasons: List[str]
+    signals: List[str] = field(default_factory=list)  # коды из VIOLATION_SIGNALS

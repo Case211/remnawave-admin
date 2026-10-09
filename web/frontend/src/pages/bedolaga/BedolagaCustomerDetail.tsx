@@ -46,6 +46,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { eventDetails, eventTitle } from '@/components/bedolaga/EventsFeed'
 
 // ── Helpers ──
 
@@ -77,27 +78,13 @@ function getInitialColor(id: number): string {
   return colors[id % colors.length]
 }
 
-function relativeTime(d?: string): string {
-  if (!d) return '—'
-  const now = Date.now()
-  const diff = now - new Date(d).getTime()
-  const mins = Math.floor(diff / 60_000)
-  if (mins < 1) return 'online'
-  if (mins < 60) return `${mins} мин назад`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours} ч назад`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days} дн назад`
-  return `${Math.floor(days / 30)} мес назад`
-}
-
 function isOnline(d?: string): boolean {
   if (!d) return false
   return Date.now() - new Date(d).getTime() < 5 * 60_000
 }
 
 // Centralized locale-aware formatters (used outside components)
-import { formatDateUtil as formatDate, formatDateShortUtil as formatDateShort } from '@/lib/useFormatters'
+import { formatDateUtil as formatDate, formatDateShortUtil as formatDateShort, useFormatters } from '@/lib/useFormatters'
 
 function daysUntil(d?: string): number | null {
   if (!d) return null
@@ -134,6 +121,7 @@ const txTypeColors: Record<string, string> = {
 export default function BedolagaCustomerDetail() {
   const { id } = useParams<{ id: string }>()
   const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -398,7 +386,7 @@ export default function BedolagaCustomerDetail() {
             <div className="flex items-center gap-3 text-dark-300 text-sm">
               <span className="flex items-center gap-1">
                 <span className={cn('w-2 h-2 rounded-full', online ? 'bg-emerald-400' : 'bg-dark-500')} />
-                {relativeTime(user.last_activity)}
+                {(user.last_activity ? formatTimeAgo(user.last_activity) : '—')}
               </span>
               {user.telegram_id && <span className="hidden sm:inline">TG: {user.telegram_id}</span>}
             </div>
@@ -507,7 +495,7 @@ export default function BedolagaCustomerDetail() {
             <Separator className="bg-[var(--glass-border)]" />
 
             <InfoRow icon={Calendar} label={t('bedolaga.customerDetail.registered')} value={formatDate(user.created_at)} />
-            <InfoRow icon={Clock} label={t('bedolaga.customerDetail.lastActivity')} value={relativeTime(user.last_activity)} highlight={online} />
+            <InfoRow icon={Clock} label={t('bedolaga.customerDetail.lastActivity')} value={(user.last_activity ? formatTimeAgo(user.last_activity) : '—')} highlight={online} />
 
             {user.promo_group?.name && (
               <>
@@ -750,27 +738,33 @@ export default function BedolagaCustomerDetail() {
                   </div>
                 ) : (
                   <div className="space-y-1 max-h-[320px] overflow-y-auto pr-1">
-                    {activityItems.map((item: any, index: number) => (
-                      <div
-                        key={`${item.type}-${item.timestamp}-${index}`}
-                        className="flex items-start gap-2.5 py-2 border-b border-[var(--glass-border)] last:border-0"
-                      >
-                        <span className="font-mono text-[10px] text-dark-400 leading-tight flex-shrink-0 w-9 pt-0.5">
-                          {formatDateShort(item.timestamp)}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-dark-100 truncate">
-                            {item.title || t(`bedolaga.customerDetail.activity.types.${item.type}`, { defaultValue: item.type })}
-                          </div>
-                          {item.subtype && <div className="text-[10px] text-dark-400 truncate">{item.subtype}</div>}
-                        </div>
-                        {typeof item.amount_kopeks === 'number' && item.amount_kopeks !== 0 && (
-                          <span className="text-xs font-bold tabular-nums text-emerald-400 flex-shrink-0">
-                            {(item.amount_kopeks / 100).toLocaleString()} ₽
+                    {activityItems.map((item: any, index: number) => {
+                      // У событий подписок бот кладёт в title английский текст, а в meta — те же поля, что в общей ленте
+                      const isEvent = item.type === 'event' && item.subtype
+                      const title = isEvent
+                        ? eventTitle(item.subtype, t)
+                        : item.title || t(`bedolaga.customerDetail.activity.types.${item.type}`, { defaultValue: item.type })
+                      const subtitle = isEvent ? eventDetails(item.subtype, item.meta, t).join(' · ') : item.subtype
+                      return (
+                        <div
+                          key={`${item.type}-${item.timestamp}-${index}`}
+                          className="flex items-start gap-2.5 py-2 border-b border-[var(--glass-border)] last:border-0"
+                        >
+                          <span className="font-mono text-[10px] text-dark-400 leading-tight flex-shrink-0 w-9 pt-0.5">
+                            {formatDateShort(item.timestamp)}
                           </span>
-                        )}
-                      </div>
-                    ))}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-dark-100 truncate">{title}</div>
+                            {subtitle && <div className="text-[10px] text-dark-400 truncate">{subtitle}</div>}
+                          </div>
+                          {typeof item.amount_kopeks === 'number' && item.amount_kopeks !== 0 && (
+                            <span className="text-xs font-bold tabular-nums text-emerald-400 flex-shrink-0">
+                              {(item.amount_kopeks / 100).toLocaleString()} ₽
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -889,7 +883,7 @@ export default function BedolagaCustomerDetail() {
                 type="number" step="0.01"
                 value={balanceAmount}
                 onChange={(e) => setBalanceAmount(e.target.value)}
-                placeholder="+100 или -50"
+                placeholder={t('bedolaga.customerDetail.balancePlaceholder')}
                 className="w-full h-10 px-3 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
               />
             </div>

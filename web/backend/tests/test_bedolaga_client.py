@@ -46,3 +46,37 @@ async def test_get_user_by_email_stops_after_max_pages(monkeypatch):
 
     assert await client.get_user_by_email("missing@example.com", page_size=2, max_pages=3) is None
     assert len(calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_email_uses_search_first(monkeypatch):
+    """Bedolaga с почтой в поиске находит клиента одним запросом — без перебора страниц."""
+    client = BedolagaClient()
+    calls = []
+
+    async def fake_list_users(limit=20, offset=0, **filters):
+        calls.append(filters)
+        return {"items": [{"id": 7, "email": "person@example.com"}], "total": 1}
+
+    monkeypatch.setattr(client, "list_users", fake_list_users)
+
+    assert (await client.get_user_by_email("Person@Example.com"))["id"] == 7
+    assert calls == [{"search": "Person@Example.com"}]
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_email_scans_when_search_misses(monkeypatch):
+    """Старая Bedolaga почту в поиске не смотрит — тогда перебор, как раньше."""
+    client = BedolagaClient()
+    calls = []
+
+    async def fake_list_users(limit=20, offset=0, **filters):
+        calls.append(filters)
+        if filters.get("search"):
+            return {"items": [{"id": 3, "email": "person@example.com.ru"}], "total": 1}
+        return {"items": [{"id": 9, "email": "person@example.com"}], "total": 1}
+
+    monkeypatch.setattr(client, "list_users", fake_list_users)
+
+    assert (await client.get_user_by_email("person@example.com"))["id"] == 9
+    assert calls == [{"search": "person@example.com"}, {}]

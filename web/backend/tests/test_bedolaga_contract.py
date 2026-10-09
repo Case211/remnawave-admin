@@ -181,3 +181,63 @@ async def test_media_upload_goes_to_bot_upload_route():
     assert (seen["method"], seen["path"]) == ("POST", "/upload")
     assert b'name="media_type"' in seen["body"] and b"photo" in seen["body"]
     assert result["file_id"] == "F1"
+
+
+@pytest.mark.asyncio
+async def test_transaction_type_filter_sent_as_type(monkeypatch):
+    """В webapi Bedolaga фильтр зовётся type: transaction_type она молча пропускала."""
+    sent = {}
+
+    async def fake(**params):
+        sent.update(params)
+        return {"items": []}
+
+    monkeypatch.setattr(customers.bedolaga_client, "list_transactions", fake)
+    await customers.list_transactions(limit=20, offset=0, user_id=None, transaction_type="deposit",
+                                      payment_method=None, is_completed=None, date_from=None, date_to=None,
+                                      admin=ADMIN)
+    assert sent["type"] == "deposit" and "transaction_type" not in sent
+
+
+@pytest.mark.asyncio
+async def test_referrals_need_customer_access(app, viewer_client):
+    """Рефералы — данные клиентов: базового bedolaga:view для них мало."""
+    from web.backend.api.deps import get_current_admin
+    from .conftest import make_admin
+    app.dependency_overrides[get_current_admin] = lambda: make_admin(
+        "viewer", "watcher", account_id=4, permissions={("bedolaga", "view")})
+    resp = await viewer_client.get("/api/v2/bedolaga/referrals/stats")
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_events_feed_uses_notifications_route(monkeypatch, client):
+    """Ручки /subscription-events у Bedolaga нет: лента живёт в /notifications/subscriptions."""
+    sent = {}
+
+    async def fake_get(path, params=None):
+        sent["path"], sent["params"] = path, params
+        return {"items": [], "total": 0}
+
+    monkeypatch.setattr(customers.bedolaga_client, "_get", fake_get)
+    # /events объявлен до /{user_id}: иначе «events» разбирался бы как id клиента
+    resp = await client.get("/api/v2/bedolaga/customers/events?event_type=purchase&event_type=renewal")
+    assert resp.status_code == 200
+    assert sent == {
+        "path": "/notifications/subscriptions",
+        "params": {"limit": 20, "offset": 0, "event_type": ["purchase", "renewal"]},
+    }
+    # httpx повторяет ключ — так FastAPI бота и собирает список типов
+    url = httpx.URL("http://bot/notifications/subscriptions", params=sent["params"])
+    assert url.query.decode() == "limit=20&offset=0&event_type=purchase&event_type=renewal"
+
+
+@pytest.mark.asyncio
+async def test_events_feed_needs_customer_access(app, viewer_client):
+    """В ленте имена клиентов и суммы — базового bedolaga:view для неё мало."""
+    from web.backend.api.deps import get_current_admin
+    from .conftest import make_admin
+    app.dependency_overrides[get_current_admin] = lambda: make_admin(
+        "viewer", "watcher", account_id=4, permissions={("bedolaga", "view")})
+    resp = await viewer_client.get("/api/v2/bedolaga/customers/events")
+    assert resp.status_code == 403

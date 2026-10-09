@@ -54,8 +54,9 @@ class TestInMemoryCache:
     @pytest.mark.asyncio
     async def test_expired_entry_returns_none(self, mem_cache):
         await mem_cache.set("key1", "value1", ex=0)
-        # Wait a tiny bit for monotonic clock to advance
-        await asyncio.sleep(0.01)
+        # Wait for monotonic clock to advance: on Windows with Python 3.11 it
+        # ticks every ~15.6 ms, so a 10 ms sleep sometimes left it unchanged
+        await asyncio.sleep(0.05)
         result = await mem_cache.get("key1")
         assert result is None
 

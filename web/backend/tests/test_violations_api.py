@@ -709,3 +709,37 @@ class TestRecapBadge:
         assert body["recap"]["total"] == 3
         assert [h["id"] for h in body["history"]] == [305]
         assert body["history"][0]["action_taken"] == "annulled"
+
+
+class TestViolationDetailBreakdown:
+    """Разбор скоринга лежит в TEXT-колонке строкой JSON — карточка отдаёт его объектом."""
+
+    @staticmethod
+    def _db(raw):
+        db = MagicMock()
+        db.is_connected = True
+        db.get_violation_by_id = AsyncMock(return_value={
+            "id": 9, "user_uuid": "11111111-2222-3333-4444-555555555555", "score": 90.0,
+            "recommended_action": "hard_block", "confidence": 0.8, "raw_breakdown": raw,
+        })
+        db.violations_recap = AsyncMock(return_value={})
+        db.user_violation_history = AsyncMock(return_value=[])
+        return db
+
+    @pytest.mark.asyncio
+    async def test_json_string_is_parsed(self, app, client):
+        from web.backend.api.deps import get_db
+        app.dependency_overrides[get_db] = lambda: self._db('{"breakdown": {"geo": {"score": 90.0}}}')
+        with patch("web.backend.api.v2.violations._client_notices", new_callable=AsyncMock, return_value={}):
+            resp = await client.get("/api/v2/violations/9")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["raw_data"] == {"breakdown": {"geo": {"score": 90.0}}}
+
+    @pytest.mark.asyncio
+    async def test_broken_json_does_not_break_the_card(self, app, client):
+        from web.backend.api.deps import get_db
+        app.dependency_overrides[get_db] = lambda: self._db("{not json")
+        with patch("web.backend.api.v2.violations._client_notices", new_callable=AsyncMock, return_value={}):
+            resp = await client.get("/api/v2/violations/9")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["raw_data"] is None

@@ -475,19 +475,26 @@ class FinanceMixin:
 
     # ==================== Upcoming / Summary ====================
 
-    async def upcoming_finance_payments(self, days: int = 30) -> List[Dict[str, Any]]:
-        """Активные записи со списанием в ближайшие N дней (+ просроченные)."""
+    async def upcoming_finance_payments(
+        self, days: int = 30, today: Optional[date] = None,
+    ) -> List[Dict[str, Any]]:
+        """Активные записи со списанием в ближайшие N дней (+ просроченные).
+
+        ``today`` — от какой даты считать; по умолчанию дата процесса. Вызывающий,
+        которому важен календарь админа, передаёт дату в зоне отображения.
+        """
         if not self.is_connected:
             return []
+        if today is None:
+            today = date.today()
         async with self.acquire() as conn:
             rows = await conn.fetch(
                 f"""{self._ITEM_SELECT}
                     WHERE i.status = 'active' AND i.next_due_at IS NOT NULL
-                      AND i.next_due_at <= CURRENT_DATE + $1::int
+                      AND i.next_due_at <= $2::date + $1::int
                     ORDER BY i.next_due_at""",
-                days,
+                days, today,
             )
-        today = date.today()
         out = []
         for r in rows:
             d = self._item_row(r)

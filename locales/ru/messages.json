@@ -93,13 +93,6 @@
     "empty_results": "По выбранному фильтру ничего не найдено."
   },
   "notification": {
-    "user_created_title": "🆕 <b>Пользователь создан</b>",
-    "user_created_username": "👤 <b>{username}</b>",
-    "user_created_traffic": "📶 {traffic}",
-    "user_created_expire": "⏳ {expire}",
-    "user_created_squad": "🧩 {squad}",
-    "user_created_strategy": "🔄 {strategy}",
-    "user_created_created_by": "👮 Создал: <b>{created_by}</b>",
     "title_created": "✅ Пользователь создан",
     "title_updated": "✏️ Пользователь изменен",
     "title_deleted": "🗑 Пользователь удален",
@@ -1077,26 +1070,25 @@
     "skip_ok": "⏭ {name}: цикл пропущен. Следующий платёж: {next_due}"
   },
   "notify": {
-    "fallback": "ℹ️ <b>Уведомление:</b> {event}",
     "user": {
-      "fallback": "✏️ <b>Пользователь изменён</b>",
+      "fallback": "✏️ Пользователь изменён",
       "title": {
-        "created": "✅ <b>Пользователь создан</b>",
-        "updated": "✏️ <b>Пользователь изменён</b>",
-        "deleted": "🗑 <b>Пользователь удалён</b>",
-        "expired": "⏱️ <b>Подписка истекла</b>",
-        "expires_in_72h": "⏰ <b>Подписка истекает через 72 часа</b>",
-        "expires_in_48h": "⏰ <b>Подписка истекает через 48 часов</b>",
-        "expires_in_24h": "⏰ <b>Подписка истекает через 24 часа</b>",
-        "expired_24h_ago": "⏱️ <b>Подписка истекла 24 часа назад</b>",
-        "revoked": "🚫 <b>Подписка отозвана</b>",
-        "disabled": "❌ <b>Пользователь отключён</b>",
-        "enabled": "✅ <b>Пользователь включён</b>",
-        "limited": "⚠️ <b>Достигнут лимит трафика</b>",
-        "traffic_reset": "🔄 <b>Трафик сброшен</b>",
-        "first_connected": "🟢 <b>Первый вход пользователя</b>",
-        "bandwidth_threshold": "📊 <b>Достигнут порог использования трафика</b>",
-        "not_connected": "🔴 <b>Пользователь не подключался</b>"
+        "created": "✅ Пользователь создан",
+        "updated": "✏️ Пользователь изменён",
+        "deleted": "🗑 Пользователь удалён",
+        "expired": "⏱️ Подписка истекла",
+        "expires_in_72h": "⏰ Подписка истекает через 72 часа",
+        "expires_in_48h": "⏰ Подписка истекает через 48 часов",
+        "expires_in_24h": "⏰ Подписка истекает через 24 часа",
+        "expired_24h_ago": "⏱️ Подписка истекла 24 часа назад",
+        "revoked": "🚫 Подписка отозвана",
+        "disabled": "❌ Пользователь отключён",
+        "enabled": "✅ Пользователь включён",
+        "limited": "⚠️ Достигнут лимит трафика",
+        "traffic_reset": "🔄 Трафик сброшен",
+        "first_connected": "🟢 Первый вход пользователя",
+        "bandwidth_threshold": "📊 Достигнут порог использования трафика",
+        "not_connected": "🔴 Пользователь не подключался"
       },
       "field": {
         "traffic_limit": "Лимит трафика",
@@ -1108,7 +1100,8 @@
         "telegram_id": "Telegram ID",
         "email": "Email",
         "tag": "Тег",
-        "squad": "Сквад"
+        "squad": "Сквад",
+        "uuid": "UUID"
       },
       "label": {
         "unlimited": "Безлимит",
@@ -1119,107 +1112,112 @@
         "subscription": "Ссылка",
         "squad": "Сквад",
         "telegram": "Telegram",
-        "email": "Email",
-        "card_separator": " · "
+        "created_by": "Создал"
       },
       "section": {
-        "changes": "📋 <b>Изменения</b>",
-        "no_changes": "<i>Изменения не определены</i>",
-        "traffic_limits": "📊 <b>Трафик и лимиты</b>",
-        "card": "ℹ️ <b>Карточка пользователя</b>"
+        "changes": "📋 Изменения",
+        "no_changes": "Изменения не определены",
+        "traffic_limits": "📊 Трафик и лимиты",
+        "card": "ℹ️ Карточка пользователя"
       },
-      "subscription_link": "🔗 Ссылка: <code>{url}</code>",
-      "external_squad": "External: {uuid}..."
+      "external_squad": "External: {uuid}...",
+      "col": {
+        "field": "Поле",
+        "old": "Было",
+        "new": "Стало"
+      },
+      "qr": "📷 QR-код подписки"
     },
     "node": {
-      "fallback": "ℹ️ <b>Событие ноды: {event}</b>",
+      "fallback": "ℹ️ Событие ноды: {event}",
       "title": {
-        "node.created": "🆕 <b>Нода создана</b>",
-        "node.modified": "✏️ <b>Нода изменена</b>",
-        "node.disabled": "❌ <b>Нода отключена</b>",
-        "node.enabled": "✅ <b>Нода включена</b>",
-        "node.deleted": "🗑 <b>Нода удалена</b>",
-        "node.connection_lost": "🔴 <b>Потеряно соединение с нодой</b>",
-        "node.connection_restored": "🟢 <b>Соединение с нодой восстановлено</b>",
-        "node.traffic_notify": "📊 <b>Уведомление о трафике ноды</b>"
+        "node.created": "🆕 Нода создана",
+        "node.modified": "✏️ Нода изменена",
+        "node.disabled": "❌ Нода отключена",
+        "node.enabled": "✅ Нода включена",
+        "node.deleted": "🗑 Нода удалена",
+        "node.connection_lost": "🔴 Потеряно соединение с нодой",
+        "node.connection_restored": "🟢 Соединение с нодой восстановлено",
+        "node.traffic_notify": "📊 Уведомление о трафике ноды"
       },
       "label": {
-        "address": "Адрес",
         "status": "Статус",
         "traffic_limit": "Лимит трафика",
-        "changes": "📋 <b>Изменения</b>"
+        "changes": "📋 Изменения",
+        "uuid": "UUID"
       }
     },
     "service": {
-      "fallback": "ℹ️ <b>Событие сервиса: {event}</b>",
+      "fallback": "ℹ️ Событие сервиса: {event}",
       "title": {
-        "service.panel_started": "🚀 <b>Панель запущена</b>",
-        "service.login_attempt_failed": "⚠️ <b>Неудачная попытка входа</b>",
-        "service.login_attempt_success": "✅ <b>Успешный вход</b>",
-        "panel.unavailable": "❌ <b>Панель недоступна</b>"
+        "service.panel_started": "🚀 Панель запущена",
+        "service.login_attempt_failed": "⚠️ Неудачная попытка входа",
+        "service.login_attempt_success": "✅ Успешный вход",
+        "panel.unavailable": "❌ Панель недоступна"
       },
       "login": {
-        "username": "👤 <b>Username:</b> <code>{username}</code>",
-        "ip": "🌐 <b>IP:</b> <code>{ip}</code>",
-        "user_agent": "🔍 <b>User Agent:</b> <code>{user_agent}</code>",
-        "description": "💬 <b>Описание:</b> <code>{description}</code>"
+        "username": "Логин",
+        "ip": "IP",
+        "user_agent": "User-Agent",
+        "description": "Описание"
       },
       "panel_unavailable": {
-        "error_type": "⚠️ <b>Ошибка:</b> <code>{error_type}</code>",
-        "error_message": "📝 <b>Сообщение:</b> <code>{error_message}</code>",
-        "failures": "🔄 <b>Неудачных попыток подряд:</b> {count}",
-        "last_check": "🕒 <b>Последняя проверка:</b> {last_check}"
+        "error_type": "Ошибка",
+        "error_message": "Сообщение",
+        "failures": "Неудач подряд",
+        "last_check": "Последняя проверка"
       }
     },
     "hwid": {
-      "fallback": "💻 <b>Событие HWID: {event}</b>",
+      "fallback": "💻 Событие HWID: {event}",
       "title": {
-        "user_hwid_devices.added": "➕ <b>HWID устройство добавлено</b>",
-        "user_hwid_devices.deleted": "➖ <b>HWID устройство удалено</b>"
+        "user_hwid_devices.added": "➕ HWID устройство добавлено",
+        "user_hwid_devices.deleted": "➖ HWID устройство удалено"
       },
       "label": {
-        "user": "👤 <b>Пользователь:</b> <code>{username}</code>",
-        "uuid": "🆔 <b>UUID:</b> <code>{uuid}</code>",
-        "tg_id": "📱 <b>TG ID:</b> <code>{telegram_id}</code>",
-        "status": "📊 <b>Статус:</b> <code>{status}</code>",
-        "description": "📝 <b>Описание:</b> <code>{description}</code>",
-        "device_limit": "📲 <b>Лимит устройств:</b> <code>{limit}</code>"
+        "user": "Пользователь",
+        "uuid": "UUID",
+        "tg_id": "Telegram",
+        "status": "Статус",
+        "description": "Описание",
+        "device_limit": "Лимит устройств"
       },
-      "device_header": "💻 <b>Информация об устройстве</b>",
+      "device_header": "💻 Устройство",
       "device": {
-        "hwid": "   HWID: <code>{hwid}</code>",
-        "platform": "   Платформа: <code>{platform}</code>",
-        "os_version": "   Версия ОС: <code>{os_version}</code>",
-        "model": "   Модель: <code>{model}</code>",
-        "user_agent": "   User-Agent: <code>{user_agent}</code>",
-        "added": "   Добавлено: <code>{created_at}</code>"
+        "hwid": "HWID",
+        "platform": "Платформа",
+        "os_version": "Версия ОС",
+        "model": "Модель",
+        "user_agent": "User-Agent",
+        "added": "Добавлено"
       },
       "action": {
         "added": "Добавлено устройство",
         "deleted": "Удалено устройство",
         "fallback": "HWID: {event}"
-      }
+      },
+      "user_header": "👤 Пользователь"
     },
     "error": {
-      "title": "⚠️ <b>Ошибка системы</b>",
-      "type": "<b>Тип:</b> <code>{event}</code>",
-      "message": "<b>Сообщение:</b> <code>{message}</code>"
+      "title": "⚠️ Ошибка системы",
+      "type": "Тип",
+      "message": "Сообщение"
     },
     "crm": {
-      "fallback": "💰 <b>Событие CRM: {event}</b>",
+      "fallback": "💰 Событие CRM: {event}",
       "title": {
-        "crm.infra_billing_node_payment_in_7_days": "📅 <b>Оплата ноды через 7 дней</b>",
-        "crm.infra_billing_node_payment_in_48hrs": "⏰ <b>Оплата ноды через 48 часов</b>",
-        "crm.infra_billing_node_payment_in_24hrs": "⏰ <b>Оплата ноды через 24 часа</b>",
-        "crm.infra_billing_node_payment_due_today": "🔴 <b>Оплата ноды сегодня</b>",
-        "crm.infra_billing_node_payment_overdue_24hrs": "⚠️ <b>Оплата ноды просрочена на 24 часа</b>",
-        "crm.infra_billing_node_payment_overdue_48hrs": "⚠️ <b>Оплата ноды просрочена на 48 часов</b>",
-        "crm.infra_billing_node_payment_overdue_7_days": "🚨 <b>Оплата ноды просрочена на 7 дней</b>"
+        "crm.infra_billing_node_payment_in_7_days": "📅 Оплата ноды через 7 дней",
+        "crm.infra_billing_node_payment_in_48hrs": "⏰ Оплата ноды через 48 часов",
+        "crm.infra_billing_node_payment_in_24hrs": "⏰ Оплата ноды через 24 часа",
+        "crm.infra_billing_node_payment_due_today": "🔴 Оплата ноды сегодня",
+        "crm.infra_billing_node_payment_overdue_24hrs": "⚠️ Оплата ноды просрочена на 24 часа",
+        "crm.infra_billing_node_payment_overdue_48hrs": "⚠️ Оплата ноды просрочена на 48 часов",
+        "crm.infra_billing_node_payment_overdue_7_days": "🚨 Оплата ноды просрочена на 7 дней"
       },
       "section": {
-        "node": "🖥 <b>Информация о ноде</b>",
-        "provider": "🏢 <b>Провайдер</b>",
-        "billing": "💰 <b>Информация об оплате</b>"
+        "node": "🖥 Информация о ноде",
+        "provider": "🏢 Провайдер",
+        "billing": "💰 Информация об оплате"
       },
       "label": {
         "name": "Название",
@@ -1227,34 +1225,16 @@
         "address": "Адрес",
         "port": "Порт",
         "country": "Страна",
-        "login_url": "Личный кабинет: {url}",
-        "next_billing": "Следующая оплата: <code>{date}</code>",
-        "last_billing": "Последняя оплата: <code>{date}</code>",
+        "login_url": "Личный кабинет",
+        "next_billing": "Следующая оплата",
+        "last_billing": "Последняя оплата",
         "interval": "Интервал",
         "amount": "Сумма"
       }
     },
     "violation": {
-      "title": "🚨 <b>НАРУШИТЕЛЬ ЛИМИТА</b>",
-      "email": "📧 Email: <code>{email}</code>",
-      "username": "📧 Username: <code>{username}</code>",
-      "tg_id": "📱 TG ID: <code>{telegram_id}</code>",
-      "description": "📝 Описание: <code>{description}</code>",
-      "ip_count": "🌐 IP адресов: <b>{count}/{limit}</b>",
-      "ips_providers": "📍 IP (провайдеры):",
-      "ip_with_meta": "   <code>{ip}</code> - {provider} ({country})",
-      "ip_with_country": "   <code>{ip}</code> ({country})",
-      "ip_bare": "   <code>{ip}</code>",
-      "nodes": "🖥 Ноды: <code>{nodes}</code>",
-      "devices": "📲 Устройства ({count}/{limit}):",
-      "devices_ua": "📲 Устройства (по UA): {details}",
-      "devices_empty": "📲 Устройства: —",
       "os_list": "ОС: {list}",
       "client_list": "Клиенты: {list}",
-      "more_devices": "... и ещё {count}",
-      "duration": "⏱ В нарушении: <code>{seconds} сек</code>",
-      "score": "📊 Скор: <code>{score}/100</code>",
-      "time": "🕐 Время: <code>{time}</code>",
       "btn": {
         "info": "👤 Подробнее",
         "block": "🔒 Заблокировать",
@@ -1274,8 +1254,6 @@
         "linux": "Linux",
         "unknown": "Unknown"
       },
-      "summary": "👤 <code>{username}</code> · 📊 Скор: <b>{score}/100</b> · 🌐 IP: <b>{count}/{limit}</b>",
-      "user_section": "👤 <b>Пользователь</b>",
       "analyzer": {
         "temporal": "времени",
         "geo": "гео",
@@ -1284,6 +1262,93 @@
         "device": "устройствам",
         "hwid": "HWID",
         "user_agent": "UA"
+      },
+      "card": {
+        "lead_score": "скор {score}/100",
+        "lead_ips": "{count} IP из {limit}",
+        "field": {
+          "username": "Юзер",
+          "email": "Email",
+          "uuid": "UUID",
+          "telegram": "Telegram",
+          "description": "Описание"
+        },
+        "connections": "🌐 Подключения",
+        "col": {
+          "ip": "IP",
+          "provider": "Провайдер",
+          "country": "Страна",
+          "platform": "Платформа",
+          "os": "ОС",
+          "app": "Приложение"
+        },
+        "nodes": "🖥 Ноды: {nodes}",
+        "devices": "📲 Устройства · {count} из {limit}",
+        "devices_ua": "📲 Устройства по User-Agent",
+        "reasons": "🔎 Детали пересечения · {count}",
+        "auto_blocked": "⛔ Пользователь заблокирован",
+        "auto_blocked_credit": "автоматически, по порогу жёсткой блокировки",
+        "recommendation": "🎯 Рекомендация",
+        "auto_off": "Автоблокировка выключена — решение за администратором",
+        "history": "🔁 Нарушений за {days} дн.: {total}",
+        "history_annulled": "аннулировано {count}",
+        "annulled": "аннулировано"
+      },
+      "reason": {
+        "double_tunnel": {
+          "title": "Двойной туннель: подписка вставлена в чужой клиент",
+          "subtitle": "В User-Agent обнаружена подписочная ссылка (vless://, https://)"
+        },
+        "bot_library": {
+          "title": "Бот/скрипт в User-Agent",
+          "subtitle": "Подписка запрашивается curl/Go-http-client/python-requests — возможно автоматизация"
+        },
+        "hwid": {
+          "title": "Коллизия аккаунтов: общие устройства (device overlap)",
+          "subtitle": "Несколько аккаунтов используют одни и те же HWID"
+        },
+        "torrent": {
+          "title": "Обнаружен торрент-трафик (P2P)",
+          "subtitle": "Пользователь использует торрент через VPN"
+        },
+        "geo": {
+          "title": "Невозможное перемещение (geo anomaly)",
+          "subtitle": "Подключения из географически несовместимых локаций"
+        },
+        "simultaneous": {
+          "title": "Превышение лимита подключений (simultaneous)",
+          "subtitle": "Слишком много одновременных подключений с разных IP"
+        },
+        "asn": {
+          "title": "Подозрительный провайдер (ASN anomaly)",
+          "subtitle": "Подключение через VPN/прокси/датацентр"
+        },
+        "traffic": {
+          "title": "Чрезмерное потребление трафика",
+          "subtitle": "Пользователь превысил порог скорости потребления"
+        },
+        "generic": {
+          "title": "Обнаружено нарушение",
+          "subtitle": "Система обнаружила подозрительную активность"
+        },
+        "analyzer": {
+          "temporal": "Временная аномалия подключений",
+          "geo": "Географическая аномалия",
+          "asn": "Аномалия провайдера",
+          "profile": "Отклонение профиля поведения",
+          "device": "Аномалия устройств",
+          "user_agent": "Подозрительный User-Agent клиента"
+        },
+        "analyzer_other": "Нарушение ({analyzer})",
+        "analyzer_subtitle": "Анализатор {analyzer} обнаружил аномалию (скор: {score})"
+      },
+      "action": {
+        "no_action": "ничего не требуется",
+        "monitor": "наблюдать",
+        "warn": "предупредить",
+        "soft_block": "разобраться вручную",
+        "temp_block": "заблокировать временно",
+        "hard_block": "заблокировать"
       }
     },
     "push": {
@@ -1311,6 +1376,398 @@
         "not_connected": "Нет подключения",
         "fallback": "Юзер: {action}"
       }
+    },
+    "card": {
+      "brand": "Remnawave Admin",
+      "more": "… и ещё {count}",
+      "copy": "📋 Скопировать",
+      "profile": "профиль"
+    },
+    "torrent": {
+      "title": "Торрент-трафик обнаружен",
+      "field": {
+        "window": "Окно",
+        "events": "События",
+        "peers": "Адреса",
+        "ips": "IP"
+      },
+      "window_minutes": "{minutes} мин",
+      "threshold": "порог {value}",
+      "destinations": "🌐 Адреса · {count}",
+      "action": {
+        "blocked": "🛑 Пользователь отключён автоматически",
+        "block_failed": "⚠️ Автоблокировка не удалась — отключите вручную",
+        "notify": "👁 Только уведомление — решение за администратором"
+      }
+    },
+    "unknown": {
+      "title": "❓ Неизвестное событие",
+      "event": "Событие",
+      "data": "Данные"
+    },
+    "torrent_blocker": {
+      "title": "🚫 Торрент-блокировщик",
+      "node": "Нода",
+      "user": "Пользователь",
+      "ip": "IP",
+      "destination": "Назначение",
+      "action": "Действие",
+      "reason": "Причина",
+      "empty": "Нода прислала отчёт торрент-блокировщика."
+    },
+    "people": {
+      "col": {
+        "account": "Аккаунт",
+        "email": "Email",
+        "subscription": "Подписка",
+        "conns": "Подключений",
+        "created": "Создан",
+        "now": "Сейчас"
+      },
+      "trial": "пробная",
+      "status": {
+        "DISABLED": "отключена",
+        "EXPIRED": "истекла",
+        "LIMITED": "лимит"
+      },
+      "until": "до {date}",
+      "removed": "отвязано {date}"
+    },
+    "hwid_card": {
+      "device": "💻 Устройство",
+      "field": {
+        "hwid": "HWID",
+        "device": "Устройство",
+        "reason": "Причина в списке",
+        "added_by": "Внёс"
+      },
+      "reuse": {
+        "repeat": {
+          "title": "Повторная пробная с того же устройства",
+          "subtitle": "Тот же человек снова взял пробную подписку на этом железе"
+        },
+        "moved": {
+          "title": "HWID переехал на другой аккаунт",
+          "subtitle": "Устройство уже видели на другом аккаунте"
+        },
+        "target": "🎯 Куда привязали",
+        "repeat_trials": "🔴 Прежние пробные того же человека · {count}",
+        "strangers": "🟠 Другие аккаунты на этом устройстве · {count}"
+      },
+      "blacklist": {
+        "blocked": {
+          "title": "Чёрный список HWID: аккаунты отключены",
+          "subtitle": "Устройство из списка, подписки погашены через панель"
+        },
+        "found": {
+          "title": "Чёрный список HWID: найдено совпадение",
+          "subtitle": "Устройство из списка, действие — только оповещение"
+        },
+        "disabled_users": "👥 Отключены · {count}",
+        "found_users": "👥 Найдены · {count}"
+      },
+      "revived": {
+        "blocked": {
+          "title": "Подписка ожила и снова отключена",
+          "subtitle": "Устройство в чёрном списке, но подписка снова заработала"
+        },
+        "alive": {
+          "title": "Живая подписка на устройстве из списка",
+          "subtitle": "Действие записи — оповещение, подписку не трогаем"
+        },
+        "users": "👥 Кого касается · {count}"
+      }
+    },
+    "ip_trial": {
+      "title": "Несколько пробных подписок с одного адреса",
+      "subtitle": {
+        "mobile": "Адрес сменить труднее, чем HWID, — но за мобильным оператором может стоять весь район",
+        "plain": "С этого адреса пробную подписку брали несколько раз"
+      },
+      "address": "📍 Адрес",
+      "field": {
+        "ip": "IP",
+        "provider": "Провайдер",
+        "network": "Сеть"
+      },
+      "network": {
+        "mobile": "мобильный оператор (CGNAT)",
+        "hosting": "хостинг",
+        "proxy": "прокси"
+      },
+      "trials": "👥 Пробные подписки · {count}",
+      "btn": {
+        "block": "🚫 Заблокировать IP",
+        "users": "👥 Аккаунты",
+        "mute": "🔇 Не напоминать"
+      }
+    },
+    "blocked_ip": {
+      "title": "Адрес заблокирован",
+      "subtitle": "Трафик с адреса отбрасывается на нодах — целиком, не только VPN",
+      "subnet": "подсеть — под блокировку попадут все адреса диапазона",
+      "field": {
+        "expires": "Срок",
+        "admin": "Внёс",
+        "nodes": "Применено на нодах"
+      },
+      "forever": "бессрочно",
+      "affected": "👥 Кого задевает · {count}",
+      "summary": {
+        "trials": "пробных: {count}",
+        "active": "с живой подпиской: {count}"
+      },
+      "nobody": "За последний месяц подключений с этого адреса не было",
+      "no_agents": "подключённых агентов нет — правило не применено"
+    },
+    "traffic_rate": {
+      "title": "Высокое потребление трафика",
+      "lead_used": "{gb} GB за {minutes} мин",
+      "lead_rate": "~{rate} GB/ч",
+      "threshold_value": "{gb} GB / {minutes} мин",
+      "field": {
+        "threshold": "Порог",
+        "status": "Статус",
+        "traffic": "Трафик",
+        "expires": "Истекает",
+        "description": "Описание",
+        "short_uuid": "Short UUID"
+      },
+      "nodes": "🖥 Ноды",
+      "col": {
+        "node": "Нода",
+        "volume": "Объём"
+      }
+    },
+    "shaper": {
+      "title": "Шейпер: штраф качальщику",
+      "field": {
+        "node": "Нода",
+        "volume": "Прокачал",
+        "speed": "Скорость",
+        "until": "До",
+        "ip": "IP"
+      },
+      "volume_window": "{volume} за {seconds} с",
+      "speed_value": "до {rate} Мбит/с"
+    },
+    "attack": {
+      "started": "Нода под атакой",
+      "escalated": "Атака усилилась",
+      "finished": "Атака закончилась",
+      "col": {
+        "metric": "Показатель",
+        "now": "Сейчас",
+        "usual": "Обычно"
+      },
+      "row": {
+        "rx": "Приём",
+        "pps": "Пакетов/с"
+      },
+      "signs": "🔎 Признаки",
+      "reason": {
+        "syn_flood": "SYN-флуд (ядро отвечает syncookies)",
+        "listen_drops": "очередь входящих соединений переполнена",
+        "nic_drops": "сетевая карта роняет пакеты",
+        "conntrack_full": "таблица соединений почти заполнена",
+        "small_packets": "поток из мелких пакетов"
+      },
+      "field": {
+        "duration": "Длилась",
+        "peak": "Пик приёма",
+        "started": "Началась",
+        "ended": "Закончилась"
+      },
+      "unit": {
+        "mbit": "{value} Мбит/с",
+        "kbit": "{value} Кбит/с"
+      },
+      "duration": {
+        "minutes": "{minutes} мин",
+        "hours": "{hours} ч {minutes} мин"
+      }
+    },
+    "sync": {
+      "stalled": {
+        "title": "Синк с панелью стоит",
+        "text": "Трафик, HWID и аналитика в админке не обновляются.",
+        "last": "Последний успешный синк",
+        "ago": "{minutes} мин назад",
+        "hint": "Проверь связь с панелью и лог коллектора (web-collector)."
+      },
+      "resumed": {
+        "title": "Синк с панелью возобновился",
+        "text": "Данные в админке снова обновляются."
+      }
+    },
+    "backup": {
+      "db_failed": "Бэкап БД не выполнен",
+      "config_failed": "Бэкап конфига не выполнен",
+      "error": "Ошибка",
+      "deadman": {
+        "title": "Давно не было бэкапа",
+        "threshold": "Порог",
+        "threshold_value": "{hours} ч",
+        "last": "Последний успешный",
+        "never": "не было ни одного",
+        "hint": "Проверьте авто-бэкап."
+      },
+      "ready": "Бэкап готов",
+      "type": {
+        "database": "База данных",
+        "config": "Конфигурация"
+      },
+      "field": {
+        "file": "Файл"
+      }
+    },
+    "mail": {
+      "title": "Новое письмо",
+      "no_subject": "(без темы)",
+      "field": {
+        "from": "От",
+        "to": "Кому",
+        "attachments": "Вложения",
+        "checks": "Проверки"
+      }
+    },
+    "plugin_catalog": {
+      "new": "Новый плагин: {name}",
+      "update": "Обновление плагина: {name} {version}",
+      "new_text": "Плагин доступен для покупки в разделе «Плагины».",
+      "field": {
+        "version": "Версия",
+        "installed": "Установлена"
+      },
+      "update_text": "Обновить можно на карточке плагина."
+    },
+    "finance": {
+      "due": {
+        "expense": "Скоро списание — {name}",
+        "income": "Скоро поступление — {name}"
+      },
+      "overdue": {
+        "expense": "Просрочен платёж — {name}",
+        "income": "Поступление задерживается — {name}"
+      },
+      "when": {
+        "today": "сегодня",
+        "tomorrow": "завтра",
+        "in_days": "через {days} дн.",
+        "overdue": "просрочен на {days} дн.",
+        "late": "ожидалось {days} дн. назад"
+      },
+      "no_amount": "сумма не указана",
+      "field": {
+        "date": "Дата",
+        "provider": "Провайдер",
+        "category": "Категория",
+        "balance": "Баланс",
+        "threshold": "Порог"
+      },
+      "btn": {
+        "paid": "✅ Оплачено",
+        "received": "✅ Получено",
+        "skip": "⏭️ Пропустить",
+        "open": "🔗 Открыть кабинет"
+      },
+      "low_balance": "Низкий баланс: {provider}"
+    },
+    "support": {
+      "new_ticket": "Новое обращение #{id}",
+      "reply": "Ответ клиента по #{id}",
+      "auto_reply": "Автоответ по обращению #{id}",
+      "auto_reply_text": "Клиент написал в часы тишины — робот подтвердил приём, ответ за вами.",
+      "sla": "Обращение #{id} без ответа {minutes} мин",
+      "no_subject": "без темы",
+      "customer": "клиент",
+      "field": {
+        "channel": "Канал",
+        "username": "Username",
+        "telegram": "Telegram",
+        "email": "Email",
+        "subscription": "Подписка",
+        "balance": "Баланс",
+        "waiting": "Ждёт с"
+      },
+      "channel": {
+        "telegram": "Telegram",
+        "cabinet": "кабинет"
+      },
+      "sub": {
+        "none": "нет",
+        "until": "до {date}",
+        "trial": "триал",
+        "devices": "устройств: {count}",
+        "status": {
+          "active": "активна",
+          "expired": "истекла",
+          "disabled": "отключена",
+          "trial": "триал"
+        }
+      },
+      "btn": {
+        "open": "🔎 Открыть обращение",
+        "profile": "👤 Профиль",
+        "write": "✉️ Написать",
+        "take": "✅ Взять себе",
+        "snooze": "💤 Отложить 1 ч",
+        "close": "🔒 Закрыть обращение"
+      }
+    },
+    "report": {
+      "title": {
+        "daily": "Ежедневный отчёт по нарушениям",
+        "weekly": "Еженедельный отчёт по нарушениям",
+        "monthly": "Ежемесячный отчёт по нарушениям"
+      },
+      "field": {
+        "total": "Всего нарушений",
+        "trend": "Тренд",
+        "users": "Уникальных пользователей",
+        "avg": "Средний скор",
+        "max": "Максимальный скор"
+      },
+      "trend_was": "было {count}",
+      "severity": "🎯 По уровню критичности",
+      "level": {
+        "critical": "Критичные (≥80)",
+        "warning": "Предупреждения (50–79)",
+        "monitor": "Мониторинг (30–49)"
+      },
+      "top": "👥 Топ нарушителей",
+      "countries": "🌍 По странам",
+      "details": "🔌 Провайдеры и действия",
+      "providers": "По типам провайдеров",
+      "actions": "По рекомендуемым действиям",
+      "col": {
+        "level": "Уровень",
+        "count": "Кол-во",
+        "share": "Доля",
+        "user": "Пользователь",
+        "violations": "Нарушений",
+        "max": "Макс. скор",
+        "country": "Страна",
+        "type": "Тип",
+        "action": "Действие"
+      },
+      "asn": {
+        "mobile": "Мобильные",
+        "mobile_isp": "Мобильные ISP",
+        "fixed": "Проводные",
+        "isp": "ISP",
+        "regional_isp": "Региональные ISP",
+        "hosting": "Хостинг",
+        "datacenter": "Датацентры",
+        "vpn": "VPN",
+        "business": "Корпоративные",
+        "infrastructure": "Инфраструктура"
+      },
+      "empty": "Нарушений за период нет"
     }
+  },
+  "ipact": {
+    "blocked_note": "🚫 Адрес в стоп-листе — {admin}",
+    "muted_note": "🔇 Не напоминать {days} дн. — {admin}"
   }
 }

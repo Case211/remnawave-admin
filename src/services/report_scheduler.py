@@ -248,8 +248,9 @@ class ReportScheduler:
         # Отправляем отчёт (rich-карточкой с фолбэком на HTML)
         try:
             from shared import tg_rich
+            card = violation_report_service.build_card(report)
             await tg_rich.send_rich_or_html(
-                self._bot.token, chat_id, report.message_text,
+                self._bot.token, chat_id, card.to_html(), blocks=card.to_blocks(),
                 message_thread_id=topic_id,
             )
 
@@ -289,8 +290,9 @@ class ReportScheduler:
 
         # Отправляем (rich-карточкой с фолбэком на HTML)
         from shared import tg_rich
+        card = violation_report_service.build_card(report)
         await tg_rich.send_rich_or_html(
-            self._bot.token, chat_id, report.message_text,
+            self._bot.token, chat_id, card.to_html(), blocks=card.to_blocks(),
             message_thread_id=topic_id,
         )
 

@@ -7,6 +7,8 @@ Endpoint: POST /batch
 import asyncio
 import hashlib
 import hmac as hmac_mod
+import dataclasses
+from enum import Enum
 import json
 import logging
 import os
@@ -22,6 +24,7 @@ from pydantic import BaseModel, Field
 from shared.database import db_service
 from shared.db_schema import NODES_TABLE
 from web.backend.core import torrent_p2p_whitelist
+from web.backend.core.torrent_p2p_whitelist import GAME_SWARM_PORTS, is_game_swarm
 from shared.db_query import select_sql
 from shared.connection_monitor import ActiveConnection, ConnectionMonitor
 from shared.violation_detector import IntelligentViolationDetector
@@ -298,6 +301,10 @@ _INFRA_PORTS = frozenset({22, 80, 443, 2222, 8443})
 # За какое окно считаем накопленные торрент-события пользователя. Полчаса
 # ловят и короткую раздачу, и неспешную закачку, но не тянут вчерашний шум.
 _TORRENT_EVENT_WINDOW_MINUTES = 30
+
+# Сколько адресов окна кладём в причины нарушения — столько же показывает
+# карточка в Telegram, остальное хвостом «… and N more».
+_TORRENT_REASON_DESTINATIONS = 10
 
 
 async def _get_node_name(node_uuid: str) -> str:
@@ -912,6 +919,10 @@ async def _process_torrent_violations(
             min_peers = int(config_service.get("torrent_min_peers", 3) or 1)
         except (TypeError, ValueError):
             min_peers = 3
+        try:
+            min_per_peer = float(config_service.get("torrent_min_events_per_peer", 1.5) or 1)
+        except (TypeError, ValueError):
+            min_per_peer = 1.5
 
         for user_uuid, user_events in events_by_user.items():
             try:
@@ -921,35 +932,66 @@ async def _process_torrent_violations(
                     logger.debug("User %s is whitelisted for torrent, skipping", user_uuid)
                     continue
 
+                # Разобранный оператором обмен второй раз не считаем: иначе
+                # окно тут же снова набирало те же события, и после
+                # «Аннулировать» через минуты приходило новое нарушение.
+                reviewed_at = await db_service.last_torrent_review_at(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                )
+
                 # Одиночное срабатывание — это шум: настоящий обмен даёт сотни
                 # событий за минуты. Считаем накопленное по базе, а не по
                 # батчу: рой приезжает кусками, и в отдельном куске событий
                 # может быть немного.
                 recent = await db_service.count_recent_torrent_events(
-                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
                 )
-                if min_events > 1:
-                    if recent < min_events:
-                        logger.info(
-                            "Torrent: %d event(s) for %s in %d min — below threshold %d",
-                            recent, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_events,
-                        )
-                        continue
+                if recent < min_events:
+                    logger.info(
+                        "Torrent: %d event(s) for %s in %d min — below threshold %d",
+                        recent, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_events,
+                    )
+                    continue
 
                 # Событий может набить и одно долгое соединение — рой это не
                 # доказывает. У обмена десятки пиров сразу; у ложного
                 # срабатывания адрес один и тот же (ловился антивирус,
                 # которому эвристика приписала шифрованный BitTorrent).
                 peers = await db_service.count_recent_torrent_peers(
-                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
                 )
-                if min_peers > 1:
-                    if peers < min_peers:
-                        logger.info(
-                            "Torrent: %d peer(s) for %s in %d min — below threshold %d",
-                            peers, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_peers,
-                        )
-                        continue
+                if peers < min_peers:
+                    logger.info(
+                        "Torrent: %d peer(s) for %s in %d min — below threshold %d",
+                        peers, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_peers,
+                    )
+                    continue
+
+                # Обмен — это много событий с одними и теми же пирами: клиент
+                # качает подолгу. Игровой лаунчер и опрос DHT касаются каждого
+                # адреса по разу. На проде окна War Thunder давали 1,0–1,5
+                # события на адрес, окна торрент-клиентов — обычно 5–9.
+                if recent < peers * min_per_peer:
+                    logger.info(
+                        "Torrent: %s — %.2f event(s) per peer in %d min, below threshold %.2f",
+                        user_uuid[:8], recent / peers, _TORRENT_EVENT_WINDOW_MINUTES, min_per_peer,
+                    )
+                    continue
+
+                # Лаунчер игры качает обновления настоящим BitTorrent, и пиры у
+                # него — другие игроки: по владельцу адреса их не отсеять. Зато
+                # весь рой сидит на порту лаунчера, а у обычного клиента порты
+                # пиров разбросаны.
+                game_peers = await db_service.count_recent_torrent_peers(
+                    user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
+                    ports=sorted(GAME_SWARM_PORTS),
+                )
+                if is_game_swarm(peers, game_peers):
+                    logger.info(
+                        "Torrent: %s — рой игрового лаунчера (%d из %d пиров на портах игр), не нарушение",
+                        user_uuid[:8], game_peers, peers,
+                    )
+                    continue
 
                 # Dedup: skip if torrent violation exists within last 10 min
                 existing = await db_service.get_recent_torrent_violation(user_uuid, minutes=10)
@@ -975,6 +1017,22 @@ async def _process_torrent_violations(
                     continue
                 ips = list(set(e.ip_address for e in user_events))
 
+                # Нарушение и уведомление — по одному и тому же окну, на котором
+                # сработали пороги. Раньше запись брала один батч («6 событий»,
+                # пять адресов), а карточка в Telegram — окно (сотни событий и
+                # адресов), и веб выглядел беднее бота.
+                window_destinations = await torrent_p2p_whitelist.filter_destinations(
+                    await db_service.recent_torrent_destinations(
+                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES, since=reviewed_at,
+                    )
+                ) or destinations
+                summary = (
+                    f"Torrent traffic detected ({recent} events, {peers} peers "
+                    f"in {_TORRENT_EVENT_WINDOW_MINUTES} min)"
+                )
+                shown = window_destinations[:_TORRENT_REASON_DESTINATIONS]
+                more = peers - len(shown)
+
                 # Save as violation (score=100)
                 violation_id, violation_created = await db_service.save_violation(
                     user_uuid=user_uuid,
@@ -986,9 +1044,10 @@ async def _process_torrent_violations(
                     confidence=1.0,
                     ip_addresses=ips,
                     reasons=[
-                        f"Torrent traffic detected ({len(user_events)} events)",
+                        summary,
                         *([f"Node: {node_name}"] if node_name else []),
-                        *[f"Destination: {d}" for d in destinations[:5]],
+                        *[f"Destination: {d}" for d in shown],
+                        *([f"… and {more} more destinations"] if more > 0 else []),
                     ],
                     simultaneous_connections=len(ips),
                     unique_ips_count=len(ips),
@@ -1005,7 +1064,7 @@ async def _process_torrent_violations(
                     "username": username,
                     "score": 100.0,
                     "recommended_action": "hard_block",
-                    "reasons": [f"Torrent traffic detected ({len(user_events)} events)"],
+                    "reasons": [summary],
                     "ip_addresses": ips,
                     "source": "torrent",
                 })
@@ -1034,11 +1093,6 @@ async def _process_torrent_violations(
                 # так, будто пороги не применились
                 try:
                     from web.backend.core.violation_notifier import send_torrent_notification
-                    window_destinations = await torrent_p2p_whitelist.filter_destinations(
-                        await db_service.recent_torrent_destinations(
-                            user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
-                        )
-                    ) or destinations
                     await send_torrent_notification(
                         user_uuid=user_uuid,
                         user_info=user_info,
@@ -1088,8 +1142,8 @@ async def _process_torrent_violations(
                         "user_uuid": user_uuid,
                         "username": username,
                         "score": 100.0,
-                        "destinations": destinations,
-                        "reasons": [f"Torrent traffic: {len(user_events)} events"],
+                        "destinations": window_destinations,
+                        "reasons": [summary],
                     })
                 except Exception as e:
                     logger.debug("WebSocket broadcast failed for torrent violation: %s", e)
@@ -1164,11 +1218,12 @@ async def _run_violation_detection(affected_user_uuids: set):
             return
 
         # Batch violation detection (all DB queries batched inside)
+        live_map = _live_connections(remaining)
         scores = await violation_detector.check_users_batch(
             remaining,
             window_minutes=60,
             excluded_analyzers_map=excluded_map,
-            live_connections=_live_connections(remaining),
+            live_connections=live_map,
         )
 
         # Post-processing: handle violations and update cooldowns
@@ -1204,6 +1259,7 @@ async def _run_violation_detection(affected_user_uuids: set):
                         users_info.get(uuid),
                         all_devices.get(uuid, []),
                         whitelist_map.get(uuid, (False, None))[0],
+                        live_connections=live_map.get(uuid),
                     )
                 except Exception as e:
                     logger.warning("Error handling violation for %s: %s", uuid, e)
@@ -1295,14 +1351,53 @@ async def _run_violation_detection(affected_user_uuids: set):
         logger.error("Background violation detection failed: %s", e, exc_info=True)
 
 
+def _breakdown_json(breakdown) -> str | None:
+    """Разбор скоринга в JSON для колонки raw_breakdown.
+
+    Анализаторы отдают dataclass'ы с множествами и датами — стандартному
+    json.dumps они не по зубам, а терять разбор нельзя: без него карточка
+    нарушения не может показать, из чего сложился скор.
+    """
+    if not breakdown:
+        return None
+
+    def _default(o):
+        if dataclasses.is_dataclass(o) and not isinstance(o, type):
+            return dataclasses.asdict(o)
+        if isinstance(o, (set, frozenset)):
+            return sorted(str(x) for x in o)
+        if isinstance(o, datetime):
+            return o.isoformat()
+        if isinstance(o, Enum):
+            return o.value
+        if hasattr(o, "__dict__"):
+            return {k: v for k, v in vars(o).items() if not k.startswith("_")}
+        return str(o)
+
+    try:
+        return json.dumps({"breakdown": breakdown}, default=_default, ensure_ascii=False)
+    except (TypeError, ValueError) as e:
+        logger.debug("raw_breakdown not serialisable: %s", e)
+        return None
+
+
 async def _handle_violation(
     user_uuid: str,
     violation_score,
     user_info: dict | None,
     hwid_devices: list,
     is_whitelisted: bool,
+    live_connections: list | None = None,
 ):
-    """Post-process a single detected violation: notify, save, auto-block."""
+    """Post-process a single detected violation: notify, save, auto-block.
+
+    ``live_connections`` — соединения из карты активности коллектора, те же,
+    по которым детектор вынес вердикт. Без них адреса пришлось бы брать из
+    БД запросом «сессии, начатые за последние 5 минут», а он не видит
+    сессий, которые идут уже дольше — как раз тех, на которых обычно и
+    ловится одновременное подключение. Итог был «IP-адресов: 0» в карточке
+    и уведомлении при двух странах в причинах.
+    """
     # Юзер уже отключён в панели (заблокирован админом/автоблоком) — не плодим
     # новые нарушения и уведомления по остаточным коннектам: админ меру принял,
     # а «нарушения по кругу» на всю сеть кросс-аккаунтов только заваливают его
@@ -1311,7 +1406,9 @@ async def _handle_violation(
         logger.debug("Skipping violation for disabled user %s", user_uuid)
         return
 
-    active_conns = await connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
+    active_conns = list(live_connections or [])
+    if not active_conns:
+        active_conns = await connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
 
     ip_metadata = {}
     if active_conns:
@@ -1357,7 +1454,11 @@ async def _handle_violation(
         ip_addresses = list(set(str(c.ip_address) for c in active_conns)) if active_conns else None
         username = user_info.get("username") if user_info else None
         email = user_info.get("email") if user_info else None
-        telegram_id = user_info.get("telegram_id") if user_info else None
+        # batch_get_users_info() returns Panel API field names (camelCase).
+        # Using the database column name here silently dropped the recipient
+        # from every non-torrent violation, so neither manual warnings nor
+        # warning-gated automation chains could deliver anything.
+        telegram_id = user_info.get("telegramId") if user_info else None
         device_limit = user_info.get("hwidDeviceLimit", 1) if user_info else 1
 
         violation_id, violation_created = await db_service.save_violation(
@@ -1388,6 +1489,7 @@ async def _handle_violation(
             hwid_score=hwid.score if hwid else None,
             hwid_matched_users=json.dumps(hwid.matched_details) if hwid and hwid.matched_details else None,
             user_agent_score=ua.score if ua else None,
+            raw_breakdown=_breakdown_json(breakdown),
             suspicious_user_agents=json.dumps([
                 {"request_id": s.request_id, "user_agent": s.user_agent,
                  "request_ip": s.request_ip, "request_at": s.request_at,
@@ -1550,9 +1652,16 @@ async def _handle_violation(
                 )
 
         try:
+            from shared.analyzers.models import dominant_analyzer
             from web.backend.api.v2.websocket import broadcast_violation
             countries = sorted(geo.countries) if geo and geo.countries else []
             asn_types = sorted(asn.asn_types) if asn and asn.asn_types else []
+            signals = list(getattr(violation_score, "signals", None) or [])
+            trial_abuse_type = (
+                "multiple_active_trials" if "trial_abuse.active_trials" in signals
+                else "repeated_trial" if "trial_abuse.repeated_trial" in signals
+                else ""
+            )
             await broadcast_violation({
                 "user_uuid": user_uuid,
                 "username": username,
@@ -1570,9 +1679,23 @@ async def _handle_violation(
                 "unique_ips": len(ip_addresses) if ip_addresses else 0,
                 "simultaneous": temporal.simultaneous_connections_count if temporal else 0,
                 "devices": len(device.os_list) if device and device.os_list else 0,
+                # Разбор порога одновременности: «источников сверх лимита устройств
+                # больше N» — условием, без арифметики между полями в конструкторе
+                "device_limit": getattr(temporal, "device_limit", device_limit) if temporal else device_limit,
+                "simultaneous_sources": temporal.simultaneous_connections_count if temporal else 0,
+                "simultaneous_addresses": getattr(temporal, "simultaneous_addresses", 0) if temporal else 0,
+                "simultaneous_excess": getattr(temporal, "simultaneous_excess", None) if temporal else None,
+                "effective_threshold": getattr(temporal, "effective_threshold", 0) if temporal else 0,
+                "effective_excess": getattr(temporal, "effective_excess", 0) if temporal else 0,
                 # Соучастники накрутки триалов (чужие живые триалы на том же HWID) —
                 # правило может применить меру и к ним, как встроенный автоблок
                 "trial_accomplices": list(getattr(hwid, "active_trial_accomplices", None) or []),
+                # Машинные признаки для условий: правило «только абуз триалов» не
+                # должно зависеть от текста причин и задевать шаринг, торренты и UA
+                "violation_kind": dominant_analyzer(breakdown) or "",
+                "signals": signals,
+                "trial_abuse": bool(trial_abuse_type),
+                "trial_abuse_type": trial_abuse_type,
             })
         except Exception:
             pass
@@ -1782,10 +1905,11 @@ async def _notify_hwid_reuse(sync_result: dict) -> None:
     from web.backend.core.hwid_cards import reuse_card
     from web.backend.core.notification_service import create_notification
     try:
+        card = reuse_card(str(hwid), target, repeat_trials, strangers, device)
         await create_notification(
-            title="Повторная пробная с того же устройства" if repeat_trials
-                  else "HWID переехал на другой аккаунт",
-            body=reuse_card(str(hwid), target, repeat_trials, strangers, device),
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="alert",
             severity="critical" if repeat_trials else "warning",
             link="/violations",

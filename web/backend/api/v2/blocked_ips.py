@@ -215,9 +215,11 @@ async def _notify_ip_blocked(db, row: dict, admin_username: str, pushed: int) ->
         users = []
 
     try:
+        card = blocked_ip_card(row, users, pushed_nodes=pushed, admin_username=admin_username)
         await create_notification(
-            title="Адрес заблокирован",
-            body=blocked_ip_card(row, users, pushed_nodes=pushed, admin_username=admin_username),
+            title=card.title_text(),
+            body=card.body_text(),
+            telegram_card=card,
             type="alert",
             severity="warning",
             link="/blocking?tab=ip",

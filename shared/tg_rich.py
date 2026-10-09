@@ -15,6 +15,8 @@ raw-запросом; при любом отказе откатываемся н
 """
 from __future__ import annotations
 
+import json
+import mimetypes
 import re
 from html import unescape
 from html.parser import HTMLParser
@@ -71,13 +73,24 @@ class _InlineParser(HTMLParser):
             self._stack[-1].append(data)
 
 
+def _copyable(node: dict) -> dict:
+    """<code> в обычном HTML копируется касанием, а в rich — нет: простой
+    код становится кнопкой copy_text, как поля карточек (tg_card.copy)."""
+    from shared.tg_card import copy, rich
+
+    if not isinstance(node["text"], str):
+        return node
+    span = copy(node["text"])
+    return rich(span) if span is not None and span.kind == "copy" else node
+
+
 def _simplify(parts: list) -> Any:
     """Список инлайнов → компактный RichText (склейка строк, str для простого)."""
     out: list = []
     for p in parts:
         if isinstance(p, dict):
             p = {**p, "text": _simplify(p["text"])}
-            out.append(p)
+            out.append(_copyable(p) if p["type"] == "code" else p)
         elif out and isinstance(out[-1], str) and isinstance(p, str):
             out[-1] += p
         else:
@@ -191,16 +204,26 @@ async def send_rich_or_html(
     blocks: Optional[list[dict]] = None,
     message_thread_id: Optional[int] = None,
     reply_markup: Optional[dict] = None,
+    fallback_markup: Optional[dict] = None,
+    media: Optional[tuple[str, str, bytes]] = None,
     disable_web_page_preview: bool = True,
+    timeout: float = 15,
 ) -> bool:
     """Отправить уведомление rich-сообщением с фолбэком на обычный HTML.
 
     blocks не передан — строится из html_text конвертером. Любая ошибка
     rich-пути (метод не принят, блоки не понравились) тихо уводит в старый
-    sendMessage: уведомление доходит всегда.
+    sendMessage: уведомление доходит всегда. fallback_markup — клавиатура
+    только для этого случая: кнопки карточки встроены в rich-сообщение,
+    а в обычном HTML их можно показать лишь клавиатурой под ним.
+
+    media — (вид, имя файла, байты) вложения, вид — photo, video или
+    document: в rich его встраивает блок attach://<вид> карточки, в фолбэке
+    оно уходит sendPhoto/sendVideo/sendDocument с html_text подписью (до
+    1024 символов — это забота вызывающего).
     """
     api = f"{tg_http.api_root()}/bot{token}"
-    async with httpx.AsyncClient(**tg_http.client_kwargs(15)) as client:
+    async with httpx.AsyncClient(**tg_http.client_kwargs(timeout)) as client:
         if _rich_enabled():
             try:
                 rich_blocks = blocks if blocks is not None else html_to_blocks(html_text)
@@ -212,7 +235,7 @@ async def send_rich_or_html(
                     payload["message_thread_id"] = int(message_thread_id)
                 if reply_markup:
                     payload["reply_markup"] = reply_markup
-                resp = await client.post(f"{api}/sendRichMessage", json=payload)
+                resp = await _post(client, f"{api}/sendRichMessage", payload, media)
                 if resp.status_code == 200:
                     logger.debug("sendRichMessage ok: chat_id=%s blocks=%d",
                                  chat_id, len(rich_blocks))
@@ -222,15 +245,60 @@ async def send_rich_or_html(
             except Exception as e:
                 logger.warning("sendRichMessage error: %s — fallback to HTML", e)
 
-        payload = {
-            "chat_id": chat_id,
-            "text": html_text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": disable_web_page_preview,
-        }
+        if media:
+            # файл приходит самим полем своего вида (см. _post)
+            payload = {"chat_id": chat_id, "caption": html_text, "parse_mode": "HTML"}
+            method = {"photo": "sendPhoto", "video": "sendVideo"}.get(media[0], "sendDocument")
+        else:
+            payload = {
+                "chat_id": chat_id,
+                "text": html_text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": disable_web_page_preview,
+            }
+            method = "sendMessage"
         if message_thread_id:
             payload["message_thread_id"] = int(message_thread_id)
-        if reply_markup:
-            payload["reply_markup"] = reply_markup
-        resp = await client.post(f"{api}/sendMessage", json=payload)
+        markup = fallback_markup or reply_markup
+        if markup:
+            payload["reply_markup"] = markup
+        resp = await _post(client, f"{api}/{method}", payload, media)
         return resp.status_code == 200
+
+
+async def _post(client: httpx.AsyncClient, url: str, payload: dict, media: Optional[tuple[str, str, bytes]]):
+    """JSON-запрос, а с вложением — multipart: вложенные поля идут JSON-строками."""
+    if not media:
+        return await client.post(url, json=payload)
+    kind, filename, content = media
+    form = {key: value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+            for key, value in payload.items()}
+    mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return await client.post(url, data=form, files={kind: (filename, content, mime)})
+
+
+async def edit_rich(
+    token: str,
+    chat_id: int | str,
+    message_id: int,
+    blocks: list[dict],
+) -> bool:
+    """Переписать rich-сообщение блоками (editMessageText с rich_message).
+
+    Нужна там, где карточка меняется после нажатия кнопки: aiogram 3.12
+    rich-сообщений не знает, а встроенные кнопки живут в самом содержимом —
+    их не снять правкой клавиатуры. Inline-клавиатура, если была, при такой
+    правке пропадает: кнопки теперь в блоках.
+    """
+    api = f"{tg_http.api_root()}/bot{token}"
+    payload = {"chat_id": chat_id, "message_id": message_id, "rich_message": {"blocks": blocks}}
+    try:
+        async with httpx.AsyncClient(**tg_http.client_kwargs(15)) as client:
+            resp = await client.post(f"{api}/editMessageText", json=payload)
+    except Exception as e:
+        logger.warning("editMessageText(rich) error: %s", e)
+        return False
+    if resp.status_code != 200:
+        logger.warning("editMessageText(rich) rejected (%s): %s", resp.status_code, resp.text[:200])
+        return False
+    return True

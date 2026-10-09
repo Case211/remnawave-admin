@@ -14,7 +14,7 @@ from enum import Enum
 from shared.analyzers.models import (
     ViolationAction, TemporalScore, GeoScore, ASNScore, ProfileScore,
     DeviceScore, HwidScore, UserAgentClassification, SuspiciousAgent,
-    UserAgentScore, ViolationScore,
+    UserAgentScore, ViolationScore, MAX_EVIDENCE, connection_evidence,
 )
 from shared.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
 from shared.logger import logger
@@ -90,6 +90,7 @@ class TemporalAnalyzer:
         user_device_count: int = 1,
         is_mobile: bool = False,
         source_of: Optional[Dict[str, str]] = None,
+        device_limit: Optional[int] = None,
     ) -> TemporalScore:
         """
         Анализирует временные паттерны подключений.
@@ -102,7 +103,10 @@ class TemporalAnalyzer:
                 оператора считаются одним источником: CGNAT раздаёт клиенту
                 разные адреса на каждое соединение, и по адресам один
                 человек выглядит толпой. Пусто — считаем по адресам.
-        
+            device_limit: лимит устройств из панели как есть (0 — безлимит).
+                Порогам нужна база не меньше 1 (user_device_count), а
+                превышению лимита — настоящий лимит: у безлимитного его нет.
+
         Returns:
             TemporalScore с оценкой и причинами
         """
@@ -111,11 +115,37 @@ class TemporalAnalyzer:
         rapid_switches = 0
         overlap_minutes = 0.0
         strong_sharing = False
+        evidence: List[Dict[str, Any]] = []
         source_of = source_of or {}
 
         def sources(ips) -> int:
             """Сколько независимых источников за набором адресов."""
             return len({source_of.get(ip, ip) for ip in ips})
+
+        from shared.config_service import config_service
+
+        # Порог одновременности: база (лимит устройств или общий из настроек)
+        # плюс буферы на смену сети и CGNAT. Считается сразу: разбор порога
+        # уходит в нарушение, даже если одновременных подключений не было.
+        try:
+            config_max_ips = config_service.get("violations_max_simultaneous_ips", 0)
+            max_allowed_simultaneous = config_max_ips if config_max_ips > 0 else max(1, user_device_count)
+        except Exception as e:
+            logger.debug("Failed to get config for violations_max_simultaneous_ips: %s, using default", e)
+            max_allowed_simultaneous = max(1, user_device_count)
+        # 1–2 устройства: +1 на переключение Wi-Fi <-> мобильная; 3+: +3 —
+        # несколько устройств могут переключать сети одновременно
+        network_buffer = 1 if user_device_count <= 2 else 3
+        # CGNAT: мобильные операторы дают 3-5 IP с одного устройства
+        cgnat_buffer = 0
+        if is_mobile:
+            try:
+                cgnat_buffer = int(config_service.get("violations_mobile_cgnat_buffer", 3))
+            except Exception as e:
+                logger.debug("Failed to get config for violations_mobile_cgnat_buffer: %s, using default", e)
+                cgnat_buffer = 3
+        effective_threshold = max_allowed_simultaneous + network_buffer + cgnat_buffer
+        simultaneous_addresses = 0
 
         # Проверка одновременных подключений
         # Считаем уникальные IP и проверяем, действительно ли подключения одновременные
@@ -123,21 +153,12 @@ class TemporalAnalyzer:
         # (2 минуты) - это учитывает нормальное переключение между сетями (Wi-Fi <-> мобильная)
         # Также учитываем роутинг в приложении - пользователь может периодически подключаться/отключаться
         if len(connections) > 1:
-            from shared.config_service import config_service
             simultaneous_window_seconds = 120  # Окно для определения одновременности (2 минуты)
             active_window_seconds = 300        # Окно активности по логу агента (5 минут)
             max_connection_age_seconds = 600   # Подключения старше этого считаются устаревшими (10 минут)
             sequential_switch_threshold = 300  # Разрыв между подключениями, указывающий на переключение (5 минут)
             max_connection_age_hours = 24  # Максимальный возраст подключения для учёта
-            # Учитываем количество устройств пользователя - если у пользователя несколько устройств,
-            # то несколько одновременных подключений могут быть нормальными
-            try:
-                config_max_ips = config_service.get("violations_max_simultaneous_ips", 0)
-                max_allowed_simultaneous = config_max_ips if config_max_ips > 0 else max(1, user_device_count)
-            except Exception as e:
-                logger.debug("Failed to get config for violations_max_simultaneous_ips: %s, using default", e)
-                max_allowed_simultaneous = max(1, user_device_count)
-            
+
             # Собираем все валидные времена подключений
             valid_connections = []
             now = datetime.utcnow()
@@ -201,33 +222,11 @@ class TemporalAnalyzer:
                 # Если есть действительно одновременные подключения с разных IP
                 if max_simultaneous_ips > 1:
                     simultaneous_count = max_simultaneous_ips
+                    simultaneous_addresses = max_simultaneous_addresses
 
-                    # Логика определения нарушения:
-                    # - Базовый лимит = количество устройств пользователя
-                    # - Буфер для переключения сетей (WiFi <-> Mobile, роутинг, погрешности disconnect)
-                    # - Превышение буфера = нарушение
-                    #
-                    # Буфер зависит от количества устройств:
-                    # - 1-2 устройства: буфер +1 (переключение WiFi <-> Mobile)
-                    # - 3+ устройств: буфер +2 (несколько устройств могут одновременно переключать сети)
-                    if user_device_count <= 2:
-                        network_switch_buffer = 1
-                    else:
-                        network_switch_buffer = 2
-
-                    # CGNAT: мобильные операторы дают 3-5 IP с одного устройства
-                    cgnat_buffer = 0
-                    if is_mobile:
-                        try:
-                            cgnat_buffer = int(config_service.get("violations_mobile_cgnat_buffer", 3))
-                        except Exception as e:
-                            logger.debug("Failed to get config for violations_mobile_cgnat_buffer: %s, using default", e)
-                            cgnat_buffer = 3
-
-                    effective_threshold = max_allowed_simultaneous + network_switch_buffer + cgnat_buffer
-
-                    if user_device_count >= 3:
-                        effective_threshold += 1
+                    # Логика определения нарушения: база — лимит устройств,
+                    # к ней буферы на переключение сетей и CGNAT (порог посчитан
+                    # выше); превышение порога — нарушение.
 
                     # Когда адресов больше, чем источников, сработал пул
                     # оператора — говорим об этом прямо, иначе по тексту
@@ -270,6 +269,15 @@ class TemporalAnalyzer:
                     # Длительное перекрытие (> 15 мин) — подозрительно
                     if simultaneous_groups and score > 0:
                         best_group = max(simultaneous_groups, key=lambda g: sources({ip for _, ip in g}))
+                        # Какие адреса были в сети вместе; пул оператора — в source
+                        conn_by_ip = {str(c.ip_address): c for c in connections}
+                        evidence = [
+                            connection_evidence(
+                                conn_by_ip[ip],
+                                source=source_of[ip] if source_of.get(ip, ip) != ip else None,
+                            )
+                            for ip in sorted({ip for _, ip in best_group}) if ip in conn_by_ip
+                        ][:MAX_EVIDENCE]
                         # Длительность перекрытия = разница между самым ранним и самым поздним подключением в группе
                         earliest_start = min(t for t, _ in best_group)
                         latest_start = max(t for t, _ in best_group)
@@ -301,15 +309,17 @@ class TemporalAnalyzer:
                 else:
                     # Нет одновременных подключений — для статистики берём
                     # число источников (адреса одного пула не считаем порознь)
-                    simultaneous_count = sources({ip for _, ip in valid_connections})
+                    valid_ips = {ip for _, ip in valid_connections}
+                    simultaneous_count = sources(valid_ips)
+                    simultaneous_addresses = len(valid_ips)
             elif len(valid_connections) == 1:
                 # Одно валидное подключение
-                simultaneous_count = 1
+                simultaneous_count = simultaneous_addresses = 1
             else:
                 # Нет валидных подключений (все старше 24 часов) - не считаем как одновременные
                 simultaneous_count = 0
         elif len(connections) == 1:
-            simultaneous_count = 1
+            simultaneous_count = simultaneous_addresses = 1
         else:
             simultaneous_count = 0
         
@@ -433,6 +443,9 @@ class TemporalAnalyzer:
                     # Если это нормальное переключение (старое отключено) или старое переключение, не считаем нарушением
                     # Если нет одновременных подключений, быстрое переключение не считается нарушением
         
+        # Превышение лимита устройств — для относительного порога шеринга.
+        # У безлимитного (0) превышения нет; неизвестный лимит — база анализа.
+        limit = user_device_count if device_limit is None else device_limit
         return TemporalScore(
             score=min(score, 100.0),  # Максимум 100
             reasons=reasons,
@@ -440,6 +453,14 @@ class TemporalAnalyzer:
             rapid_switches_count=rapid_switches,
             overlap_duration_minutes=overlap_minutes,
             strong_sharing=strong_sharing,
+            simultaneous_addresses=simultaneous_addresses,
+            device_limit=limit,
+            network_buffer=network_buffer,
+            cgnat_buffer=cgnat_buffer,
+            effective_threshold=effective_threshold,
+            simultaneous_excess=None if limit == 0 else max(0, simultaneous_count - limit),
+            effective_excess=max(0, simultaneous_count - effective_threshold),
+            evidence=evidence,
         )
 
 

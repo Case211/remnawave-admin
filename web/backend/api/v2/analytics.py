@@ -573,9 +573,11 @@ async def get_timeseries(
                     start_dt, now, bucket_minutes=60,
                 )
             else:
-                # 7d / 30d — use Panel API daily data + supplement today with snapshots
+                # 7d / 30d — use Panel API daily data + supplement today with snapshots.
+                # Панель режет сутки по UTC и «по» считает включительно: конец —
+                # сегодня, иначе в конце графика висит пустое завтра (#302)
                 start_str = start_dt.strftime('%Y-%m-%d')
-                end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+                end_str = now.strftime('%Y-%m-%d')
 
                 resp = await fetch_nodes_usage_by_range(
                     start=start_str, end=end_str, top_nodes_limit=50,
@@ -724,10 +726,10 @@ async def _build_daily_points(
 
     for day in days:
         day_str = day.strftime('%Y-%m-%d')
-        next_day_str = (day + timedelta(days=1)).strftime('%Y-%m-%d')
         try:
+            # «по» у панели включительно: запрос до следующего дня сложил бы два дня
             resp = await fetch_nodes_usage_by_range(
-                start=day_str, end=next_day_str, top_nodes_limit=50,
+                start=day_str, end=day_str, top_nodes_limit=50,
             )
             if resp:
                 total = 0
@@ -785,16 +787,14 @@ async def _compute_deltas() -> DeltaStats:
 
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
-    end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+    today_str = today_start.strftime('%Y-%m-%d')
+    yesterday_str = yesterday_start.strftime('%Y-%m-%d')
 
     try:
-        today_resp = await fetch_nodes_usage_by_range(
-            start=today_start.strftime('%Y-%m-%d'), end=end_str,
-        )
-        yesterday_resp = await fetch_nodes_usage_by_range(
-            start=yesterday_start.strftime('%Y-%m-%d'),
-            end=today_start.strftime('%Y-%m-%d'),
-        )
+        # Каждый запрос — ровно одни сутки: «по» у панели включительно, и
+        # «со вчера по сегодня» захватывало сегодняшний трафик — дельта занижалась
+        today_resp = await fetch_nodes_usage_by_range(start=today_str, end=today_str)
+        yesterday_resp = await fetch_nodes_usage_by_range(start=yesterday_str, end=yesterday_str)
         today_traffic = _sum_top_nodes_total(today_resp) if today_resp else 0
         yesterday_traffic = _sum_top_nodes_total(yesterday_resp) if yesterday_resp else 0
         if yesterday_traffic > 0:

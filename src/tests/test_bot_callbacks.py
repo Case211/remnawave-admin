@@ -444,7 +444,7 @@ class TestUserIdentifierHelpers:
             resp = await panel_event(req)
         assert resp.status_code == 200
         mock_notif.assert_called_once()
-        msg = mock_notif.call_args.kwargs["message"]
+        msg = mock_notif.call_args.kwargs["card"].to_html()
         assert "unknown.event_type" in msg
 
     async def test_html_escaping_in_unknown_event(self, set_secret):
@@ -460,7 +460,7 @@ class TestUserIdentifierHelpers:
         with patch("src.utils.notifications.send_generic_notification", new=AsyncMock()) as mock_notif:
             resp = await panel_event(req)
         assert resp.status_code == 200
-        msg = mock_notif.call_args.kwargs["message"]
+        msg = mock_notif.call_args.kwargs["card"].to_html()
         assert "<script>" not in msg
         assert "&lt;script&gt;alert(1)&lt;/script&gt;" in msg
         assert "<b>bold</b>" not in msg

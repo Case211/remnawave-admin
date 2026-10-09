@@ -806,6 +806,13 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
         for r, a in sorted(admin.permissions)
     ]
 
+    from web.backend.api.deps import user_scope_restricted
+    try:
+        scope_restricted = await user_scope_restricted(admin)
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
+        scope_restricted = False
+
     return AdminInfo(
         telegram_id=admin.telegram_id,
         username=admin.username,
@@ -823,6 +830,7 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
         hosts_created=hosts_created,
         unlimited_traffic_policy=unlimited_traffic_policy,
         unrestricted_user_access=unrestricted_user_access,
+        user_scope_restricted=scope_restricted,
         auth_method=admin.auth_method,
         password_is_generated=password_is_generated,
         totp_enabled=totp_enabled,
@@ -1072,7 +1080,7 @@ async def wa_register_begin(request: Request, admin: AdminUser = Depends(get_cur
     try:
         return await wa.begin_registration(request, account)
     except wa.WebAuthnError as e:
-        raise api_error(400, E.FORBIDDEN, str(e))
+        raise api_error(400, e.code, str(e))
 
 
 @router.post("/webauthn/register/finish", response_model=SuccessResponse)
@@ -1082,7 +1090,7 @@ async def wa_register_finish(request: Request, data: WaRegisterFinish,
     try:
         await wa.finish_registration(request, data.token, data.credential, data.name)
     except wa.WebAuthnError as e:
-        raise api_error(400, E.FORBIDDEN, str(e))
+        raise api_error(400, e.code, str(e))
     return SuccessResponse(message="Passkey добавлен")
 
 
@@ -1112,7 +1120,7 @@ async def wa_login_begin(request: Request, data: WaLoginBegin):
     try:
         return await wa.begin_authentication(request, data.username)
     except wa.WebAuthnError as e:
-        raise api_error(400, E.FORBIDDEN, str(e))
+        raise api_error(400, e.code, str(e))
 
 
 @router.post("/webauthn/login/finish", response_model=LoginResponse)
@@ -1125,7 +1133,7 @@ async def wa_login_finish(request: Request, response: Response, data: WaLoginFin
     except wa.WebAuthnError as e:
         login_guard.record_failure(client_ip)
         log_auth_failure(client_ip, "passkey", "passkey", str(e))
-        raise api_error(401, E.INVALID_TOKEN, str(e))
+        raise api_error(401, e.code, str(e))
     login_guard.record_success(client_ip)
     username = acc.get("username") or (str(acc.get("telegram_id")) if acc.get("telegram_id") else f"admin{acc['id']}")
     subject = ("pwd:" + acc["username"]) if acc.get("username") else str(acc.get("telegram_id"))

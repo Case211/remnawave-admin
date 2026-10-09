@@ -10,6 +10,8 @@ from typing import Optional
 
 from shared.db_schema import DOMAIN_CONFIG_TABLE, EMAIL_ATTACHMENTS_TABLE, EMAIL_INBOX_TABLE
 from shared.db_query import select_sql, insert_sql
+from shared.i18n import tr
+from shared.tg_card import Card, b, copy, join
 
 from aiosmtpd.smtp import SMTP as SMTPProtocol, Envelope, Session
 
@@ -52,19 +54,51 @@ def _is_service_mail(msg, mail_from: str, rcpt_tos: list) -> bool:
     return (msg.get_content_type() or "").lower() == "multipart/report"
 
 
-async def _notify_new_mail(from_header: str, subject: str, rcpt: str) -> None:
+def _checks_line(verdict) -> str:
+    """«SPF ✓ · DKIM ✓ · DMARC ✗» — прошло ли письмо проверки подлинности."""
+    if verdict is None:
+        return ""
+    marks = {"pass": "✓", "fail": "✗"}
+    return " · ".join(f"{name} {marks.get(str(value).lower(), str(value))}"
+                      for name, value in (("SPF", verdict.spf), ("DKIM", verdict.dkim), ("DMARC", verdict.dmarc))
+                      if value)
+
+
+def new_mail_card(from_header: str, subject: str, rcpt: str, body_text: str = "",
+                  attachment_count: int = 0, verdict=None) -> Card:
+    """Письмо: тема, от кого и кому, проверки — и начало текста цитатой с отправителем."""
+    card = Card(tr("notify.mail.title"), emoji="📨")
+    card.lead(b(subject[:200] or tr("notify.mail.no_subject")))
+    # Имя отправителя — текстом, адрес копируется касанием: на него и отвечают
+    sender_name, sender_addr = parseaddr(from_header)
+    sender = join(sender_name[:120], copy(sender_addr)) if sender_addr else from_header[:200]
+    card.fields([
+        (tr("notify.mail.field.from"), sender),
+        (tr("notify.mail.field.to"), copy(rcpt)),
+        (tr("notify.mail.field.attachments"), str(attachment_count) if attachment_count else None),
+        (tr("notify.mail.field.checks"), _checks_line(verdict) or None),
+    ])
+    snippet = " ".join((body_text or "").split())[:400]
+    card.quote(snippet, credit=from_header[:120])
+    return card.stamp()
+
+
+async def _notify_new_mail(from_header: str, subject: str, rcpt: str, body_text: str = "",
+                           attachment_count: int = 0, verdict=None) -> None:
     """Сообщить администратору о новом письме."""
     try:
         from web.backend.core.notification_service import create_notification
+        card = new_mail_card(from_header, subject, rcpt, body_text, attachment_count, verdict)
         await create_notification(
-            title=f"Новое письмо: {subject[:80]}",
-            body=f"От {from_header[:120]} на {rcpt}",
+            title=f"{card.title_text()}: {subject[:80]}",
+            body=card.body_text(),
+            telegram_card=card,
             type="info",
             severity="info",
             channels=["in_app", "telegram"],
             topic_type="service",
             source="mailserver",
-            link="/admin/mail-server",
+            link="/mailserver",
             # Поток писем от одного отправителя схлопывается в одно
             # уведомление: рассылка на десяток адресов не должна звонить
             # десять раз.
@@ -305,7 +339,8 @@ class InboundMailHandler:
             if (_config("mailserver_notify_new_mail", False)
                     and not verdict.is_spam
                     and not _is_service_mail(msg, envelope.mail_from or "", envelope.rcpt_tos)):
-                await _notify_new_mail(from_header, subject, envelope.rcpt_tos[0])
+                await _notify_new_mail(from_header, subject, envelope.rcpt_tos[0], body_text,
+                                       attachment_count, verdict)
 
             return "250 Message accepted"
 

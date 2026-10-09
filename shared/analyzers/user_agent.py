@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as tz
 from itertools import combinations
 from math import radians, sin, cos, sqrt, atan2
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 from enum import Enum
 
 from shared.analyzers.models import (
@@ -18,6 +18,39 @@ from shared.analyzers.models import (
 )
 from shared.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
 from shared.logger import logger
+
+
+def _as_utc(value: Any) -> Optional[datetime]:
+    """Момент запроса как aware UTC: из базы приходит datetime, из Panel API — ISO-строка."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=tz.utc)
+
+
+def _already_reviewed(
+    classification: UserAgentClassification,
+    ua: Optional[str],
+    request_at: Any,
+    reviewed_until: Optional[datetime],
+    accepted: Optional[Set[Tuple[str, str]]],
+) -> bool:
+    """Подозрительный запрос уже был в нарушении, которое оператор разобрал.
+
+    История подписки хранит до сотни запросов, и один старый ``curl`` в ней
+    после «Аннулировать» каждые полчаса рождал новое нарушение с уведомлением:
+    висящего нарушения больше нет, склеивать новое не с чем.
+    """
+    if accepted and (classification.value, (ua or "")[:200]) in accepted:
+        return True
+    until = _as_utc(reviewed_until)
+    at = _as_utc(request_at)
+    return until is not None and at is not None and at <= until
+
 
 class UserAgentAnalyzer:
     """
@@ -127,6 +160,8 @@ class UserAgentAnalyzer:
         self,
         srh_records: List[Dict[str, Any]],
         max_age_days: int = 0,
+        reviewed_until: Optional[datetime] = None,
+        accepted: Optional[Set[Tuple[str, str]]] = None,
     ) -> UserAgentScore:
         """
         Проанализировать User-Agent в Subscription Request History.
@@ -139,6 +174,10 @@ class UserAgentAnalyzer:
             srh_records: список записей SRH с полями {user_agent, request_id, request_ip, request_at}
                          (поля snake_case; вызывающий код нормализует camelCase из Panel API)
             max_age_days: игнорировать записи старше указанного количества дней (0 = без ограничения)
+            reviewed_until: подозрительные запросы не позже этого момента оператор уже
+                         разобрал в нарушении — повторно их не поднимаем
+            accepted: пары (классификация, User-Agent) из аннулированных нарушений —
+                         оператор признал их ложным срабатыванием для этого клиента
 
         Returns:
             UserAgentScore — агрегированный результат по всем запросам подписки
@@ -174,6 +213,10 @@ class UserAgentAnalyzer:
 
             ua = record.get("user_agent")
             classification = self.classify(ua)
+            if classification != UserAgentClassification.VALID and _already_reviewed(
+                classification, ua, request_at, reviewed_until, accepted,
+            ):
+                continue
             analyzed += 1
 
             if classification == UserAgentClassification.VALID:

@@ -19,6 +19,7 @@ import httpx
 
 from shared import timefmt
 from shared.timefmt import quiet_window_end
+from shared.tg_card import Card
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,50 @@ def _warning_failed(action_type: Optional[str], result: str, details: Optional[d
         action_type == "warn_user" and result != "success"
         and (details or {}).get("reason") != "already_notified"
     )
+
+
+# Меры, которые можно не применять к уже платящему клиенту (#308)
+_PAYMENT_ACTIONS = {"warn_user", "block_user", "disable_user", "throttle_user"}
+_PAYMENT_REASONS = {"payment_received", "active_paid_subscription"}
+
+
+async def _payment_reason(
+    action_type: Optional[str], user_uuid: Optional[str], config: dict,
+    since: Optional[datetime] = None, telegram_id: Optional[int] = None,
+) -> Optional[str]:
+    """Почему меру не применять: клиент уже платит; None — применять.
+
+    ``unless_paid_after`` сверяется с транзакциями Bedolaga с момента
+    срабатывания, а без них — со статусом подписки. В момент срабатывания
+    (since=None) этот вопрос не задаётся: заплатить после ещё не наступившего
+    момента нельзя. ``unless_paid`` — живая платная подписка у клиента.
+    """
+    if action_type not in _PAYMENT_ACTIONS or not user_uuid:
+        return None
+    paid_after = bool(config.get("unless_paid_after")) and since is not None
+    if not paid_after and not config.get("unless_paid"):
+        return None
+
+    from web.backend.core.automation import paid_since, person_has_paid_subscription
+
+    if paid_after:
+        paid = await paid_since(telegram_id, since)
+        if paid:
+            return "payment_received"
+        # Bedolaga ответила «не платил» — статус подписки спрашиваем, только
+        # если админ отдельно просил щадить уже платящих
+        if paid is False and not config.get("unless_paid"):
+            return None
+    if await person_has_paid_subscription(user_uuid):
+        return "active_paid_subscription"
+    return None
+
+
+def _hold_reason(details: Optional[dict]) -> str:
+    """Почему отложенную меру не ставить, раз предупреждение не ушло: клиент
+    уже платит — так и пишем, иначе «предупреждение не доставлено»."""
+    reason = (details or {}).get("reason")
+    return reason if reason in _PAYMENT_REASONS else "warning_not_delivered"
 
 
 def _cooldown_seconds(trigger_config: dict, default: int) -> int:
@@ -1161,7 +1206,7 @@ class AutomationEngine:
         Если основное упало, дополнительные не выполняются: «уведомить и
         урезать» не должно урезать, когда не вышло даже уведомить.
         """
-        result, details = await self._execute_single(rule, target_type, target_id, context)
+        result, details = await self._execute_guarded(rule, target_type, target_id, context)
         extras = rule.get("extra_actions") or []
         if isinstance(extras, str):
             extras = json.loads(extras)
@@ -1170,23 +1215,41 @@ class AutomationEngine:
         steps = []
         # «Предупредить, через 12 ч урезать» имеет смысл, только если клиент
         # предупреждение получил: иначе мера снова приходит без объяснений
-        warning_failed = _warning_failed(rule.get("action_type"), result, details)
+        hold = _hold_reason(details) if _warning_failed(rule.get("action_type"), result, details) else None
         for index, step in enumerate(extras):
             delay_hours = _step_delay_hours(step)
             if delay_hours > 0:
-                if warning_failed:
+                if hold:
                     steps.append({"action": step.get("action_type"), "result": "skipped",
-                                  "details": {"reason": "warning_not_delivered"}})
+                                  "details": {"reason": hold}})
                 else:
                     steps.append(await self._schedule_step(rule, index, step, delay_hours, target_type, target_id, context))
                 continue
             sub_rule = {**rule, "action_type": step.get("action_type"), "action_config": step.get("action_config") or {}}
-            sub_result, sub_details = await self._execute_single(sub_rule, target_type, target_id, context)
+            sub_result, sub_details = await self._execute_guarded(sub_rule, target_type, target_id, context)
             steps.append({"action": step.get("action_type"), "result": sub_result, "details": sub_details})
-            warning_failed = warning_failed or _warning_failed(step.get("action_type"), sub_result, sub_details)
+            if not hold and _warning_failed(step.get("action_type"), sub_result, sub_details):
+                hold = _hold_reason(sub_details)
             if sub_result == "error":
                 result = "error"
         return result, {**(details or {}), "then": steps}
+
+    async def _execute_guarded(
+        self, rule: dict, target_type: Optional[str], target_id: Optional[str], context: dict,
+    ) -> Tuple[str, dict]:
+        """Мера сразу при срабатывании — если клиент ещё не платит (#308)."""
+        action_type = rule.get("action_type")
+        config = rule.get("action_config") or {}
+        if isinstance(config, str):
+            config = json.loads(config)
+        try:
+            reason = await _payment_reason(action_type, target_id, config)
+        except Exception as e:
+            logger.warning("Payment check for %s (%s) failed: %s", target_id, action_type, e)
+            return "error", {"error": f"payment check failed: {e}"}
+        if reason:
+            return "skipped", {"action": action_type, "skipped": True, "reason": reason}
+        return await self._execute_single(rule, target_type, target_id, context)
 
     async def _schedule_step(
         self, rule: dict, index: int, step: dict, delay_hours: float,
@@ -1273,6 +1336,11 @@ class AutomationEngine:
                 reason = await _measure_state(conn, action_type, uuid)
             if not reason and (await db_service.is_user_violation_whitelisted(uuid))[0]:
                 reason = "whitelisted"
+            # Любая из галочек «щадить платящих» щадит и платящего соучастника
+            if not reason and (own_config.get("unless_paid") or own_config.get("unless_paid_after")):
+                from web.backend.core.automation import person_has_paid_subscription
+                if await person_has_paid_subscription(uuid):
+                    reason = "active_paid_subscription"
             if reason:
                 results.append({"user_uuid": uuid, "result": "skipped", "reason": reason})
                 continue
@@ -1320,14 +1388,17 @@ class AutomationEngine:
         if whitelisted:
             return "whitelisted"
 
+        started_at = datetime.fromisoformat(payload["started_at"])
+        telegram_id = int(violation["telegram_id"]) if violation["telegram_id"] else None
         if payload.get("unless_support", True):
             from web.backend.core.automation import support_contact_since
 
-            started_at = datetime.fromisoformat(payload["started_at"])
-            telegram_id = int(violation["telegram_id"]) if violation["telegram_id"] else None
             if await support_contact_since(telegram_id, started_at, user_uuid=user_uuid):
                 return "support_contacted"
-        return None
+        return await _payment_reason(
+            action_type, user_uuid, payload.get("action_config") or {},
+            since=started_at, telegram_id=telegram_id,
+        )
 
     async def _execute_single(
         self,
@@ -1470,10 +1541,14 @@ class AutomationEngine:
         # Значения идут в Telegram-HTML: «<» в имени юзера ломал разметку, и
         # сообщение не уходило. Экранируем всё, кроме заведомо готового HTML.
         raw_html = {"top_nodes_yesterday"}
-        enriched = {
-            k: (v if k in raw_html or channel != "telegram" else html.escape(str(v), quote=False))
-            for k, v in context.items()
-        }
+
+        def _value(key, value):
+            # Пустое значение (лимит у безлимитного и т.п.) — прочерк, а не «None»
+            if value is None:
+                return "—"
+            return value if key in raw_html or channel != "telegram" else html.escape(str(value), quote=False)
+
+        enriched = {k: _value(k, v) for k, v in context.items()}
         for short, full in _ALIASES.items():
             if short not in enriched and full in enriched:
                 enriched[short] = enriched[full]
@@ -1531,12 +1606,16 @@ class AutomationEngine:
             channels = (["telegram"] if config.get("telegram", True) else []) + extra
             if not channels:
                 channels = ["in_app"]
-            reply_markup = None
+            # Текст правила — его готовый HTML внутри карточки; кнопки действий
+            # по юзеру — прямо в сообщении
+            card = Card(context.get("rule_name") or "Automation", emoji="🤖")
+            card.html_block(message)
             if config.get("buttons") and target_type == "user" and target_id:
-                from web.backend.core.violation_notifier import _violation_keyboard
-                reply_markup = _violation_keyboard(target_id, with_whitelist=False)
+                from web.backend.core.violation_notifier import violation_buttons
+                card.buttons(*violation_buttons(target_id, with_whitelist=False))
+            card.stamp()
             await create_notification(
-                title=context.get("rule_name") or "Automation",
+                title=card.title_text(),
                 body=message,
                 type="automation",
                 severity=severity,
@@ -1546,9 +1625,8 @@ class AutomationEngine:
                 user_uuid=target_id if target_type == "user" else None,
                 channels=channels,
                 topic_type=topic_type,
-                telegram_body=message,
+                telegram_card=card,
                 link="/automations",
-                reply_markup=reply_markup,
             )
             return {"action": "notify", "channel": "telegram", "sent": True}
 

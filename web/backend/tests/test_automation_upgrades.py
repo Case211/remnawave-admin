@@ -93,7 +93,9 @@ async def test_notify_channels_severity_and_buttons():
     kwargs = notify.await_args.kwargs
     assert kwargs["channels"] == ["telegram", "in_app", "email"]
     assert kwargs["severity"] == "critical" and kwargs["title"] == "Правило"
-    assert kwargs["reply_markup"] is not None
+    embedded = [btn["callback_data"] for blk in kwargs["telegram_card"].to_blocks()
+                if blk["type"] == "buttons" for btn in blk["buttons"]]
+    assert "vact:block:u-1" in embedded
 
 
 @pytest.mark.asyncio

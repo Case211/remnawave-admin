@@ -113,10 +113,6 @@ export function useChartTheme() {
       tooltipTextClass: isLight ? 'text-slate-800' : 'text-slate-900',
       tooltipMutedClass: isLight ? 'text-slate-500' : 'text-slate-600',
       isLight,
-      mapBackground: isLight ? '#e2e8f0' : '#0d1117',
-      mapTileUrl: isLight
-        ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
       accentColor,
       nodeColors: generatePalette(accentColor, 10),
     }),
