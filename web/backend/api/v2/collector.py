@@ -1679,6 +1679,14 @@ async def _handle_violation(
                 "unique_ips": len(ip_addresses) if ip_addresses else 0,
                 "simultaneous": temporal.simultaneous_connections_count if temporal else 0,
                 "devices": len(device.os_list) if device and device.os_list else 0,
+                # Разбор порога одновременности: «источников сверх лимита устройств
+                # больше N» — условием, без арифметики между полями в конструкторе
+                "device_limit": getattr(temporal, "device_limit", device_limit) if temporal else device_limit,
+                "simultaneous_sources": temporal.simultaneous_connections_count if temporal else 0,
+                "simultaneous_addresses": getattr(temporal, "simultaneous_addresses", 0) if temporal else 0,
+                "simultaneous_excess": getattr(temporal, "simultaneous_excess", None) if temporal else None,
+                "effective_threshold": getattr(temporal, "effective_threshold", 0) if temporal else 0,
+                "effective_excess": getattr(temporal, "effective_excess", 0) if temporal else 0,
                 # Соучастники накрутки триалов (чужие живые триалы на том же HWID) —
                 # правило может применить меру и к ним, как встроенный автоблок
                 "trial_accomplices": list(getattr(hwid, "active_trial_accomplices", None) or []),

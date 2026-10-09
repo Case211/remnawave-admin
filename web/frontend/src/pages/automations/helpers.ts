@@ -410,6 +410,8 @@ const TRIGGER_FIELDS: Record<string, string[]> = {
     'score', 'recommended_action', 'violation_kind', 'trial_abuse', 'trial_abuse_type', 'signals', 'reasons',
     'country', 'countries', 'asn_types',
     'is_mobile', 'is_datacenter', 'is_vpn', 'unique_ips', 'simultaneous', 'devices',
+    'device_limit', 'simultaneous_sources', 'simultaneous_addresses', 'simultaneous_excess',
+    'effective_threshold', 'effective_excess',
   ],
   'torrent.detected': ['event_count', 'window_events', 'peers', 'node_name'],
   'node.went_offline': ['offline_minutes', 'users_before', 'country_code', 'node_name'],
@@ -433,7 +435,10 @@ const TRIGGER_FIELDS: Record<string, string[]> = {
 
 // Переменные для текста уведомления — по триггеру
 const TRIGGER_VARS: Record<string, string[]> = {
-  'violation.detected': ['{user}', '{user_code}', '{score}', '{recommended_action}', '{country}', '{unique_ips}'],
+  'violation.detected': [
+    '{user}', '{user_code}', '{score}', '{recommended_action}', '{country}', '{unique_ips}',
+    '{simultaneous_sources}', '{device_limit}', '{simultaneous_excess}',
+  ],
   'torrent.detected': ['{user}', '{user_code}', '{window_events}', '{peers}', '{node}'],
   'node.went_offline': ['{node}', '{node_code}', '{offline_minutes}', '{users_before}', '{country_code}'],
   'user.traffic_exceeded': ['{user}', '{user_code}', '{percent}', '{traffic_gb}', '{days_left}'],
@@ -483,7 +488,7 @@ const CONDITION_VALUES: Record<string, readonly string[]> = {
   trial_abuse_type: ['multiple_active_trials', 'repeated_trial'],
   signals: [
     'trial_abuse.active_trials', 'trial_abuse.repeated_trial', 'hwid.accounts', 'hwid.matches',
-    'sharing.sources', 'sharing.simultaneous', 'sharing.devices',
+    'sharing.sources', 'sharing.simultaneous', 'sharing.devices', 'sharing.excess',
   ],
 }
 

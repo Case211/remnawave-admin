@@ -1593,7 +1593,7 @@ class ViolationsMixin:
     async def batch_get_user_devices_counts(
         self, user_uuids: List[str]
     ) -> Dict[str, int]:
-        """Batch get device counts from users.raw_data. Returns {uuid: count}."""
+        """Batch get device limits from users.raw_data. Returns {uuid: limit}; 0 — безлимит."""
         if not self.is_connected or not user_uuids:
             return {}
 
@@ -1620,7 +1620,7 @@ class ViolationsMixin:
                         hwid_limit = response.get("hwidDeviceLimit")
                         if hwid_limit is not None:
                             limit = int(hwid_limit)
-                            count = 1 if limit == 0 else max(1, limit)
+                            count = 0 if limit == 0 else max(1, limit)
                         else:
                             dc = response.get("devicesCount")
                             if dc is not None:

@@ -121,7 +121,7 @@ class NetworkMixin:
             user_uuid: UUID пользователя
         
         Returns:
-            Количество устройств пользователя
+            Лимит устройств пользователя (0 — безлимит)
         """
         if not self.is_connected:
             return 1  # По умолчанию 1 устройство
@@ -146,14 +146,13 @@ class NetworkMixin:
                         # Проверяем различные возможные поля с данными об устройствах
                         response = raw_data.get("response", raw_data)
 
-                        # Основное поле - hwidDeviceLimit (лимит HWID устройств)
+                        # Основное поле - hwidDeviceLimit (лимит HWID устройств).
+                        # 0 — безлимит, отдаём как есть: базу не меньше 1 детектор
+                        # берёт сам, а превышению лимита нужен настоящий
                         hwid_device_limit = response.get("hwidDeviceLimit")
                         if hwid_device_limit is not None:
-                            # 0 означает безлимит, но для расчёта используем 1
                             limit = int(hwid_device_limit)
-                            if limit == 0:
-                                return 1  # Безлимит - используем 1 как базу
-                            return max(1, limit)
+                            return 0 if limit == 0 else max(1, limit)
 
                         # Fallback: devicesCount (старый формат)
                         devices_count = response.get("devicesCount")

@@ -113,7 +113,7 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| **🌐 Max simultaneous IPs** | `violations_max_simultaneous_ips` | `0` | Max simultaneous IPs above the device limit to trigger a violation (0 = auto from device count) |
+| **🌐 Shared simultaneous IP limit** | `violations_max_simultaneous_ips` | `0` | One simultaneous-source limit for all users instead of their device limit; network-switch and CGNAT buffers are added on top. 0 = each user's own device limit from the panel |
 | **📏 Max inter-city distance (km)** | `violations_geo_max_city_distance_km` | `50` | Distance between cities below which movement is not considered suspicious |
 | **👥 Max accounts per HWID** | `violations_hwid_max_accounts` | `2` | How many distinct accounts may share one HWID WITHOUT triggering — a violation starts at the next account (value 2 → fires on the third). Subscriptions of the same person count as one account: grouped by telegram_id, or by email when the user signed up without Telegram |
 | **Max subscriptions per account on one HWID** | `violations_hwid_max_per_account` | `10` | How many panel UUIDs (subscriptions) of a single telegram_id are allowed on one HWID. Guards against multi-plan abuse. 0 = unlimited |
@@ -150,6 +150,7 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **🚫 Hard block: max devices** | `violations_hard_block_devices` | `80` | Number of unique device fingerprints to trigger a hard block |
 | **🚫 Hard block: max HWID matches** | `violations_hard_block_hwid_matches` | `10` | Number of matching HWIDs (same model) to trigger a hard block |
 | **🚫 Hard block: accounts on one HWID** | `violations_hard_block_hwid_accounts` | `5` | How many distinct accounts on a single device (HWID) counts as mass trial abuse and triggers a hard block. Subscriptions of the same telegram_id count as one account. 0 = disabled |
+| **🚫 Hard block: sources above the device limit** | `violations_hard_block_simultaneous_excess` | `0` | Hard block when simultaneous sources exceed the user's device limit by more than this number: with 5 and a limit of 1 — from 7 sources, with a limit of 3 — from 9. The sources must also exceed the threshold with network-switch and CGNAT buffers. Does not apply to unlimited users (limit 0). 0 = disabled |
 
 
 ### 🆓 Trial user detection

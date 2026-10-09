@@ -275,6 +275,17 @@ describe('trial abuse conditions (#308)', () => {
   })
 })
 
+describe('sharing above the device limit (#309)', () => {
+  it('offers the threshold breakdown as condition fields', () => {
+    const fields = conditionFieldsFor('event', 'violation.detected', '').map((f) => f.value)
+    expect(fields).toEqual(expect.arrayContaining([
+      'device_limit', 'simultaneous_sources', 'simultaneous_excess', 'effective_threshold', 'effective_excess',
+    ]))
+    expect(conditionValueOptions('signals')?.find((o) => o.value === 'sharing.excess')?.label)
+      .toBe('Шаринг сверх лимита устройств')
+  })
+})
+
 describe('describeStep', () => {
   it('prefixes a delayed chain step with its delay', () => {
     expect(describeStep({ action_type: 'throttle_user', action_config: {}, delay_hours: 12 }))

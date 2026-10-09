@@ -201,6 +201,41 @@ class TestHandleViolationCreatedGate:
         assert event["violation_kind"] == ""
 
     @pytest.mark.asyncio
+    async def test_event_carries_threshold_breakdown(self):
+        """#309: «источников сверх лимита устройств > N» — условием, без арифметики в конструкторе."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(45, True),
+                                                       config={"violation_auto_hard_block": False})
+        score = _score()
+        score.breakdown = {"temporal": SimpleNamespace(
+            score=80.0, reasons=[], simultaneous_connections_count=7, simultaneous_addresses=9,
+            device_limit=1, simultaneous_excess=6, effective_threshold=2, effective_excess=5,
+        )}
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, score, {"username": "t", "hwidDeviceLimit": 1}, [], False)
+
+        event = broadcast.await_args.args[0]
+        fields = ("device_limit", "simultaneous_sources", "simultaneous_addresses",
+                  "simultaneous_excess", "effective_threshold", "effective_excess")
+        assert [event[f] for f in fields] == [1, 7, 9, 6, 2, 5]
+
+    @pytest.mark.asyncio
+    async def test_event_without_temporal_takes_panel_limit(self):
+        db, monitor, patches = _handle_violation_mocks(save_result=(46, True))
+
+        with (
+            patches[0], patches[1], patches[2], patches[3],
+            patches[4], patches[5], patches[6] as broadcast,
+        ):
+            await collector._handle_violation(USER_UUID, _score(), {"username": "t", "hwidDeviceLimit": 0}, [], False)
+
+        event = broadcast.await_args.args[0]
+        assert (event["device_limit"], event["simultaneous_excess"]) == (0, None)
+
+    @pytest.mark.asyncio
     async def test_violation_keeps_telegram_recipient_from_api_user(self):
         """Panel API user data is camelCase; keep the recipient on the violation."""
         db, monitor, patches = _handle_violation_mocks(save_result=(41, True))

@@ -140,7 +140,10 @@ class IntelligentViolationDetector:
             return None
 
         try:
-            user_device_count = prefetched_device_count if prefetched_device_count is not None else await self.db.get_user_devices_count(user_uuid)
+            # Лимит устройств из панели: 0 — безлимит. Анализаторам нужна база не
+            # меньше 1, а превышению лимита (относительный порог шеринга) — настоящий
+            device_limit = prefetched_device_count if prefetched_device_count is not None else await self.db.get_user_devices_count(user_uuid)
+            user_device_count = max(1, device_limit)
 
             if prefetched_active_connections is not None:
                 active_connections = prefetched_active_connections
@@ -207,7 +210,7 @@ class IntelligentViolationDetector:
 
             temporal_score = self.temporal_analyzer.analyze(
                 active_connections, connection_history, user_device_count,
-                is_mobile=_has_mobile, source_of=source_of,
+                is_mobile=_has_mobile, source_of=source_of, device_limit=device_limit,
             )
 
             # Анализируем геолокацию (используем общий кэш)
@@ -491,6 +494,23 @@ class IntelligentViolationDetector:
                 signals.append("sharing.simultaneous")
                 extreme_abuse_reasons.append(
                     f"Экстремальное количество одновременных подключений: {sim_count} (порог: {hb_sim})"
+                )
+
+            # 2б) Шаринг сверх лимита устройств: источников больше лимита юзера
+            # больше чем на N, и они вышли за порог с буферами на смену сети и
+            # CGNAT. Абсолютный порог выше одинаков для лимита 1 и 10, этот —
+            # нет. Безлимитных (лимит 0) не касается: превышения у них не бывает.
+            try:
+                hb_excess = int(config_service.get("violations_hard_block_simultaneous_excess", 0) or 0)
+            except (TypeError, ValueError):
+                hb_excess = 0
+            sim_excess = getattr(temporal_score, 'simultaneous_excess', None)
+            if (hb_excess > 0 and sim_excess is not None and sim_excess > hb_excess
+                    and getattr(temporal_score, 'effective_excess', 0) > 0):
+                signals.append("sharing.excess")
+                extreme_abuse_reasons.append(
+                    f"Шаринг сверх лимита устройств: {sim_count} источников при лимите "
+                    f"{temporal_score.device_limit} (превышение на {sim_excess}, порог: {hb_excess})"
                 )
 
             # 3) Много устройств по fingerprint

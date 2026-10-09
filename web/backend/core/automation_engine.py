@@ -1540,10 +1540,14 @@ class AutomationEngine:
         # Значения идут в Telegram-HTML: «<» в имени юзера ломал разметку, и
         # сообщение не уходило. Экранируем всё, кроме заведомо готового HTML.
         raw_html = {"top_nodes_yesterday"}
-        enriched = {
-            k: (v if k in raw_html or channel != "telegram" else html.escape(str(v), quote=False))
-            for k, v in context.items()
-        }
+
+        def _value(key, value):
+            # Пустое значение (лимит у безлимитного и т.п.) — прочерк, а не «None»
+            if value is None:
+                return "—"
+            return value if key in raw_html or channel != "telegram" else html.escape(str(value), quote=False)
+
+        enriched = {k: _value(k, v) for k, v in context.items()}
         for short, full in _ALIASES.items():
             if short not in enriched and full in enriched:
                 enriched[short] = enriched[full]

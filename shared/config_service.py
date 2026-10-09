@@ -1271,8 +1271,9 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "value_type": "int",
         "category": "violations",
         "subcategory": "thresholds",
-        "display_name": "Макс. одновременных IP",
-        "description": "Максимальное количество одновременных IP сверх лимита устройств для срабатывания (0 = авто по кол-ву устройств)",
+        "display_name": "Общий предел одновременных IP",
+        "description": "Общий для всех юзеров предел одновременных источников вместо их лимита устройств; "
+                       "к нему прибавляются буферы на смену сети и CGNAT. 0 = у каждого свой лимит устройств из панели",
         "default_value": "0",
         "sort_order": 10,
     },
@@ -1463,6 +1464,19 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Сколько разных аккаунтов на одном устройстве (HWID) считается массовым триальным абьюзом и даёт жёсткую блокировку. Подписки одного telegram_id считаются одним аккаунтом. 0 = отключено",
         "default_value": "5",
         "sort_order": 24,
+    },
+    {
+        "key": "violations_hard_block_simultaneous_excess",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "hard_block",
+        "display_name": "Жёсткая блокировка: источников сверх лимита устройств",
+        "description": "Жёсткая блокировка, когда одновременных источников больше лимита устройств юзера "
+                       "больше чем на это число: при 5 и лимите 1 — с 7 источников, при лимите 3 — с 9. "
+                       "Источники должны выйти и за порог с буферами на смену сети и CGNAT. "
+                       "Безлимитных (лимит 0) не касается. 0 = отключено",
+        "default_value": "0",
+        "sort_order": 25,
     },
     {
         "key": "violations_trial_tags",

@@ -33,7 +33,7 @@ All of them live in **Settings → Violations → Thresholds**.
 | Setting | Meaning | Default |
 |---------|---------|---------|
 | Minimum notification score | below this a violation stays quiet | `50` |
-| Max simultaneous IPs | above the device limit; `0` means derive it | `0` |
+| Shared simultaneous IP limit | one limit for everyone instead of the user's device limit, network-switch and CGNAT buffers are added on top; `0` — each user's own limit from the panel | `0` |
 | Mobile CGNAT buffer | how many extra addresses to forgive a mobile connection | `3` |
 | Max distance between cities | below this, movement is not suspicious | `50` km |
 | Max accounts per HWID | how many different people may share a device | `2` |
@@ -43,6 +43,12 @@ All of them live in **Settings → Violations → Thresholds**.
 ::: tip An account is a person, not a subscription
 Subscriptions of one person are grouped by `telegram_id`, or by email when the registration had no Telegram. Two plans of the same user do not look like two accounts.
 :::
+
+### Sharing above the device limit
+
+The absolute hard-block threshold on simultaneous connections is the same for a one-device plan and a ten-device one: it either cuts large plans or is too soft on small ones. The relative one — **“Hard block: sources above the device limit”** in the hard block section: with a value of 5, a plan with a limit of 1 is blocked from 7 simultaneous sources, with a limit of 3 — from 9. Sources are counted after collapsing carrier pools, and they must also exceed the threshold with network-switch and CGNAT buffers. Unlimited users (limit 0) are not affected. Off by default.
+
+The same can be built as an automation: the violation event carries the **device limit**, **sources above the device limit**, **threshold with buffers** and **sources above the threshold** — a “Sources above the device limit > 5” condition plus the action you need, with a warning and a delay. The threshold breakdown is also saved in the violation itself.
 
 ## Trial farming
 

@@ -4297,7 +4297,13 @@
       "trial_abuse": "Trial abuse",
       "trial_abuse_type": "Trial abuse kind",
       "signals": "Triggered hard-block rules",
-      "reasons": "Reasons (text)"
+      "reasons": "Reasons (text)",
+      "device_limit": "Device limit",
+      "simultaneous_sources": "Simultaneous sources",
+      "simultaneous_addresses": "Simultaneous addresses",
+      "simultaneous_excess": "Sources above the device limit",
+      "effective_threshold": "Threshold with buffers",
+      "effective_excess": "Sources above the threshold with buffers"
     },
     "actionTypes": {
       "disable_user": "Disable user",
@@ -4823,7 +4829,8 @@
         "sharing": {
           "sources": "Abnormally many sources",
           "simultaneous": "Many simultaneous connections",
-          "devices": "Many devices by fingerprint"
+          "devices": "Many devices by fingerprint",
+          "excess": "Sharing above the device limit"
         }
       }
     },
@@ -5424,8 +5431,8 @@
         "description": "Delete synced Subscription Request History records older than N days. 0 = keep forever"
       },
       "violations_max_simultaneous_ips": {
-        "label": "🌐 Max simultaneous IPs",
-        "description": "Max simultaneous IPs above the device limit to trigger a violation (0 = auto from device count)"
+        "label": "🌐 Shared simultaneous IP limit",
+        "description": "One simultaneous-source limit for all users instead of their device limit; network-switch and CGNAT buffers are added on top. 0 = each user's own device limit from the panel"
       },
       "violations_geo_max_city_distance_km": {
         "label": "📏 Max inter-city distance (km)",
@@ -6050,6 +6057,10 @@
       "notifications_retention_days": {
         "label": "Notification retention (days)",
         "description": "How many days notifications and the alert trigger log are kept"
+      },
+      "violations_hard_block_simultaneous_excess": {
+        "label": "🚫 Hard block: sources above the device limit",
+        "description": "Hard block when simultaneous sources exceed the user's device limit by more than this number: with 5 and a limit of 1 — from 7 sources, with a limit of 3 — from 9. The sources must also exceed the threshold with network-switch and CGNAT buffers. Does not apply to unlimited users (limit 0). 0 = disabled"
       }
     },
     "inDb": "In DB",
