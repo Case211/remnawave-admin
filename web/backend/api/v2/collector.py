@@ -7,6 +7,8 @@ Endpoint: POST /batch
 import asyncio
 import hashlib
 import hmac as hmac_mod
+import dataclasses
+from enum import Enum
 import json
 import logging
 import os
@@ -1216,11 +1218,12 @@ async def _run_violation_detection(affected_user_uuids: set):
             return
 
         # Batch violation detection (all DB queries batched inside)
+        live_map = _live_connections(remaining)
         scores = await violation_detector.check_users_batch(
             remaining,
             window_minutes=60,
             excluded_analyzers_map=excluded_map,
-            live_connections=_live_connections(remaining),
+            live_connections=live_map,
         )
 
         # Post-processing: handle violations and update cooldowns
@@ -1256,6 +1259,7 @@ async def _run_violation_detection(affected_user_uuids: set):
                         users_info.get(uuid),
                         all_devices.get(uuid, []),
                         whitelist_map.get(uuid, (False, None))[0],
+                        live_connections=live_map.get(uuid),
                     )
                 except Exception as e:
                     logger.warning("Error handling violation for %s: %s", uuid, e)
@@ -1347,14 +1351,53 @@ async def _run_violation_detection(affected_user_uuids: set):
         logger.error("Background violation detection failed: %s", e, exc_info=True)
 
 
+def _breakdown_json(breakdown) -> str | None:
+    """Разбор скоринга в JSON для колонки raw_breakdown.
+
+    Анализаторы отдают dataclass'ы с множествами и датами — стандартному
+    json.dumps они не по зубам, а терять разбор нельзя: без него карточка
+    нарушения не может показать, из чего сложился скор.
+    """
+    if not breakdown:
+        return None
+
+    def _default(o):
+        if dataclasses.is_dataclass(o) and not isinstance(o, type):
+            return dataclasses.asdict(o)
+        if isinstance(o, (set, frozenset)):
+            return sorted(str(x) for x in o)
+        if isinstance(o, datetime):
+            return o.isoformat()
+        if isinstance(o, Enum):
+            return o.value
+        if hasattr(o, "__dict__"):
+            return {k: v for k, v in vars(o).items() if not k.startswith("_")}
+        return str(o)
+
+    try:
+        return json.dumps({"breakdown": breakdown}, default=_default, ensure_ascii=False)
+    except (TypeError, ValueError) as e:
+        logger.debug("raw_breakdown not serialisable: %s", e)
+        return None
+
+
 async def _handle_violation(
     user_uuid: str,
     violation_score,
     user_info: dict | None,
     hwid_devices: list,
     is_whitelisted: bool,
+    live_connections: list | None = None,
 ):
-    """Post-process a single detected violation: notify, save, auto-block."""
+    """Post-process a single detected violation: notify, save, auto-block.
+
+    ``live_connections`` — соединения из карты активности коллектора, те же,
+    по которым детектор вынес вердикт. Без них адреса пришлось бы брать из
+    БД запросом «сессии, начатые за последние 5 минут», а он не видит
+    сессий, которые идут уже дольше — как раз тех, на которых обычно и
+    ловится одновременное подключение. Итог был «IP-адресов: 0» в карточке
+    и уведомлении при двух странах в причинах.
+    """
     # Юзер уже отключён в панели (заблокирован админом/автоблоком) — не плодим
     # новые нарушения и уведомления по остаточным коннектам: админ меру принял,
     # а «нарушения по кругу» на всю сеть кросс-аккаунтов только заваливают его
@@ -1363,7 +1406,9 @@ async def _handle_violation(
         logger.debug("Skipping violation for disabled user %s", user_uuid)
         return
 
-    active_conns = await connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
+    active_conns = list(live_connections or [])
+    if not active_conns:
+        active_conns = await connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
 
     ip_metadata = {}
     if active_conns:
@@ -1440,6 +1485,7 @@ async def _handle_violation(
             hwid_score=hwid.score if hwid else None,
             hwid_matched_users=json.dumps(hwid.matched_details) if hwid and hwid.matched_details else None,
             user_agent_score=ua.score if ua else None,
+            raw_breakdown=_breakdown_json(breakdown),
             suspicious_user_agents=json.dumps([
                 {"request_id": s.request_id, "user_agent": s.user_agent,
                  "request_ip": s.request_ip, "request_at": s.request_at,
