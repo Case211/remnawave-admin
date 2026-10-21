@@ -1,4 +1,5 @@
 """Tests for shared/rbac.py — permission checking, scope, quota."""
+from contextlib import asynccontextmanager
 from unittest.mock import patch, AsyncMock
 
 import pytest
@@ -275,26 +276,36 @@ class TestGetScope:
 # ── get_visible_user_uuids ──────────────────────────────────────
 
 
+def _fake_scope(node=None, squad=None, user=None):
+    """Подмена get_scope: возвращает заданный scope по типу ресурса."""
+    async def fake_scope(account_id, role_id, role, resource, action):
+        if resource == "node":
+            return node
+        if resource == "squad":
+            return squad
+        return user
+    return fake_scope
+
+
 class TestGetVisibleUserUuids:
-    """Видимость юзеров: свои созданные + разрешённые политиками (#261)."""
+    """Видимость юзеров: база по чекбоксу, сужение по политике юзеров.
+
+    Чекбокс «Может видеть всех пользователей» задаёт базу: включён — все
+    юзеры, снят — только свои (created_by_admin_id). Политика с
+    resource_type='user' СУЖАЕТ базу и никогда её не расширяет. Политики по
+    нодам/хостам/сквадам ограничивают доступ к самим ресурсам и на видимость
+    юзеров не влияют.
+    """
 
     OWN = "11111111-1111-1111-1111-111111111111"
     FOREIGN = "22222222-2222-2222-2222-222222222222"
 
-    def _db(self, creator_rows, policy_rows, unrestricted=False):
-        from contextlib import asynccontextmanager
-
+    def _db(self, creator_rows, unrestricted=False):
         conn = AsyncMock()
         conn.fetchrow = AsyncMock(
             return_value={"unrestricted_user_access": unrestricted, "role_id": 5}
         )
-        calls = {"n": 0}
-
-        async def fetch(*args, **kwargs):
-            calls["n"] += 1
-            return creator_rows if calls["n"] == 1 else policy_rows
-
-        conn.fetch = fetch
+        conn.fetch = AsyncMock(return_value=creator_rows)
 
         db = AsyncMock()
         db.is_connected = True
@@ -304,13 +315,8 @@ class TestGetVisibleUserUuids:
             yield conn
 
         db.acquire = acquire
+        db.conn = conn  # для проверок выданного SQL
         return db
-
-    @staticmethod
-    def _scope(node=None, squad=None):
-        async def fake_scope(account_id, role_id, role, resource, action):
-            return node if resource == "node" else squad
-        return fake_scope
 
     async def test_own_user_visible_before_first_connection(self):
         """Создал юзера — видишь сразу.
@@ -322,33 +328,77 @@ class TestGetVisibleUserUuids:
         """
         from shared.rbac import get_visible_user_uuids
 
-        db = self._db(creator_rows=[{"uuid": self.OWN}], policy_rows=[])
+        db = self._db(creator_rows=[{"uuid": self.OWN}])
         with patch("shared.rbac.db_service", db), \
-             patch("shared.rbac.get_scope", self._scope(node={"node-1"})):
+             patch("shared.rbac.get_scope", _fake_scope(node={"node-1"})):
             result = await get_visible_user_uuids(42, "manager")
         assert result == {self.OWN}
 
-    async def test_policy_users_added_to_own(self):
-        """Политика расширяет видимость, а не сужает её."""
+    async def test_checked_flag_shows_all_users(self):
+        """Включённый чекбокс — все юзеры; политики по нодам не сужают.
+
+        Раньше видимость считалась как «свои ∪ юзеры разрешённых нод», и
+        чекбокс работал наоборот: включённый админ видел МЕНЬШЕ юзеров,
+        чем снятый, а снятый — больше, чем «только свои».
+        """
         from shared.rbac import get_visible_user_uuids
 
-        db = self._db(
-            creator_rows=[{"uuid": self.OWN}],
-            policy_rows=[{"user_uuid": self.FOREIGN}],
-        )
+        db = self._db(creator_rows=[{"uuid": self.OWN}], unrestricted=True)
         with patch("shared.rbac.db_service", db), \
-             patch("shared.rbac.get_scope", self._scope(node={"node-1"})):
+             patch("shared.rbac.get_scope", _fake_scope(node={"node-1"})):
             result = await get_visible_user_uuids(42, "manager")
-        assert result == {self.OWN, self.FOREIGN}
+        assert result is None
+
+    async def test_user_policy_narrows_all_users(self):
+        """Политика по юзерам сужает базу «все юзеры»."""
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[], unrestricted=True)
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", _fake_scope(user={self.OWN})):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == {self.OWN}
+
+    async def test_user_policy_cannot_widen_creator_scope(self):
+        """Снятый чекбокс: политика сужает, но не расширяет «своих».
+
+        Политика может выдать чужого юзера — он не появится: снятый чекбокс
+        означает «только свои», и политика лишь сужает.
+        """
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}])
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", _fake_scope(user={self.FOREIGN})):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == set()
 
     async def test_without_policies_creator_scope_applies(self):
         from shared.rbac import get_visible_user_uuids
 
-        db = self._db(creator_rows=[{"uuid": self.OWN}], policy_rows=[])
+        db = self._db(creator_rows=[{"uuid": self.OWN}])
         with patch("shared.rbac.db_service", db), \
-             patch("shared.rbac.get_scope", self._scope()):
+             patch("shared.rbac.get_scope", _fake_scope()):
             result = await get_visible_user_uuids(42, "manager")
         assert result == {self.OWN}
+
+    async def test_creator_scope_query_filters_by_admin_id(self):
+        """Свои юзеры берутся по created_by_admin_id = id админа.
+
+        Заодно: выборка «своих» — единственный запрос к users, политики по
+        нодам не подмешивают в неё чужих юзеров.
+        """
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}])
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", _fake_scope(node={"node-1"})):
+            await get_visible_user_uuids(42, "manager")
+
+        assert db.conn.fetch.await_count == 1
+        sql, params = db.conn.fetch.await_args[0]
+        assert "created_by_admin_id" in sql
+        assert params == 42
 
     async def test_superadmin_unrestricted(self):
         from shared.rbac import get_visible_user_uuids
@@ -364,3 +414,140 @@ class TestGetVisibleUserUuids:
         with patch("shared.rbac.db_service", db):
             result = await get_visible_user_uuids(42, "manager")
         assert result == set()
+
+
+# ── список юзеров уважает видимость ─────────────────────────────
+
+
+class TestUsersListVisibility:
+    """GET /api/v2/users отдаёт только то, что админ имеет право видеть."""
+
+    OWN = "11111111-1111-1111-1111-111111111111"
+    FOREIGN = "22222222-2222-2222-2222-222222222222"
+
+    async def _list(self, app, admin, *, unrestricted, creator_rows, user_scope=None):
+        """Запрашивает список юзеров и возвращает (whitelist, uuid'ы в ответе)."""
+        import shared.database as shared_database
+
+        from httpx import ASGITransport, AsyncClient
+
+        from web.backend.api.deps import get_current_admin
+
+        app.dependency_overrides[get_current_admin] = lambda: admin
+
+        conn = AsyncMock()
+        conn.fetchrow = AsyncMock(
+            return_value={"unrestricted_user_access": unrestricted, "role_id": 5}
+        )
+        conn.fetch = AsyncMock(return_value=creator_rows)
+
+        rbac_db = AsyncMock()
+        rbac_db.is_connected = True
+
+        @asynccontextmanager
+        async def acquire():
+            yield conn
+
+        rbac_db.acquire = acquire
+        rbac_db.get_effective_policy_rules = AsyncMock(return_value=[])
+
+        captured = {}
+        async def get_users_paginated(**kwargs):
+            captured.update(kwargs)
+            whitelist = kwargs.get("uuid_whitelist")
+            candidates = [
+                {"uuid": self.OWN, "username": "own"},
+                {"uuid": self.FOREIGN, "username": "foreign"},
+            ]
+            if whitelist is not None:
+                allowed = {u.lower() for u in whitelist}
+                candidates = [
+                    u for u in candidates if str(u["uuid"]).lower() in allowed
+                ]
+            return candidates, len(candidates)
+
+        list_db = AsyncMock()
+        list_db.is_connected = True
+        list_db.get_users_paginated = AsyncMock(side_effect=get_users_paginated)
+        list_db.get_hwid_device_counts_for_uuids = AsyncMock(return_value={})
+        list_db.get_raw_traffic_for_uuids = AsyncMock(return_value={})
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            with patch("shared.rbac.db_service", rbac_db), \
+                 patch("shared.rbac.get_scope", _fake_scope(user=user_scope)), \
+                 patch.object(shared_database, "db_service", list_db):
+                resp = await ac.get("/api/v2/users")
+
+        assert resp.status_code == 200, resp.text
+        return captured.get("uuid_whitelist"), [u["uuid"] for u in resp.json()["items"]]
+
+    async def test_unchecked_admin_sees_only_own_users(self, app, manager):
+        """Снятый чекбокс — в списке только собственные юзеры."""
+        whitelist, uuids = await self._list(
+            app, manager,
+            unrestricted=False,
+            creator_rows=[{"uuid": self.OWN}],
+        )
+        assert whitelist is not None, "фильтр по видимости не применён"
+        assert uuids == [self.OWN]
+        assert self.FOREIGN not in uuids
+
+    async def test_checked_admin_narrowed_by_user_policy(self, app, manager):
+        """Включённый чекбокс + политика по юзерам — список сужен политикой."""
+        whitelist, uuids = await self._list(
+            app, manager,
+            unrestricted=True,
+            creator_rows=[],
+            user_scope={self.OWN},
+        )
+        assert whitelist is not None
+        assert set(whitelist) == {self.OWN.lower()}
+        assert uuids == [self.OWN]
+        assert self.FOREIGN not in uuids
+
+
+# ── разворачивание тега в uuid ───────────────────────────────────
+
+
+class TestGetUuidsByTag:
+    """Разный SQL для юзеров и нод/хостов.
+
+    У нод и хостов теги лежат массивом в raw_data (Panel API payload),
+    у юзеров — в отдельной колонке `tag` с одним точным значением.
+    """
+
+    async def _sql_for(self, resource_type: str) -> str:
+        from shared.db.network import NetworkMixin
+
+        conn = AsyncMock()
+        conn.fetch = AsyncMock(return_value=[{"uuid": "x"}])
+
+        @asynccontextmanager
+        async def acquire():
+            yield conn
+
+        mixin = NetworkMixin()
+        mixin.is_connected = True
+        mixin.acquire = acquire
+
+        await mixin.get_uuids_by_tag(resource_type, "vip")
+        return conn.fetch.call_args[0][0]
+
+    async def test_user_tag_uses_dedicated_column(self):
+        sql = await self._sql_for("user")
+        assert "FROM users" in sql
+        assert "tag = $1" in sql
+        assert "raw_data" not in sql
+
+    async def test_node_tag_still_uses_raw_data(self):
+        sql = await self._sql_for("node")
+        assert "FROM nodes" in sql
+        assert "raw_data" in sql
+
+    async def test_unknown_resource_type_returns_empty(self):
+        from shared.db.network import NetworkMixin
+
+        mixin = NetworkMixin()
+        mixin.is_connected = True
+        assert await mixin.get_uuids_by_tag("squad", "vip") == []
