@@ -8010,7 +8010,8 @@
     "resource": {
       "node": "Нода",
       "host": "Хост",
-      "squad": "Сквад"
+      "squad": "Сквад",
+      "user": "Пользователь"
     },
     "scope": {
       "uuid": "По UUID",

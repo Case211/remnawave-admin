@@ -1,6 +1,6 @@
 import client from './client'
 
-export type ResourceType = 'node' | 'host' | 'squad'
+export type ResourceType = 'node' | 'host' | 'squad' | 'user'
 export type ScopeType = 'uuid' | 'tag'
 export type PolicyAction = 'view' | 'edit' | 'delete'
 

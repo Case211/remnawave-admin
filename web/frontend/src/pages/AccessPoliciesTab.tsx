@@ -38,7 +38,7 @@ interface ResourceOption {
   label: string
 }
 
-const RESOURCE_TYPES: ResourceType[] = ['node', 'host', 'squad']
+const RESOURCE_TYPES: ResourceType[] = ['node', 'host', 'squad', 'user']
 const SCOPE_TYPES: ScopeType[] = ['uuid', 'tag']
 const ALL_ACTIONS: PolicyAction[] = ['view', 'edit', 'delete']
 
@@ -82,11 +82,25 @@ function useResourceOptions(enabled: boolean = true) {
     enabled,
     staleTime: 60_000,
   })
+  const usersQ = useQuery({
+    queryKey: ['policy-options', 'users'],
+    queryFn: async () => {
+      const { data } = await client.get('/users', { params: { per_page: 500 } })
+      const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
+      return items.map((u: any) => ({
+        uuid: u.uuid,
+        label: u.username || u.email || u.uuid,
+      })) as ResourceOption[]
+    },
+    enabled,
+    staleTime: 60_000,
+  })
   return {
     node: nodesQ.data || [],
     host: hostsQ.data || [],
     squad: squadsQ.data || [],
-    loading: nodesQ.isLoading || hostsQ.isLoading || squadsQ.isLoading,
+    user: usersQ.data || [],
+    loading: nodesQ.isLoading || hostsQ.isLoading || squadsQ.isLoading || usersQ.isLoading,
   }
 }
 
