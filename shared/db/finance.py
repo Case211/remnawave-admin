@@ -693,13 +693,15 @@ class FinanceMixin:
                 days,
             )
             user_rows = await conn.fetch(
-                f"""SELECT DISTINCT uc.user_uuid::text AS user_uuid,
-                                      uc.node_uuid::text AS node_uuid,
-                                      u.tag, u.raw_data
+                f"""SELECT DISTINCT ON (uc.user_uuid, uc.node_uuid)
+                           uc.user_uuid::text AS user_uuid,
+                           uc.node_uuid::text AS node_uuid,
+                           u.tag, u.raw_data
                     FROM {USER_CONNECTIONS_TABLE} uc
                     JOIN {USERS_TABLE} u ON u.uuid = uc.user_uuid
                     WHERE uc.node_uuid IS NOT NULL
-                      AND uc.connected_at >= NOW() - INTERVAL '1 day' * $1""",
+                      AND uc.connected_at >= NOW() - INTERVAL '1 day' * $1
+                    ORDER BY uc.user_uuid, uc.node_uuid""",
                 days,
             )
             name_rows = await conn.fetch(
