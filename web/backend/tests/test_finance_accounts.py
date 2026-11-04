@@ -475,6 +475,48 @@ class TestNodeMatching:
 
 
 class TestNodeCosts:
+    def test_multinode_users_are_split_and_trials_can_be_excluded(self):
+        from shared.db.finance import _node_user_counts
+
+        rows = [
+            {"user_uuid": "paid-multi", "node_uuid": "a", "tag": "paid", "raw_data": {}},
+            {"user_uuid": "paid-multi", "node_uuid": "b", "tag": "paid", "raw_data": {}},
+            {"user_uuid": "paid-single", "node_uuid": "a", "tag": "paid", "raw_data": {}},
+            {"user_uuid": "trial", "node_uuid": "b", "tag": "trial", "raw_data": {}},
+        ]
+
+        raw, weighted, total = _node_user_counts(rows, True, ["trial"], [])
+        assert raw == {"a": 2, "b": 2}
+        assert weighted == {"a": 1.5, "b": 1.5}
+        assert total == 3
+        assert sum(weighted.values()) == total
+
+        raw, weighted, total = _node_user_counts(rows, False, ["trial"], [])
+        assert raw == {"a": 2, "b": 1}
+        assert weighted == {"a": 1.5, "b": 0.5}
+        assert total == 2
+        assert sum(weighted.values()) == total
+
+    def test_cost_per_user_uses_effective_users(self):
+        from shared.db.finance import FinanceMixin
+
+        result = FinanceMixin._build_node_costs(
+            [
+                {"node_uuid": "a", "amount": 300, "billing_cycle": "monthly", "cycle_days": None, "currency": "RUB"},
+                {"node_uuid": "b", "amount": 300, "billing_cycle": "monthly", "cycle_days": None, "currency": "RUB"},
+            ],
+            {"RUB": 1.0}, traffic={}, users={"a": 2, "b": 1},
+            names={"a": "A", "b": "B"}, days=30,
+            weighted_users={"a": 1.5, "b": 0.5}, global_users=2,
+        )
+
+        by_uuid = {i["node_uuid"]: i for i in result["items"]}
+        assert by_uuid["a"]["effective_users"] == 1.5
+        assert by_uuid["a"]["cost_per_user_rub"] == 200.0
+        assert by_uuid["b"]["effective_users"] == 0.5
+        assert by_uuid["b"]["cost_per_user_rub"] == 600.0
+        assert result["global_users"] == 2
+
     def test_build_node_costs(self):
         from shared.db.finance import FinanceMixin
 

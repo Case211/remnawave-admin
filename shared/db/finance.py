@@ -13,7 +13,7 @@ from shared.logger import logger
 from shared.db_schema import (
     FINANCE_CATEGORIES_TABLE, FINANCE_PROVIDERS_TABLE, FINANCE_ITEMS_TABLE,
     FINANCE_PAYMENTS_TABLE, FINANCE_RATES_TABLE, NODES_TABLE,
-    NODE_TRAFFIC_SNAPSHOTS_TABLE, USER_CONNECTIONS_TABLE,
+    NODE_TRAFFIC_SNAPSHOTS_TABLE, USER_CONNECTIONS_TABLE, USERS_TABLE,
 )
 
 BILLING_CYCLES = ("monthly", "yearly", "once", "days")
@@ -46,6 +46,41 @@ def _payment_row(r: Any) -> Dict[str, Any]:
     d["paid_at"] = _d(d.get("paid_at"))
     d["created_at"] = _d(d.get("created_at"))
     return d
+
+
+def _node_user_counts(
+    rows: List[Dict[str, Any]],
+    include_trials: bool,
+    trial_tags: List[str],
+    trial_squads: List[str],
+) -> tuple[Dict[str, int], Dict[str, float], int]:
+    """Count users per node and distribute multi-node users without duplication.
+
+    A user seen on N nodes contributes 1/N effective user to every node.  Thus
+    effective users across all nodes always add up to the fleet-wide unique
+    user count, while the raw count remains available for reach diagnostics.
+    """
+    from shared.db.network import _is_trial_user
+
+    user_nodes: Dict[str, set[str]] = {}
+    for row in rows:
+        if not include_trials and _is_trial_user(
+            row.get("tag"), row.get("raw_data"), trial_tags, trial_squads,
+        ):
+            continue
+        user_uuid = str(row["user_uuid"])
+        node_uuid = str(row["node_uuid"])
+        user_nodes.setdefault(user_uuid, set()).add(node_uuid)
+
+    raw: Dict[str, int] = {}
+    weighted: Dict[str, float] = {}
+    for nodes in user_nodes.values():
+        weight = 1.0 / len(nodes)
+        for node_uuid in nodes:
+            raw[node_uuid] = raw.get(node_uuid, 0) + 1
+            weighted[node_uuid] = weighted.get(node_uuid, 0.0) + weight
+
+    return raw, weighted, len(user_nodes)
 
 
 def _advance_due(next_due: date, cycle: str, cycle_days: Optional[int], today: date) -> Optional[date]:
@@ -608,17 +643,25 @@ class FinanceMixin:
 
     # ==================== Node costs (себестоимость) ====================
 
-    async def finance_node_costs(self, days: int = 30) -> Dict[str, Any]:
+    async def finance_node_costs(
+        self, days: int = 30, include_trials: bool = True,
+    ) -> Dict[str, Any]:
         """Себестоимость нод: расход/мес + трафик и юзеры за окно days.
 
         - расход — месячный эквивалент активных expense-записей с node_uuid;
         - трафик — сумма положительных дневных дельт lifetime-счётчика ноды
           (устойчиво к ресетам при перезагрузках; снапшоты хранятся 31 день);
-        - юзеры — DISTINCT user_uuid по коннектам окна.
+        - юзеры — DISTINCT user_uuid по коннектам окна; пользователь на N
+          нодах даёт каждой 1/N для расчёта стоимости без двойного учёта;
+        - триальные пользователи при необходимости исключаются по общим
+          настройкам trial-тегов и trial-squad'ов.
         Всё в RUB; конвертацию в базовую валюту делает API-слой.
         """
         if not self.is_connected:
-            return {"items": [], "unassigned_monthly_rub": 0.0, "days": days}
+            return {
+                "items": [], "unassigned_monthly_rub": 0.0, "days": days,
+                "global_users": 0, "include_trials": include_trials,
+            }
 
         async with self.acquire() as conn:
             item_rows = await conn.fetch(
@@ -650,24 +693,35 @@ class FinanceMixin:
                 days,
             )
             user_rows = await conn.fetch(
-                f"""SELECT node_uuid::text AS node_uuid,
-                           COUNT(DISTINCT user_uuid) AS users
-                    FROM {USER_CONNECTIONS_TABLE}
-                    WHERE node_uuid IS NOT NULL
-                      AND connected_at >= NOW() - INTERVAL '1 day' * $1
-                    GROUP BY node_uuid""",
+                f"""SELECT DISTINCT uc.user_uuid::text AS user_uuid,
+                                      uc.node_uuid::text AS node_uuid,
+                                      u.tag, u.raw_data
+                    FROM {USER_CONNECTIONS_TABLE} uc
+                    JOIN {USERS_TABLE} u ON u.uuid = uc.user_uuid
+                    WHERE uc.node_uuid IS NOT NULL
+                      AND uc.connected_at >= NOW() - INTERVAL '1 day' * $1""",
                 days,
             )
             name_rows = await conn.fetch(
                 f"SELECT uuid::text AS node_uuid, name FROM {NODES_TABLE}"
             )
 
+        from shared.db.network import _load_trial_settings
+
+        trial_tags, trial_squads = _load_trial_settings()
+        users, weighted_users, global_users = _node_user_counts(
+            [dict(r) for r in user_rows], include_trials, trial_tags, trial_squads,
+        )
+
         return self._build_node_costs(
             [dict(r) for r in item_rows], rates,
             {r["node_uuid"]: int(r["bytes"] or 0) for r in traffic_rows},
-            {r["node_uuid"]: int(r["users"] or 0) for r in user_rows},
+            users,
             {r["node_uuid"]: r["name"] for r in name_rows},
             days,
+            weighted_users=weighted_users,
+            global_users=global_users,
+            include_trials=include_trials,
         )
 
     @staticmethod
@@ -675,6 +729,9 @@ class FinanceMixin:
         item_rows: List[Dict[str, Any]], rates: Dict[str, float],
         traffic: Dict[str, int], users: Dict[str, int],
         names: Dict[str, Optional[str]], days: int,
+        weighted_users: Optional[Dict[str, float]] = None,
+        global_users: Optional[int] = None,
+        include_trials: bool = True,
     ) -> Dict[str, Any]:
         """Чистая сборка метрик себестоимости из выборок (тестируемо без БД)."""
         per_node: Dict[str, Dict[str, Any]] = {}
@@ -705,6 +762,7 @@ class FinanceMixin:
             cost = round(node["monthly_cost_rub"], 2)
             gb = round(traffic.get(node_uuid, 0) / gib, 2)
             n_users = users.get(node_uuid, 0)
+            effective_users = (weighted_users or users).get(node_uuid, 0)
             items.append({
                 "node_uuid": node_uuid,
                 "node_name": names.get(node_uuid) or node_uuid[:8],
@@ -712,13 +770,23 @@ class FinanceMixin:
                 "traffic_gb": gb,
                 "cost_per_gb_rub": round(cost / gb, 2) if gb > 0 and cost > 0 else None,
                 "users": n_users,
-                "cost_per_user_rub": round(cost / n_users, 2) if n_users > 0 and cost > 0 else None,
+                "effective_users": round(effective_users, 2),
+                "cost_per_user_rub": (
+                    round(cost / effective_users, 2)
+                    if effective_users > 0 and cost > 0 else None
+                ),
             })
         items.sort(key=lambda x: -x["monthly_cost_rub"])
         return {
             "items": items,
             "unassigned_monthly_rub": round(unassigned, 2),
             "days": days,
+            "global_users": (
+                global_users
+                if global_users is not None
+                else int(round(sum((weighted_users or users).values())))
+            ),
+            "include_trials": include_trials,
         }
 
     # ==================== Rates ====================

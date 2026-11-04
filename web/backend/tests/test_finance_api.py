@@ -81,6 +81,43 @@ class TestFinanceApi:
         assert data["monthly"][0]["net"] == 70.0
 
     @pytest.mark.asyncio
+    async def test_node_costs_forwards_trial_filter_and_effective_users(self, client):
+        db = AsyncMock()
+        db.finance_node_costs = AsyncMock(return_value={
+            "days": 30,
+            "include_trials": False,
+            "global_users": 2,
+            "unassigned_monthly_rub": 0.0,
+            "items": [{
+                "node_uuid": "node-a",
+                "node_name": "Node A",
+                "monthly_cost_rub": 300.0,
+                "traffic_gb": 10.0,
+                "cost_per_gb_rub": 30.0,
+                "users": 2,
+                "effective_users": 1.5,
+                "cost_per_user_rub": 200.0,
+            }],
+        })
+        db.get_finance_rates = AsyncMock(return_value=[])
+
+        with patch("web.backend.api.v2.finance.db_service", db):
+            resp = await client.get(
+                "/api/v2/finance/node-costs?days=30&include_trials=false",
+            )
+
+        assert resp.status_code == 200
+        db.finance_node_costs.assert_awaited_once_with(
+            days=30, include_trials=False,
+        )
+        data = resp.json()
+        assert data["include_trials"] is False
+        assert data["global_users"] == 2
+        assert data["items"][0]["users"] == 2
+        assert data["items"][0]["effective_users"] == 1.5
+        assert data["items"][0]["cost_per_user"] == 200.0
+
+    @pytest.mark.asyncio
     async def test_create_item_validates_cycle(self, client):
         resp = await client.post("/api/v2/finance/items", json={
             "name": "X", "billing_cycle": "weekly",

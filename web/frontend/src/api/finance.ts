@@ -164,12 +164,15 @@ export interface NodeCost {
   traffic_gb: number
   cost_per_gb: number | null
   users: number
+  effective_users: number
   cost_per_user: number | null
 }
 
 export interface NodeCosts {
   base_currency: string
   days: number
+  include_trials: boolean
+  global_users: number
   unassigned_monthly: number
   items: NodeCost[]
 }
@@ -255,8 +258,8 @@ export const financeApi = {
     await client.delete(`/finance/providers/${id}`)
   },
 
-  getNodeCosts: async (days = 30): Promise<NodeCosts> =>
-    (await client.get('/finance/node-costs', { params: { days } })).data,
+  getNodeCosts: async (days = 30, includeTrials = true): Promise<NodeCosts> =>
+    (await client.get('/finance/node-costs', { params: { days, include_trials: includeTrials } })).data,
 
   listRates: async (): Promise<{ items: FinanceRate[]; base_currency: string }> =>
     (await client.get('/finance/rates')).data,

@@ -97,6 +97,7 @@ function CurrencySelect({ value, onChange }: { value: string; onChange: (v: stri
 function OverviewTab() {
   const { t } = useTranslation()
   const chart = useChartTheme()
+  const [nodeCostAudience, setNodeCostAudience] = useState<'all' | 'paid'>('all')
 
   // 12 месяцев истории — хватает и графику, и селектору месяца KPI
   const { data: summary, isLoading, isError, refetch } = useQuery({
@@ -127,8 +128,8 @@ function OverviewTab() {
     enabled: hasAccounts,
   })
   const { data: nodeCosts } = useQuery({
-    queryKey: ['finance-node-costs'],
-    queryFn: () => financeApi.getNodeCosts(30),
+    queryKey: ['finance-node-costs', nodeCostAudience],
+    queryFn: () => financeApi.getNodeCosts(30, nodeCostAudience === 'all'),
     staleTime: 300_000,
   })
 
@@ -392,10 +393,21 @@ function OverviewTab() {
       {(nodeCosts?.items.length ?? 0) > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Server className="w-5 h-5 text-primary-400" />
-              <CardTitle className="text-base">{t('finance.nodeCosts.title')}</CardTitle>
-              <InfoTooltip text={t('finance.nodeCosts.tooltip')} side="right" />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Server className="w-5 h-5 text-primary-400" />
+                <CardTitle className="text-base">{t('finance.nodeCosts.title')}</CardTitle>
+                <InfoTooltip text={t('finance.nodeCosts.tooltip')} side="right" />
+              </div>
+              <Select value={nodeCostAudience} onValueChange={(v) => setNodeCostAudience(v as 'all' | 'paid')}>
+                <SelectTrigger className="h-8 w-[190px]" aria-label={t('finance.nodeCosts.audience')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('finance.nodeCosts.allUsers')}</SelectItem>
+                  <SelectItem value="paid">{t('finance.nodeCosts.paidOnly')}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardHeader>
           <CardContent>
@@ -408,6 +420,7 @@ function OverviewTab() {
                     <th scope="col" className="pb-2 pr-3 font-normal text-right">{t('finance.nodeCosts.traffic', { days: nodeCosts!.days })}</th>
                     <th scope="col" className="pb-2 pr-3 font-normal text-right">{t('finance.nodeCosts.perGb')}</th>
                     <th scope="col" className="pb-2 pr-3 font-normal text-right">{t('finance.nodeCosts.users')}</th>
+                    <th scope="col" className="pb-2 pr-3 font-normal text-right">{t('finance.nodeCosts.effectiveUsers')}</th>
                     <th scope="col" className="pb-2 font-normal text-right">{t('finance.nodeCosts.perUser')}</th>
                   </tr>
                 </thead>
@@ -423,6 +436,9 @@ function OverviewTab() {
                         {n.cost_per_gb != null ? fmtMoney(n.cost_per_gb, base) : <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono">{n.users || '—'}</td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {n.effective_users > 0 ? n.effective_users.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                      </td>
                       <td className="py-2 text-right font-mono whitespace-nowrap">
                         {n.cost_per_user != null ? fmtMoney(n.cost_per_user, base) : <span className="text-muted-foreground">—</span>}
                       </td>

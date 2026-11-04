@@ -7022,13 +7022,17 @@
     "factPlusUpcoming": "actual {{actual}} + upcoming {{upcoming}}",
     "nodeCosts": {
       "title": "Node costs",
-      "tooltip": "Cost/mo — items linked to the node (monthly equivalent). Traffic — from node counter snapshots, users — unique within the window. Link an item to a node via the \"Node\" field in the item dialog. Costs outside nodes (panel, domains, bots) are not in this table — that's fine, they are counted in the overall P&L.",
+      "tooltip": "Cost/mo — items linked to the node (monthly equivalent). A user seen on multiple nodes is split evenly between them, so the user counts once in total cost calculations. The trial filter uses the trial tags and trial squads configured for violation detection. Costs outside nodes remain part of the overall P&L.",
       "node": "Node",
       "monthlyCost": "Cost/mo",
       "traffic": "Traffic {{days}}d",
       "perGb": "per GB",
       "users": "Users",
+      "effectiveUsers": "Counted users",
       "perUser": "per user",
+      "audience": "Users included in the calculation",
+      "allUsers": "All, including trials",
+      "paidOnly": "Paid only",
       "unassigned": "Outside nodes (panel, domains, etc.): {{amount}}/mo"
     },
     "pm": {
