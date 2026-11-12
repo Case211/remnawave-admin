@@ -8005,7 +8005,8 @@
     "resource": {
       "node": "Node",
       "host": "Host",
-      "squad": "Squad"
+      "squad": "Squad",
+      "user": "User"
     },
     "scope": {
       "uuid": "By UUID",

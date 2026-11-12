@@ -6,13 +6,12 @@ the Telegram bot and web backend from a single codebase.
 Designed to be imported directly by the bot process, and
 re-exported/extended by web/backend/core/rbac.py for the web API.
 """
-import json
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from shared.database import db_service
 from shared.logger import logger
-from shared.db_schema import ADMIN_COUNTER_COLUMNS, ADMIN_TABLE, ADMIN_ROLES_TABLE, ADMIN_PERMISSIONS_TABLE, USERS_TABLE, USER_NODE_TRAFFIC_TABLE
+from shared.db_schema import ADMIN_COUNTER_COLUMNS, ADMIN_TABLE, ADMIN_ROLES_TABLE, ADMIN_PERMISSIONS_TABLE, USERS_TABLE
 from shared.db_query import select_sql, update_sql, left_join_sql
 
 # ── In-memory permission cache ──────────────────────────────────
@@ -240,12 +239,20 @@ async def get_visible_user_uuids(
     """Resolve which user UUIDs an admin can see.
 
     Superadmins / unknown admins see all users (return None).
-    Creator scope is always applied when unrestricted_user_access = False.
-    Access policies расширяют видимость: к своим созданным добавляются
-    юзеры разрешённых нод и сквадов.
+
+    Флаг unrestricted_user_access («Может видеть всех пользователей») задаёт
+    БАЗУ выборки:
+      * включён → все юзеры;
+      * снят    → только свои юзеры (created_by_admin_id == admin).
+
+    Политика доступа с resource_type='user' СУЖАЕТ базу и никогда её не
+    расширяет: включённый чекбокс → все юзеры ∩ политика, снятый →
+    свои юзеры ∩ политика. Политики по нодам/хостам/сквадам ограничивают
+    доступ к самим ресурсам и на видимость юзеров не влияют.
 
     Returns:
-        None — no restrictions (superadmin, or unrestricted + no policies)
+        None — все юзеры (superadmin, legacy, или чекбокс включён и политики
+               по юзерам нет)
         set[str] — whitelist of user UUIDs (lowercase, possibly empty)
     """
     if role == "superadmin" or account_id is None:
@@ -268,79 +275,38 @@ async def get_visible_user_uuids(
             unrestricted = row.get("unrestricted_user_access", True)
             role_id = row["role_id"]
 
-        creator_uuids: Optional[Set[str]] = None
+        # База выборки: чекбокс «Может видеть всех пользователей» включён —
+        # все юзеры (None), снят — только свои (created_by_admin_id).
+        base: Optional[Set[str]] = None
         if not unrestricted:
             async with db_service.acquire() as conn:
                 rows = await conn.fetch(
                     select_sql(USERS_TABLE, "uuid", "WHERE created_by_admin_id = $1"),
                     account_id,
                 )
-                creator_uuids = {str(row["uuid"]).lower() for row in rows}
+                base = {str(r["uuid"]).lower() for r in rows}
 
-        node_scope = await get_scope(account_id, role_id, role, "node", "view")
-        squad_scope = await get_scope(account_id, role_id, role, "squad", "view")
+        # Политика по юзерам (resource_type='user') СУЖАЕТ выборку и никогда
+        # её не расширяет:
+        #   * чекбокс включён → все юзеры ∩ политика;
+        #   * чекбокс снят    → свои юзеры ∩ политика.
+        #
+        # Раньше политики по нодам и сквадам подмешивали в видимость всех
+        # юзеров разрешённых нод, и чекбокс работал наоборот: включённый
+        # админ видел МЕНЬШЕ юзеров, чем снятый, а снятый — больше, чем
+        # «только свои». Политики по нодам/хостам/сквадам ограничивают
+        # доступ к самим ресурсам и на видимость юзеров не влияют.
+        user_scope = await get_scope(account_id, role_id, role, "user", "view")
+        if user_scope is None:
+            # Политики по юзерам нет — сужать нечем.
+            return base
 
-        if node_scope is None and squad_scope is None:
-            return None if unrestricted else creator_uuids
-
-        policy_uuids: Set[str] = set()
-
-        if node_scope is not None and node_scope:
-            async with db_service.acquire() as conn:
-                rows = await conn.fetch(
-                    select_sql(USER_NODE_TRAFFIC_TABLE, "DISTINCT user_uuid", "WHERE node_uuid = ANY($1::uuid[])"),
-                    list(node_scope),
-                )
-                policy_uuids.update(str(r["user_uuid"]).lower() for r in rows)
-
-        if squad_scope is not None and squad_scope:
-            squad_list = list(squad_scope)
-            async with db_service.acquire() as conn:
-                rows = await conn.fetch(
-                    select_sql(USERS_TABLE, "uuid", "WHERE external_squad_uuid = ANY($1::uuid[])"),
-                    squad_list,
-                )
-                policy_uuids.update(str(r["uuid"]).lower() for r in rows)
-
-                internal_rows = await conn.fetch(
-                    select_sql(USERS_TABLE, "uuid::text AS uuid, raw_data", "WHERE raw_data IS NOT NULL")
-                )
-                squad_lower = {s.lower() for s in squad_list}
-                for r in internal_rows:
-                    raw = r["raw_data"]
-                    if isinstance(raw, str):
-                        try:
-                            raw = json.loads(raw)
-                        except (ValueError, TypeError):
-                            continue
-                    if not isinstance(raw, dict):
-                        continue
-                    sqs = raw.get("activeInternalSquads") or []
-                    if not isinstance(sqs, list):
-                        continue
-                    for sq in sqs:
-                        sq_uuid = None
-                        if isinstance(sq, str):
-                            sq_uuid = sq
-                        elif isinstance(sq, dict):
-                            sq_uuid = sq.get("uuid") or sq.get("squadUuid")
-                        if sq_uuid and str(sq_uuid).lower() in squad_lower:
-                            policy_uuids.add(str(r["uuid"]).lower())
-                            break
-
-        if unrestricted:
-            return policy_uuids if policy_uuids else set()
-
-        if creator_uuids is None:
-            return policy_uuids if policy_uuids else set()
-
-        # Объединение, а не пересечение (#261). Пересечение отбирало у
-        # админа его же свежесозданных юзеров: в policy_uuids юзер
-        # попадает через трафик по разрешённой ноде или через сквад, а
-        # только что созданный ещё ни разу не подключался и сквада может
-        # не иметь. Выходило «создал, квота списалась, а в списке пусто»
-        # — управлять юзером нельзя до его первого подключения.
-        return creator_uuids | policy_uuids
+        allowed = {u.lower() for u in user_scope}
+        if base is None:
+            # База — все юзеры; сужение — сама политика.
+            return allowed
+        # База — свои юзеры; сужение — пересечение с политикой.
+        return base & allowed
 
     except Exception as e:
         logger.warning("get_visible_user_uuids failed: %s", e)

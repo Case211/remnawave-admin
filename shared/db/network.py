@@ -2254,17 +2254,25 @@ class NetworkMixin:
         return result
 
     async def get_uuids_by_tag(self, resource_type: str, tag: str) -> List[str]:
-        """Return UUIDs of nodes/hosts of a given type whose tags include the tag.
+        """Return UUIDs of nodes/hosts/users of a given type whose tags include the tag.
 
-        Tags are stored in raw_data JSON (Panel API payload). We cast to jsonb
-        for the containment check. Squads have no tags yet -> empty result.
+        Nodes and hosts keep their tags in raw_data JSON (Panel API payload) —
+        we cast to jsonb for the containment check. Users have a dedicated
+        `tag` column with one exact value, so they are matched directly.
+        Squads have no tags yet -> empty result.
         """
         if not self.is_connected:
             return []
         if resource_type == "node":
             table = NODES_TABLE
+            where = "(raw_data::jsonb)->'tags' ? $1"
         elif resource_type == "host":
             table = HOSTS_TABLE
+            where = "(raw_data::jsonb)->'tags' ? $1"
+        elif resource_type == "user":
+            # У юзеров один тег в отдельной колонке, а не массив в raw_data.
+            table = USERS_TABLE
+            where = "tag = $1"
         else:
             return []
         try:
@@ -2273,7 +2281,7 @@ class NetworkMixin:
                     f"""
                     SELECT uuid::text AS uuid
                     FROM {table}
-                    WHERE (raw_data::jsonb)->'tags' ? $1
+                    WHERE {where}
                     """,
                     tag,
                 )
