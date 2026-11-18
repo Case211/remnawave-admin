@@ -162,7 +162,7 @@ async def get_scope(
         account_id: admin_accounts.id (None for legacy/env admins)
         role_id: admin_roles.id (None for legacy/env admins)
         role: role name (e.g. "superadmin")
-        resource_type: 'node', 'host', 'squad'
+        resource_type: 'node', 'host', 'squad', 'user'
         action: 'view', 'edit', 'delete'
 
     Returns:

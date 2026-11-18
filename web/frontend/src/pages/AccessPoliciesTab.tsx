@@ -43,7 +43,7 @@ const SCOPE_TYPES: ScopeType[] = ['uuid', 'tag']
 const ALL_ACTIONS: PolicyAction[] = ['view', 'edit', 'delete']
 
 
-function useResourceOptions(enabled: boolean = true) {
+function useResourceOptions(enabled: boolean = true, userSearch?: string) {
   const nodesQ = useQuery({
     queryKey: ['policy-options', 'nodes'],
     queryFn: async () => {
@@ -83,9 +83,11 @@ function useResourceOptions(enabled: boolean = true) {
     staleTime: 60_000,
   })
   const usersQ = useQuery({
-    queryKey: ['policy-options', 'users'],
+    queryKey: ['policy-options', 'users', userSearch || ''],
     queryFn: async () => {
-      const { data } = await client.get('/users', { params: { per_page: 500 } })
+      const { data } = await client.get('/users', {
+        params: { page: 1, per_page: 100, search: userSearch },
+      })
       const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
       return items.map((u: any) => ({
         uuid: u.uuid,
@@ -101,6 +103,8 @@ function useResourceOptions(enabled: boolean = true) {
     squad: squadsQ.data || [],
     user: usersQ.data || [],
     loading: nodesQ.isLoading || hostsQ.isLoading || squadsQ.isLoading || usersQ.isLoading,
+    userLoading: usersQ.isLoading,
+    userError: usersQ.isError,
   }
 }
 
@@ -278,6 +282,8 @@ function PolicyEditor({
   const [rules, setRules] = useState<PolicyRule[]>(policy.rules)
   const [selectedRoles, setSelectedRoles] = useState<Set<number>>(new Set(policy.role_ids))
   const [selectedAdmins, setSelectedAdmins] = useState<Set<number>>(new Set(policy.admin_ids))
+  const [userSearchInput, setUserSearchInput] = useState('')
+  const [userSearch, setUserSearch] = useState<string | undefined>(undefined)
 
   const adminsQ = useQuery({
     queryKey: ['admins-for-policies'],
@@ -292,9 +298,11 @@ function PolicyEditor({
     setRules(policy.rules)
     setSelectedRoles(new Set(policy.role_ids))
     setSelectedAdmins(new Set(policy.admin_ids))
+    setUserSearchInput('')
+    setUserSearch(undefined)
   }, [policy.id])
 
-  const options = useResourceOptions()
+  const options = useResourceOptions(true, userSearch)
 
   const addRule = () => {
     setRules([...rules, {
@@ -414,14 +422,53 @@ function PolicyEditor({
               </p>
             )}
             {rules.map((rule, i) => {
-              const resOptions = options[rule.resource_type] || []
+              const loadedOptions = options[rule.resource_type] || []
+              const resOptions = rule.resource_type === 'user'
+                && rule.scope_type === 'uuid'
+                && rule.scope_value
+                && !loadedOptions.some((o) => o.uuid === rule.scope_value)
+                ? [{ uuid: rule.scope_value, label: rule.scope_value }, ...loadedOptions]
+                : loadedOptions
+              const availableActions: PolicyAction[] = rule.resource_type === 'user' ? ['view'] : ALL_ACTIONS
+              const resourceLoading = rule.resource_type === 'user' ? options.userLoading : options.loading
+              const resourceSelect = (
+                <Select
+                  value={rule.scope_value}
+                  onValueChange={(v) => updateRule(i, { scope_value: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={
+                      resourceLoading
+                        ? t('accessPolicies.loading') || 'Loading...'
+                        : resOptions.length === 0
+                          ? t('accessPolicies.noResources') || 'No resources'
+                          : t('accessPolicies.pickResource') || 'Pick...'
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {resOptions.length === 0 && !resourceLoading ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        {t('accessPolicies.noResources')}
+                      </div>
+                    ) : (
+                      resOptions.map((o) => (
+                        <SelectItem key={o.uuid} value={o.uuid}>{o.label}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              )
               return (
                 <div key={i} className="grid grid-cols-12 gap-2 items-start p-2 rounded-lg border border-white/5 bg-white/[0.02]">
                   <div className="col-span-12 md:col-span-2">
                     <Label className="text-[10px]">{t('accessPolicies.resourceType')}</Label>
                     <Select
                       value={rule.resource_type}
-                      onValueChange={(v) => updateRule(i, { resource_type: v as ResourceType, scope_value: '' })}
+                      onValueChange={(v) => updateRule(i, {
+                        resource_type: v as ResourceType,
+                        scope_value: '',
+                        actions: v === 'user' ? ['view'] : rule.actions,
+                      })}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -448,31 +495,44 @@ function PolicyEditor({
                   <div className="col-span-12 md:col-span-4">
                     <Label className="text-[10px]">{t('accessPolicies.scopeValue')}</Label>
                     {rule.scope_type === 'uuid' ? (
-                      <Select
-                        value={rule.scope_value}
-                        onValueChange={(v) => updateRule(i, { scope_value: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={
-                            options.loading
-                              ? t('accessPolicies.loading') || 'Loading...'
-                              : resOptions.length === 0
-                                ? t('accessPolicies.noResources') || 'No resources'
-                                : t('accessPolicies.pickResource') || 'Pick...'
-                          } />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {resOptions.length === 0 && !options.loading ? (
-                            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                              {t('accessPolicies.noResources')}
-                            </div>
-                          ) : (
-                            resOptions.map((o) => (
-                              <SelectItem key={o.uuid} value={o.uuid}>{o.label}</SelectItem>
-                            ))
+                      rule.resource_type === 'user' ? (
+                        <div className="space-y-2">
+                          <div className="flex gap-1">
+                            <Input
+                              aria-label={t('accessPolicies.searchUsers')}
+                              placeholder={t('accessPolicies.searchUsersPlaceholder')}
+                              value={userSearchInput}
+                              onChange={(e) => setUserSearchInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  setUserSearch(userSearchInput.trim() || undefined)
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setUserSearch(userSearchInput.trim() || undefined)}
+                            >
+                              {t('accessPolicies.search')}
+                            </Button>
+                          </div>
+                          {resourceSelect}
+                          {options.userError && (
+                            <p role="alert" className="text-xs text-destructive">
+                              {t('accessPolicies.userOptionsError')}
+                            </p>
                           )}
-                        </SelectContent>
-                      </Select>
+                          <Input
+                            aria-label={t('accessPolicies.userUuid')}
+                            placeholder={t('accessPolicies.userUuid')}
+                            value={rule.scope_value}
+                            onChange={(e) => updateRule(i, { scope_value: e.target.value })}
+                          />
+                        </div>
+                      ) : resourceSelect
                     ) : (
                       <Input
                         placeholder="tag name"
@@ -484,7 +544,7 @@ function PolicyEditor({
                   <div className="col-span-10 md:col-span-3">
                     <Label className="text-[10px]">{t('accessPolicies.actions')}</Label>
                     <div className="flex gap-3 items-center pt-2">
-                      {ALL_ACTIONS.map((a) => (
+                      {availableActions.map((a) => (
                         <label key={a} className="flex items-center gap-1 text-xs">
                           <Checkbox
                             checked={rule.actions.includes(a)}
@@ -498,6 +558,11 @@ function PolicyEditor({
                         </label>
                       ))}
                     </div>
+                    {rule.resource_type === 'user' && (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {t('accessPolicies.userViewOnly')}
+                      </p>
+                    )}
                   </div>
                   <div className="col-span-2 md:col-span-1 pt-5">
                     <Button size="sm" variant="ghost" onClick={() => removeRule(i)} aria-label={t('common.delete')}>

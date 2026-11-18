@@ -272,17 +272,45 @@ class TestGetScope:
             result = await get_scope(1, 1, "admin", "node", "view")
         assert result is None
 
+    async def test_uuid_and_tag_rules_form_a_union(self):
+        from shared.rbac import get_scope, invalidate_scope_cache
+        invalidate_scope_cache()
+        mock_db = AsyncMock()
+        mock_db.is_connected = True
+        mock_db.get_effective_policy_rules = AsyncMock(return_value=[
+            {"resource_type": "user", "scope_type": "uuid", "scope_value": "ABC", "actions": ["view"]},
+            {"resource_type": "user", "scope_type": "tag", "scope_value": "vip", "actions": ["view"]},
+            {"resource_type": "user", "scope_type": "uuid", "scope_value": "def", "actions": ["view"]},
+        ])
+        mock_db.get_uuids_by_tag = AsyncMock(return_value=["GHI", "jkl"])
+        with patch("shared.rbac.db_service", mock_db):
+            result = await get_scope(1, 1, "admin", "user", "view")
+        assert result == {"abc", "def", "ghi", "jkl"}
+        mock_db.get_uuids_by_tag.assert_awaited_once_with("user", "vip")
+
+    async def test_policy_resolution_failure_fails_closed(self):
+        from shared.rbac import get_scope, invalidate_scope_cache
+        invalidate_scope_cache()
+        mock_db = AsyncMock()
+        mock_db.is_connected = True
+        mock_db.get_effective_policy_rules = AsyncMock(side_effect=RuntimeError("scope unavailable"))
+        with patch("shared.rbac.db_service", mock_db):
+            result = await get_scope(1, 1, "admin", "user", "view")
+        assert result == set()
+
 
 # ── get_visible_user_uuids ──────────────────────────────────────
 
 
-def _fake_scope(node=None, squad=None, user=None):
+def _fake_scope(node=None, squad=None, user=None, host=None):
     """Подмена get_scope: возвращает заданный scope по типу ресурса."""
     async def fake_scope(account_id, role_id, role, resource, action):
         if resource == "node":
             return node
         if resource == "squad":
             return squad
+        if resource == "host":
+            return host
         return user
     return fake_scope
 
@@ -415,6 +443,51 @@ class TestGetVisibleUserUuids:
             result = await get_visible_user_uuids(42, "manager")
         assert result == set()
 
+    async def test_owned_users_intersect_user_scope(self):
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}], unrestricted=False)
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", _fake_scope(user={self.OWN, self.FOREIGN})):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == {self.OWN}
+
+    async def test_empty_user_scope_hides_every_user(self):
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}], unrestricted=True)
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", _fake_scope(user=set())):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == set()
+
+    async def test_node_host_and_squad_scopes_do_not_change_users(self):
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}], unrestricted=False)
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", _fake_scope(node={"n"}, host={"h"}, squad={"s"})):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == {self.OWN}
+
+    async def test_scope_resolution_failure_fails_closed(self):
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}], unrestricted=True)
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", AsyncMock(side_effect=RuntimeError("scope unavailable"))):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == set()
+
+    async def test_admin_lookup_failure_fails_closed(self):
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[], unrestricted=True)
+        db.conn.fetchrow = AsyncMock(side_effect=RuntimeError("database unavailable"))
+        with patch("shared.rbac.db_service", db):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == set()
+
 
 # ── список юзеров уважает видимость ─────────────────────────────
 
@@ -543,6 +616,11 @@ class TestGetUuidsByTag:
     async def test_node_tag_still_uses_raw_data(self):
         sql = await self._sql_for("node")
         assert "FROM nodes" in sql
+        assert "raw_data" in sql
+
+    async def test_host_tag_still_uses_raw_data(self):
+        sql = await self._sql_for("host")
+        assert "FROM hosts" in sql
         assert "raw_data" in sql
 
     async def test_unknown_resource_type_returns_empty(self):
