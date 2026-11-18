@@ -1,7 +1,8 @@
 """Access policies API — manage scope templates for admin rights.
 
-Policies whitelist specific nodes/hosts/squads (by uuid or tag) with a set
-of allowed actions (view/edit/delete). Policies can be attached to roles
+Policies whitelist specific nodes/hosts/squads/users (by uuid or tag) with a set
+of allowed actions. User rules are view-only; other resource types also support
+edit/delete. Policies can be attached to roles
 (inherited by all admins with that role) or to individual admins.
 
 Resolution: see web/backend/core/rbac.get_scope.
@@ -82,6 +83,12 @@ def _validate_rules(rules: List[RuleIn]) -> None:
             raise api_error(400, E.VALIDATION, f"Unknown actions: {bad}")
         if not r.actions:
             raise api_error(400, E.VALIDATION, "Rule must have at least one action")
+        if r.resource_type == "user" and any(a != "view" for a in r.actions):
+            raise api_error(
+                400,
+                E.VALIDATION,
+                "The user resource_type only supports the 'view' action",
+            )
 
 
 @router.get("", response_model=List[PolicyListItem])
