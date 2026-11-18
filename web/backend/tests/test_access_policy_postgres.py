@@ -12,9 +12,8 @@ from uuid import NAMESPACE_DNS, uuid5
 import asyncpg
 import pytest
 
-pytest.importorskip("alembic", reason="root requirements are not installed")
-from alembic import command
-from alembic.config import Config
+command = pytest.importorskip("alembic.command", reason="root requirements are not installed")
+Config = pytest.importorskip("alembic.config", reason="root requirements are not installed").Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
