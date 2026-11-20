@@ -51,7 +51,7 @@ export function RepCard({ r }: { r: RepResult }) {
   const { t } = useTranslation()
   const providerName: Record<string, string> = {
     ipapi: 'ip-api', ipinfo: 'ipinfo', ipqs: 'IPQualityScore',
-    abuseipdb: 'AbuseIPDB', cheburcheck: 'CheburCheck (РКН)',
+    abuseipdb: 'AbuseIPDB', cheburcheck: 'CheburCheck (РКН)', vpndetection: 'VPNDetection',
   }
   return (
     <div className="rounded-lg border border-[var(--glass-border)] p-3 space-y-1.5">

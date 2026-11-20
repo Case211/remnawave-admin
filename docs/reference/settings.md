@@ -36,6 +36,7 @@
 | **Репутация: ipinfo.io токен (зашифр.)** | `reputation_ipinfo_token` | пусто | Управляется на странице BS-Check (только чтение) |
 | **Репутация: IPQualityScore токен (зашифр.)** | `reputation_ipqs_token` | пусто | Управляется на странице BS-Check (только чтение) |
 | **Репутация: AbuseIPDB токен (зашифр.)** | `reputation_abuseipdb_token` | пусто | Управляется на странице BS-Check (только чтение) |
+| **Репутация: VPNDetection токен (зашифр.)** | `reputation_vpndetection_token` | пусто | Управляется на странице BS-Check (только чтение) |
 | **OAuth: Google client_id** | `oauth_google_client_id` | пусто | Управляется в настройках OAuth (только чтение) |
 | **OAuth: Google secret (зашифр.)** | `oauth_google_client_secret` | пусто | Управляется в настройках OAuth (только чтение) |
 | **OAuth: GitHub client_id** | `oauth_github_client_id` | пусто | Управляется в настройках OAuth (только чтение) |

@@ -36,6 +36,7 @@ The basics: language, logs, access to the Remnawave panel, third-party service k
 | **Reputation: ipinfo.io token (encrypted)** | `reputation_ipinfo_token` | empty | Managed on the BS-Check page (read-only) |
 | **Reputation: IPQualityScore token (encrypted)** | `reputation_ipqs_token` | empty | Managed on the BS-Check page (read-only) |
 | **Reputation: AbuseIPDB token (encrypted)** | `reputation_abuseipdb_token` | empty | Managed on the BS-Check page (read-only) |
+| **Reputation: VPNDetection token (encrypted)** | `reputation_vpndetection_token` | empty | Managed on the BS-Check page (read-only) |
 | **OAuth: Google client_id** | `oauth_google_client_id` | empty | Managed in the OAuth settings (read-only) |
 | **OAuth: Google secret (encrypted)** | `oauth_google_client_secret` | empty | Managed in the OAuth settings (read-only) |
 | **OAuth: GitHub client_id** | `oauth_github_client_id` | empty | Managed in the OAuth settings (read-only) |
