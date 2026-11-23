@@ -70,6 +70,33 @@ class TestAdapters:
         assert d["blocked"] is True and d["rkn_domain"] == "rutracker.org"
         assert d["asn"] == "AS13335" and d["country"] == "US"
 
+    @pytest.mark.asyncio
+    async def test_vpndetection(self):
+        seen = {}
+
+        def h(r):
+            seen["auth"] = r.headers.get("Authorization")
+            return httpx.Response(200, json={"ip": "146.70.116.130", "is_vpn": True, "is_tor": False,
+                                             "is_hosting": True, "is_resproxy": False,
+                                             "is_dcproxy": False, "is_mobproxy": False,
+                                             "is_pubproxy": True, "location": {"country": "AT"},
+                                             "asn": {"asn": 9009, "name": "M247 Europe SRL"},
+                                             "company": {"name": "M247 LTD Vienna Infrastructure"}})
+        with patch("httpx.AsyncClient", _patched(h)):
+            d = await ad.VpnDetection().lookup("146.70.116.130", "tok")
+        assert seen["auth"] == "Bearer tok" and d["provider"] == "vpndetection"
+        assert d["is_vpn"] is True and d["is_proxy"] is True and d["is_hosting"] is True
+        assert d["asn"] == "AS9009" and d["country"] == "AT"
+        assert d["org"] == "M247 LTD Vienna Infrastructure"
+
+    @pytest.mark.asyncio
+    async def test_vpndetection_bad_token(self):
+        def h(r):
+            return httpx.Response(401, json={"error": "invalid API key"})
+        with patch("httpx.AsyncClient", _patched(h)):
+            with pytest.raises(ad.RepError):
+                await ad.VpnDetection().lookup("1.2.3.4", "bad")
+
 
 class TestLookupAll:
     @pytest.mark.asyncio

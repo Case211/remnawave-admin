@@ -5784,6 +5784,10 @@
         "label": "Reputation: AbuseIPDB token (encrypted)",
         "description": "Managed on the BS-Check page"
       },
+      "reputation_vpndetection_token": {
+        "label": "Reputation: VPNDetection token (encrypted)",
+        "description": "Managed on the BS-Check page"
+      },
       "oauth_google_client_id": {
         "label": "OAuth: Google client_id",
         "description": "Managed in the OAuth settings"
@@ -6817,7 +6821,7 @@
   },
   "reputation": {
     "providers": "Providers",
-    "providersHint": "ip-api and CheburCheck (RKN blocking) are free, no token. ipinfo / IPQualityScore / AbuseIPDB need a token (click a chip). CheburCheck also accepts a domain.",
+    "providersHint": "ip-api and CheburCheck (RKN blocking) are free, no token. ipinfo / IPQualityScore / AbuseIPDB / VPNDetection need a token (click a chip). CheburCheck also accepts a domain.",
     "checkIp": "Check IP / domain",
     "check": "Check",
     "orNode": "or a node:",

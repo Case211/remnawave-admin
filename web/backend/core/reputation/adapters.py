@@ -136,3 +136,25 @@ class AbuseIpdb(RepProvider):
                           is_tor=data.get("isTor"),
                           is_hosting=("hosting" in usage or "data center" in usage),
                           country=data.get("countryCode"), org=data.get("isp"), raw=data)
+
+
+@register
+class VpnDetection(RepProvider):
+    slug = "vpndetection"
+    name = "VPNDetection"
+    needs_token = True
+    signup_url = "https://vpndetection.io/signup"
+
+    async def lookup(self, ip: str, token: Optional[str]) -> Dict[str, Any]:
+        d = await _get(f"https://api.vpndetection.io/{ip}",
+                       headers={"Authorization": f"Bearer {token or ''}"})
+        if not isinstance(d, dict) or d.get("error"):
+            raise RepError(str(d.get("error") if isinstance(d, dict) else "некорректный ответ"))
+        proxies = [d.get(k) for k in ("is_resproxy", "is_dcproxy", "is_mobproxy", "is_pubproxy")]
+        asn_info = d.get("asn") or {}
+        return normalized("vpndetection", ip, is_vpn=d.get("is_vpn"),
+                          is_proxy=(any(proxies) if any(p is not None for p in proxies) else None),
+                          is_tor=d.get("is_tor"), is_hosting=d.get("is_hosting"),
+                          country=(d.get("location") or {}).get("country"),
+                          asn=(f"AS{asn_info['asn']}" if asn_info.get("asn") else None),
+                          org=(d.get("company") or {}).get("name") or asn_info.get("name"), raw=d)

@@ -5785,6 +5785,10 @@
         "label": "Репутация: AbuseIPDB токен (зашифр.)",
         "description": "Управляется на странице BS-Check"
       },
+      "reputation_vpndetection_token": {
+        "label": "Репутация: VPNDetection токен (зашифр.)",
+        "description": "Управляется на странице BS-Check"
+      },
       "oauth_google_client_id": {
         "label": "OAuth: Google client_id",
         "description": "Управляется в настройках OAuth"
@@ -6818,7 +6822,7 @@
   },
   "reputation": {
     "providers": "Провайдеры",
-    "providersHint": "ip-api и CheburCheck (блокировка РКН) — бесплатно, без токена. ipinfo / IPQualityScore / AbuseIPDB — по токену (клик по чипу). CheburCheck принимает и домен.",
+    "providersHint": "ip-api и CheburCheck (блокировка РКН) — бесплатно, без токена. ipinfo / IPQualityScore / AbuseIPDB / VPNDetection — по токену (клик по чипу). CheburCheck принимает и домен.",
     "checkIp": "Проверить IP / домен",
     "check": "Проверить",
     "orNode": "или нода:",

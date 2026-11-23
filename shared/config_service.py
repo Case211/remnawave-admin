@@ -614,6 +614,13 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Управляется на странице BS-Check", "default_value": "",
         "is_secret": True, "is_readonly": True, "sort_order": 98,
     },
+    {
+        "key": "reputation_vpndetection_token", "value_type": "string", "category": "general",
+        "subcategory": "ip_reputation",
+        "display_name": "Репутация: VPNDetection токен (зашифр.)",
+        "description": "Управляется на странице BS-Check", "default_value": "",
+        "is_secret": True, "is_readonly": True, "sort_order": 99,
+    },
     # OAuth SSO — client_id/secret провайдеров (правятся в настройках OAuth)
     {
         "key": "oauth_google_client_id", "value_type": "string", "category": "general",
