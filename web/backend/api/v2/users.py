@@ -546,7 +546,7 @@ async def list_users(
         total = 0
         db_available = False
 
-        # Access-policy scope: only users tied to allowed nodes/squads
+        # User visibility: unrestricted/owned base set, narrowed by user policies
         visible_uuids = await get_visible_user_uuids(admin)
         uuid_whitelist = list(visible_uuids) if visible_uuids is not None else None
 

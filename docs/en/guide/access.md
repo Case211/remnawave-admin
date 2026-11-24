@@ -26,6 +26,27 @@ RBAC is granular: a permission is a pair of resource and action, such as `users.
 
 The superadmin receives every permission automatically, including those declared by [plugins](/en/guide/plugins) — installing a plugin grants its permissions to the superadmin right away, other roles get them by hand.
 
+## Access Scopes
+
+Access policies can be attached to a role or directly to an administrator. Role and personal rules form one union. A rule selects a node, host, squad or user by UUID or tag. User tags are resolved through the dedicated `users.tag` column; node and host tags continue to use their panel `raw_data` JSON.
+
+The **Can view all users** checkbox (`unrestricted_user_access`) sets the base set of visible users. A policy with `resource_type="user"` only narrows that set, it never expands it:
+
+| unrestricted_user_access | User policy present | Expected visibility |
+| --- | --- | --- |
+| true | no | All users, represented by None |
+| true | yes | Exactly the user-policy scope |
+| false | no | Only users with created_by_admin_id equal to the admin |
+| false | yes | Owned users intersected with the user-policy scope |
+
+An empty resolved scope means no visible users. Database and scope-resolution failures also produce no visible users. Superadmins and supported legacy/environment administrators retain unrestricted access.
+
+**Intentional behavior change:** node, host and squad policies no longer determine user visibility. They scope only their own resource types. In particular, they cannot add users who connected through an allowed node or belonged to an allowed squad. Owned users remain visible immediately after creation, before their first connection.
+
+User policies are view-only. They do not grant or restrict user edit/delete actions; the separate `users.edit` and `users.delete` permissions work as before. The API rejects user rules containing actions other than `view`.
+
+Downgrading migration `0128` to `0127` removes user-scoped rules before restoring the old database constraint. Policies, their non-user rules and role/admin attachments remain.
+
 ## Sessions
 
 Browsers get JWTs in **HttpOnly cookies** (`rw_access`, `rw_refresh`): JavaScript cannot read them and they never touch `localStorage`. Mutating requests additionally require the `X-CSRF-Token` header carrying the value of the `rw_csrf` cookie — double-submit protection.
